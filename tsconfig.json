@@ -1,25 +1,67 @@
 {
   "compilerOptions": {
+    // === Module Settings ===
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "resolvePackageJsonExports": true,
     "esModuleInterop": true,
     "isolatedModules": true,
-    "declaration": true,
-    "removeComments": true,
+    "allowSyntheticDefaultImports": true,
+    
+    // === Decorators (NestJS Required) ===
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
-    "allowSyntheticDefaultImports": true,
+    
+    // === JavaScript Features ===
     "target": "ES2023",
+    "lib": ["ES2023"],
+    
+    // === Build Output ===
+    "declaration": true,
+    "removeComments": true,
     "sourceMap": true,
     "outDir": "./dist",
     "baseUrl": "./",
-    "incremental": true,
-    "skipLibCheck": true,
+    
+    // === Strict Checks (IMPORTANT) ===
+    "strict": true,                    // 🔴 BẬT TẤT CẢ STRICT CHECKS
     "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "strictPropertyInitialization": true,
+    "noImplicitAny": true,             // 🔴 BẮT BUỘC PHẢI CÓ
+    "noImplicitThis": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,            // 🟡 Phát hiện biến không dùng
+    "noUnusedParameters": true,        // 🟡 Phát hiện param không dùng
+    "noPropertyAccessFromIndexSignature": true,
+    "noUncheckedIndexedAccess": true,
+    
+    // === Performance & Compatibility ===
+    "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "noImplicitAny": false,
-    "strictBindCallApply": false,
-    "noFallthroughCasesInSwitch": false
-  }
+    "incremental": true,
+    "tsBuildInfoFile": ".tsbuildinfo",
+    
+    // === Path Aliases (Recommended) ===
+    "paths": {
+      "@/*": ["src/*"],
+      "@config/*": ["src/config/*"],
+      "@modules/*": ["src/modules/*"],
+      "@common/*": ["src/common/*"],
+      "@shared/*": ["src/shared/*"],
+      "@database/*": ["src/database/*"]
+    },
+    
+    // === Types ===
+    "types": ["node", "jest"],
+    
+    // === Additional ===
+    "resolveJsonModule": true,
+    "allowJs": false,
+    "checkJs": false
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "coverage", "**/*.spec.ts", "**/*.test.ts"]
 }
