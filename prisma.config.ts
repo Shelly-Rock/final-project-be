@@ -6,6 +6,6 @@ export default defineConfig({
     path: 'prisma/migrations',
   },
   datasource: {
-    url: 'postgresql://postgres:postgres@localhost:5432/be_db?schema=public&connection_limit=1',
+    url: 'postgresql://postgres:1@localhost:5432/be_db?schema=public&connection_limit=1',
   },
 });

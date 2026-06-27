@@ -9,7 +9,6 @@ import { ConfigService } from '@nestjs/config';
 import { HttpAdapterHost } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
-import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -45,7 +44,6 @@ async function bootstrap() {
 
   app.useGlobalInterceptors(new ClassSerializerInterceptor(reflector));
 
-  app.useGlobalGuards(new JwtAuthGuard(reflector));
 
   app.enableCors({
     origin: true,
@@ -62,15 +60,6 @@ Welcome to the Final Project API documentation.
 ## Overview
 RESTful API built with NestJS for the final project backend.
 
-## Authentication
-This API uses JWT (JSON Web Token) for authentication.
-
-### How to Authenticate:
-1. Register a new account via \`POST /auth/register\`
-2. Login to get JWT token via \`POST /auth/login\`
-3. Include the token in the Authorization header:
-   \`Authorization: Bearer <your-jwt-token>\`
-
 ## User Roles
 - **USER**: Standard user with basic access
 - **ADMIN**: Administrator with full access
@@ -86,17 +75,6 @@ This API uses JWT (JSON Web Token) for authentication.
       'support@example.com'
     )
     .setLicense('MIT License', 'https://opensource.org/licenses/MIT')
-    .addBearerAuth(
-      {
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'JWT',
-        name: 'JWT',
-        description: 'Enter your JWT token',
-        in: 'header',
-      },
-      'JWT-auth',
-    )
     .addApiKey(
       {
         type: 'apiKey',
@@ -106,7 +84,6 @@ This API uses JWT (JSON Web Token) for authentication.
       },
       'api-key',
     )
-    .addTag('Auth', 'Authentication and authorization endpoints')
     .addTag('Users', 'User management - Admin/Secretary can CRUD users')
     .addTag('Departments', 'Academic department management')
     .addTag('Majors', 'Major/Specialization management')

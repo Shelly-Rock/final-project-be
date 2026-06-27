@@ -1,219 +1,25 @@
 generator client {
-  provider   = "prisma-client-js"
-  engineType = "library"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
 }
 
-// ============== USER & AUTH ==============
-
-model User {
-  id           String    @id @default(cuid())
-  email        String    @unique
-  password     String
-  name         String?
-  mssv         String?   @unique // Student ID (for STUDENT role)
-  role         Role      @default(STUDENT)
-  isActive     Boolean   @default(true)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-
-  // Relations
-  departmentId String?
-  department   Department? @relation(fields: [departmentId], references: [id])
-  
-  majorId      String?
-  major        Major?       @relation(fields: [majorId], references: [id])
-  
-  classId      String?
-  class        Class?       @relation(fields: [classId], references: [id])
-
-  // Thesis related
-  supervisedTopics   ThesisTopic[] @relation("Supervisor")
-  registrations      Registration[]
-  createdTopics      ThesisTopic[]  @relation("Creator")
-
-  @@map("users")
-}
-
 enum Role {
-  ADMIN
   SECRETARY
   TEACHER
   STUDENT
 }
 
-// ============== ACADEMIC STRUCTURE ==============
-
-model Department {
-  id          String   @id @default(cuid())
-  code        String   @unique
-  name        String
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  users       User[]
-  majors      Major[]
-
-  @@map("departments")
-}
-
-model Major {
-  id            String   @id @default(cuid())
-  code          String   @unique
-  name          String
-  departmentId  String
-  department    Department @relation(fields: [departmentId], references: [id])
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  users         User[]
-  classes       Class[]
-  thesisTopics  ThesisTopic[]
-
-  @@map("majors")
-}
-
-model Class {
+model User {
   id        String   @id @default(cuid())
-  code      String   @unique
+  email     String   @unique
+  password  String
   name      String
-  majorId   String
-  major     Major    @relation(fields: [majorId], references: [id])
-  courseId  String
-  course    Course   @relation(fields: [courseId], references: [id])
-  isActive  Boolean  @default(true)
+  code      String?  @unique // MSSV hoặc mã giảng viên/thư ký
+  role      Role
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  users     User[]
-
-  @@map("classes")
-}
-
-model Course {
-  id        String   @id @default(cuid())
-  code      String   @unique
-  name      String   // e.g., "K2022", "K2023"
-  year      Int      // e.g., 2022, 2023
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  classes   Class[]
-
-  @@map("courses")
-}
-
-// ============== THESIS TOPIC ==============
-
-model ThesisTopic {
-  id              String          @id @default(cuid())
-  code            String          @unique // Auto-generated: "DT-001", "DT-002"
-  title           String
-  description     String?
-  requirements    String?         // Requirements for students
-  maxStudents     Int             @default(1) // Max students per topic
-  minGpa          Float?          // Minimum GPA requirement
-  
-  status          TopicStatus     @default(PENDING_APPROVAL)
-  deadline        DateTime?       // Registration deadline
-  isMultipleOrder Boolean @default(false) // Allow multiple order choices
-  
-  majorId         String?
-  major           Major?          @relation(fields: [majorId], references: [id])
-  
-  supervisorId    String
-  supervisor      User             @relation("Supervisor", fields: [supervisorId], references: [id])
-  
-  createdById     String?
-  createdBy       User?           @relation("Creator", fields: [createdById], references: [id])
-
-  // Tracking
-  approvedAt      DateTime?
-  approvedById    String?
-  rejectionReason String?
-  
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-
-  registrations   Registration[]
-
-  @@map("thesis_topics")
-}
-
-enum TopicStatus {
-  PENDING_APPROVAL    // Chờ phê duyệt (thư ký)
-  APPROVED            // Đã duyệt, mở đăng ký
-  CLOSED              // Đã đóng (hết hạn hoặc đủ SV)
-  REJECTED            // Bị từ chối
-}
-
-// ============== REGISTRATION ==============
-
-model Registration {
-  id              String            @id @default(cuid())
-  studentId       String
-  student         User              @relation(fields: [studentId], references: [id])
-  topicId         String
-  topic           ThesisTopic       @relation(fields: [topicId], references: [id])
-  
-  orderChoice     Int               @default(1) // 1 = first choice, 2 = second, etc.
-  priorityReason  String?           // Lý do ưu tiên
-  
-  status          RegistrationStatus @default(PENDING)
-  
-  approvedAt      DateTime?
-  approvedById    String?
-  rejectionReason String?
-  
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-
-  // One student can register for one topic at a time (per active thesis cycle)
-  @@unique([studentId, topicId])
-  @@map("registrations")
-}
-
-enum RegistrationStatus {
-  PENDING       // Chờ GV duyệt
-  APPROVED      // GV đã duyệt
-  REJECTED      // GV từ chối
-  CANCELLED     // SV hủy
-}
-
-// ============== DEADLINE SETTINGS ==============
-
-model DeadlineSetting {
-  id            String   @id @default(cuid())
-  name          String   // e.g., "Đăng ký đề tài", "Nộp báo cáo"
-  startDate     DateTime
-  endDate       DateTime
-  isActive      Boolean  @default(true)
-  warningDays   Int      @default(3) // Ngày cảnh báo trước deadline
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  @@map("deadline_settings")
-}
-
-// ============== AUDIT LOG ==============
-
-model AuditLog {
-  id          String   @id @default(cuid())
-  userId      String
-  action      String   // CREATE, UPDATE, DELETE
-  entity      String   // Entity name: User, ThesisTopic, etc.
-  entityId    String   // ID of affected entity
-  oldData     Json?    // Previous state
-  newData     Json?    // New state
-  ipAddress   String?
-  userAgent   String?
-  createdAt   DateTime @default(now())
-
-  @@map("audit_logs")
+  @@map("users")
 }
