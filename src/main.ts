@@ -75,21 +75,6 @@ This API uses JWT (JSON Web Token) for authentication.
 - **USER**: Standard user with basic access
 - **ADMIN**: Administrator with full access
 
-## Common Response Codes
-| Code | Description |
-|------|-------------|
-| 200 | Success |
-| 201 | Created |
-| 400 | Bad Request - Validation error |
-| 401 | Unauthorized - Invalid/missing token |
-| 403 | Forbidden - Insufficient permissions |
-| 404 | Not Found |
-| 409 | Conflict - Resource already exists |
-| 500 | Internal Server Error |
-
-## Rate Limiting
-Rate limiting is not currently implemented. Use responsibly.
-
 ---
 **Base URL:** \`http://localhost:3000/api/v1\`
 **Swagger UI:** \`http://localhost:3000/api/docs\`
