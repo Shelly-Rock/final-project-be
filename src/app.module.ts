@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { MulterModule } from '@nestjs/platform-express';
-import { PrismaModule } from './prisma/prisma.module';
+import { PrismaModule } from '@core/database/prisma/prisma.module';
 
 @Module({
   imports: [

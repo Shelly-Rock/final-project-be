@@ -54,6 +54,7 @@
     "@nestjs/testing": "^11.0.1",
     "@types/bcrypt": "^6.0.0",
     "@types/express": "^5.0.0",
+    "@types/jest": "^30.0.0",
     "@types/node": "^24.0.0",
     "@types/supertest": "^7.0.0",
     "eslint": "^9.18.0",
@@ -82,6 +83,11 @@
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
+    },
+    "moduleNameMapper": {
+      "^@core/(.*)$": "<rootDir>/core/$1",
+      "^@modules/(.*)$": "<rootDir>/modules/$1",
+      "^@shared/(.*)$": "<rootDir>/shared/$1"
     },
     "collectCoverageFrom": [
       "**/*.(t|j)s"
