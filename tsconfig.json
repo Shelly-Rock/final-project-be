@@ -17,7 +17,7 @@
     "removeComments": true,
     "sourceMap": true,
     "outDir": "./dist",
-    "baseUrl": "./",
+    "rootDir": "./", 
     
     "strict": false,
     "strictNullChecks": false,
@@ -31,12 +31,10 @@
     "tsBuildInfoFile": ".tsbuildinfo",
     
     "paths": {
-      "@/*": ["src/*"],
-      "@config/*": ["src/config/*"],
-      "@modules/*": ["src/modules/*"],
-      "@common/*": ["src/common/*"],
-      "@shared/*": ["src/shared/*"],
-      "@database/*": ["src/database/*"]
+      "@/*": ["./src/*"],
+      "@core/*": ["./src/core/*"],
+      "@modules/*": ["./src/modules/*"],
+      "@shared/*": ["./src/shared/*"]
     },
     
     "types": ["node", "jest"],
@@ -44,6 +42,6 @@
     "allowJs": false,
     "checkJs": false
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "coverage", "**/*.spec.ts", "**/*.test.ts"]
+  "include": ["src/**/*", "test/**/*"],
+  "exclude": ["node_modules", "dist", "coverage"]
 }
