@@ -4,7 +4,11 @@ import {
   BadRequestException,
   ClassSerializerInterceptor,
 } from '@nestjs/common';
-import { SwaggerModule, DocumentBuilder, SwaggerDocumentOptions } from '@nestjs/swagger';
+import {
+  SwaggerModule,
+  DocumentBuilder,
+  SwaggerDocumentOptions,
+} from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { HttpAdapterHost } from '@nestjs/core';
 import { AppModule } from './app.module';
@@ -44,7 +48,6 @@ async function bootstrap() {
 
   app.useGlobalInterceptors(new ClassSerializerInterceptor(reflector));
 
-
   app.enableCors({
     origin: true,
     credentials: true,
@@ -52,13 +55,14 @@ async function bootstrap() {
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Final Project API')
-    .setDescription(`
+    .setDescription(
+      `
 # API Documentation
 
 Welcome to the Final Project API documentation.
 
 ## Overview
-RESTful API built with NestJS for the final project backend.
+RESTful API built with NestJS for the QTQ project backend.
 
 ## User Roles
 - **USER**: Standard user with basic access
@@ -67,14 +71,9 @@ RESTful API built with NestJS for the final project backend.
 ---
 **Base URL:** \`http://localhost:3000/api/v1\`
 **Swagger UI:** \`http://localhost:3000/api/docs\`
-    `)
-    .setVersion('1.0.0')
-    .setContact(
-      'API Support',
-      'https://github.com/your-repo',
-      'support@example.com'
+    `,
     )
-    .setLicense('MIT License', 'https://opensource.org/licenses/MIT')
+    .setVersion('1.0.0')
     .addApiKey(
       {
         type: 'apiKey',
@@ -84,16 +83,7 @@ RESTful API built with NestJS for the final project backend.
       },
       'api-key',
     )
-    .addTag('Users', 'User management - Admin/Secretary can CRUD users')
-    .addTag('Departments', 'Academic department management')
-    .addTag('Majors', 'Major/Specialization management')
-    .addTag('Classes', 'Class management')
-    .addTag('Courses', 'Course/Academic year management')
-    .addTag('Thesis Topics', 'Thesis topic management - Create, approve, assign')
-    .addTag('Registrations', 'Student topic registration and teacher approval')
-    .addTag('Reports', 'Export Excel reports - Users, Topics, Registrations')
-    .addTag('Deadline Settings', 'Registration deadline management')
-    .addTag('Health', 'Service health check endpoints')
+    .addTag('Students', 'Student API')
     .build();
 
   const documentOptions: SwaggerDocumentOptions = {
@@ -101,8 +91,12 @@ RESTful API built with NestJS for the final project backend.
     deepScanRoutes: true,
   };
 
-  const document = SwaggerModule.createDocument(app, swaggerConfig, documentOptions);
-  
+  const document = SwaggerModule.createDocument(
+    app,
+    swaggerConfig,
+    documentOptions,
+  );
+
   SwaggerModule.setup('api/docs', app, document, {
     swaggerOptions: {
       persistAuthorization: true,
