@@ -1,7 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 
-export function setupSwagger(app: INestApplication) {
+export default function setupSwagger(app: INestApplication) {
   const config = new DocumentBuilder()
     .setTitle('Final Project API')
     .setDescription('API Documentation')
