@@ -6,7 +6,6 @@ import {
   HttpStatus,
   BadRequestException,
 } from '@nestjs/common';
-import { Request, Response } from 'express';
 import { HttpAdapterHost } from '@nestjs/core';
 
 @Catch()

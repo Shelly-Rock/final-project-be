@@ -1,20 +1,8 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { MulterModule } from '@nestjs/platform-express';
+import { ConfigModule } from './core/config/config.module';
 import { PrismaModule } from '@core/database/prisma/prisma.module';
 
 @Module({
-  imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,
-      envFilePath: '.env',
-    }),
-    MulterModule.register({
-      limits: {
-        fileSize: 5 * 1024 * 1024, // 5MB limit
-      },
-    }),
-    PrismaModule,
-  ],
+  imports: [ConfigModule, PrismaModule],
 })
 export class AppModule {}

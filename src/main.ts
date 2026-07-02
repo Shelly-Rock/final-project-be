@@ -13,14 +13,16 @@ import { ConfigService } from '@nestjs/config';
 import { HttpAdapterHost } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from '@core/exceptions/http-exception.filter';
+import { env } from 'process';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   const configService = app.get(ConfigService);
+
   const reflector = app.get(Reflector);
 
-  app.setGlobalPrefix('api/v1');
+  app.setGlobalPrefix(`${env.API_PREFIX}/${env.API_VERSION}`);
 
   app.useGlobalPipes(
     new ValidationPipe({
