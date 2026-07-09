@@ -85,7 +85,6 @@ RESTful API built with NestJS for the QTQ project backend.
       },
       'api-key',
     )
-    .addTag('Students', 'Student API')
     .build();
 
   const documentOptions: SwaggerDocumentOptions = {
