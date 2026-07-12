@@ -233,6 +233,110 @@ final-project-be/
 ├── tsconfig.build.json
 └── README.md
 
+
+<!-- Roadmap Auth + RBAC -->
+Infrastructure ✅
+│
+├── Docker
+├── PostgreSQL
+├── Prisma
+├── Config
+└── JWT Config
+        │
+        ▼
+1. User Repository (Prisma)
+        │
+        ▼
+2. Password Hash (bcrypt)
+        │
+        ▼
+3. Register
+        │
+        ▼
+4. Login
+        │
+        ▼
+5. Generate Access Token
+        │
+        ▼
+6. Generate Refresh Token
+        │
+        ▼
+7. Jwt Strategy
+        │
+        ▼
+8. JwtAuthGuard
+        │
+        ▼
+9. Current User
+        │
+        ▼
+10. Roles Guard
+        │
+        ▼
+11. Permissions Guard
+
+sprint 1: 
+POST /auth/register
+
+↓
+
+User được tạo
+
+↓
+
+Password được hash
+
+↓
+
+Role mặc định = STUDENT
+
+↓
+
+Lưu database
+
+
+<!-- Sprint 2: POST /auth/login -->
+
+email
+
+↓
+
+find user
+
+↓
+
+compare password
+
+↓
+
+đúng
+
+↓
+
+generate token
+
+↓
+
+return
+
+
+Sprint 3 JwtStrategy để đọc Access Token.
+
+Sprint 5 CurrentUser Decorator
+@Get("profile")
+getProfile(
+    @CurrentUser() user: JwtPayload
+){}
+
+Sprint 6 Roles Guard
+
+Sprint 7 Permissions Guard
+
+
+
+
+
 Nguyên tắc build hệ thống
 
 Infrastructure → Core foundation → Shared contract → Feature modules → Cross-cutting enhancement
