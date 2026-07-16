@@ -3,6 +3,7 @@ import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import type { StringValue } from 'ms';
 
 @Global()
 @Module({
@@ -14,9 +15,9 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        secret: config.get<string>('jwt.access.secret'),
+        secret: config.getOrThrow<StringValue>('jwt.access.secret'),
         signOptions: {
-          expiresIn: config.get<string>('jwt.access.expiresIn'),
+          expiresIn: config.getOrThrow<StringValue>('jwt.access.expiresIn'),
         },
       }),
     }),
