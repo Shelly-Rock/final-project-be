@@ -11,7 +11,7 @@ import {
 import { Type } from 'class-transformer';
 import { Gender } from '@prisma/client';
 
-export class CreateStudentReqDTO {
+export class CreateUserReqDTO {
   @IsString()
   @IsNotEmpty()
   studentId: string;
@@ -49,10 +49,10 @@ export class CreateStudentReqDTO {
   @IsNotEmpty()
   academicYear: string;
 }
-export class CreateStudentsReqDTO {
+export class CreateUsersReqDTO {
   @IsArray()
   @ArrayMinSize(1)
   @ValidateNested({ each: true })
-  @Type(() => CreateStudentReqDTO)
-  students: CreateStudentReqDTO[];
+  @Type(() => CreateUserReqDTO)
+  users: CreateUserReqDTO[];
 }

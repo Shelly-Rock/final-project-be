@@ -100,7 +100,7 @@ model User {
   model Student {
     id                Int      @id @default(autoincrement())
 
-    user_id           Int      @unique
+    user_id           Int?      @unique
 
     student_id        String   @unique
 
@@ -118,8 +118,8 @@ model User {
     academic_year     String
 
     teacher_id        Int?
-
-    user              User     @relation(fields: [user_id], references: [id])
+    extra_data        Json?
+    user              User?     @relation(fields: [user_id], references: [id])
     teacher           Teacher? @relation(fields: [teacher_id], references: [id])
 
     created_at        DateTime @default(now())

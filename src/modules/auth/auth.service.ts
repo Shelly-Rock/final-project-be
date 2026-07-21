@@ -11,4 +11,7 @@ export class AuthService {
   async login(dto: LoginReqDTO): Promise<LoginRespDTO> {
     return {} as LoginRespDTO;
   }
+  async register(dto: LoginReqDTO): Promise<LoginRespDTO> {
+    return {} as LoginRespDTO;
+  }
 }
