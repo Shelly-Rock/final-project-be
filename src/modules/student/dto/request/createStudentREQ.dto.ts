@@ -6,7 +6,9 @@ import {
   IsInt,
   IsDateString,
   IsEnum,
+  IsOptional,
   IsArray,
+  IsObject,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Gender } from '@prisma/client';
@@ -15,6 +17,10 @@ export class CreateStudentReqDTO {
   @IsString()
   @IsNotEmpty()
   studentId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  email: string;
 
   @IsString()
   @IsNotEmpty()
@@ -48,6 +54,14 @@ export class CreateStudentReqDTO {
   @IsString()
   @IsNotEmpty()
   academicYear: string;
+
+  @IsString()
+  @IsNotEmpty()
+  projectName: string;
+
+  @IsOptional()
+  @IsObject()
+  extraData?: Record<string, unknown>;
 }
 export class CreateStudentsReqDTO {
   @IsArray()
