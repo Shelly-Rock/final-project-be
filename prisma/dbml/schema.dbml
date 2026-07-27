@@ -1,0 +1,147 @@
+//// ------------------------------------------------------
+//// THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+//// ------------------------------------------------------
+
+Table roles {
+  id Int [pk, increment]
+  name String [unique, not null]
+  display_name String [not null]
+  description String
+  is_system Boolean [not null, default: false]
+  priority Int [not null, default: 0]
+  permissions role_permissions [not null]
+  users users [not null]
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [not null]
+  deleted_at DateTime
+}
+
+Table permissions {
+  id Int [pk, increment]
+  name String [unique, not null]
+  description String
+  module String [not null]
+  action String [not null]
+  roles role_permissions [not null]
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [not null]
+  deleted_at DateTime
+
+  indexes {
+    (module, action) [unique]
+  }
+}
+
+Table role_permissions {
+  role_id Int [not null]
+  permission_id Int [not null]
+  role roles [not null]
+  permission permissions [not null]
+
+  indexes {
+    (role_id, permission_id) [pk]
+  }
+}
+
+Table users {
+  id Int [pk, increment]
+  email String [unique, not null]
+  username String [unique, not null]
+  password_hash String [not null]
+  must_change_password Boolean [not null, default: true]
+  email_verified_at DateTime
+  is_active Boolean [not null, default: true]
+  role_id Int [not null]
+  role roles [not null]
+  student students
+  teacher teachers
+  secretary secretaries
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [not null]
+  deleted_at DateTime
+}
+
+Table students {
+  id Int [pk, increment]
+  user_id Int [unique]
+  student_id String [unique, not null]
+  email String [unique, not null]
+  first_name String [not null]
+  middle_name String [not null]
+  last_name String [not null]
+  date_of_birth DateTime [not null]
+  gender Gender [not null]
+  class_name String [not null]
+  major String [not null]
+  course_year Int [not null]
+  academic_year String [not null]
+  project projects
+  teacher_id Int
+  extra_data Json
+  user users
+  teacher teachers
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [not null]
+  deleted_at DateTime
+}
+
+Table teachers {
+  id Int [pk, increment]
+  user_id Int [unique, not null]
+  teacher_id String [unique, not null]
+  major String [not null]
+  project projects [not null]
+  user users [not null]
+  students students [not null]
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [not null]
+  deleted_at DateTime
+}
+
+Table secretaries {
+  id Int [pk, increment]
+  user_id Int [unique, not null]
+  secretary_id String [unique, not null]
+  user users [not null]
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [not null]
+  deleted_at DateTime
+}
+
+Table projects {
+  id Int [pk, increment]
+  project_id String [unique, not null]
+  project_name String [not null]
+  description String [not null]
+  student_id Int [unique, not null]
+  teacher_id Int [not null]
+  student students [not null]
+  teacher teachers [not null]
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [not null]
+  deleted_at DateTime
+}
+
+Enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+Ref: role_permissions.role_id > roles.id
+
+Ref: role_permissions.permission_id > permissions.id
+
+Ref: users.role_id > roles.id
+
+Ref: students.user_id - users.id
+
+Ref: students.teacher_id > teachers.id
+
+Ref: teachers.user_id - users.id
+
+Ref: secretaries.user_id - users.id
+
+Ref: projects.student_id - students.id
+
+Ref: projects.teacher_id > teachers.id

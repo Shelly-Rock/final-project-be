@@ -10,6 +10,8 @@ export class CreateStudentRespDTO {
   major: string;
   courseYear: number;
   academicYear: string;
+  projectName: string;
+  extraData?: unknown;
   createdAt: string;
 }
 export class CreateStudentsRespDTO {

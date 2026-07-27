@@ -5,7 +5,10 @@
   datasource db {
     provider = "postgresql"
   }
-
+  generator dbml {
+    provider = "prisma-dbml-generator"
+  }
+  
   //Quản lý quyền và tài khoản người dùng theo hệ thống RBAC
 
   model Role {
@@ -103,6 +106,7 @@ model User {
     user_id           Int?      @unique
 
     student_id        String   @unique
+    email             String   @unique
 
     first_name        String
     middle_name       String
@@ -116,6 +120,8 @@ model User {
 
     course_year       Int
     academic_year     String
+
+    project           Project?
 
     teacher_id        Int?
     extra_data        Json?
@@ -140,6 +146,8 @@ model User {
     teacher_id        String   @unique
 
     major             String
+
+    project            Project[]
 
     user              User     @relation(fields: [user_id], references: [id])
 
@@ -170,3 +178,25 @@ model User {
     @@map("secretaries")
   }
 
+
+
+  model Project {
+    id                Int @id @default(autoincrement())
+    project_id        String @unique
+    project_name      String 
+    description       String
+
+    student_id        Int @unique
+    teacher_id        Int 
+
+    student           Student @relation(fields:[student_id], references: [id])
+    teacher           Teacher @relation(fields:[teacher_id], references: [id])      
+
+    created_at        DateTime @default(now())
+    updated_at        DateTime @updatedAt
+    deleted_at        DateTime?  
+
+    @@index([teacher_id])
+    @@map("projects")
+
+  }

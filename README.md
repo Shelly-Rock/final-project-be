@@ -233,8 +233,8 @@ final-project-be/
 ├── tsconfig.build.json
 └── README.md
 
-
 <!-- Roadmap Auth + RBAC -->
+
 Infrastructure ✅
 │
 ├── Docker
@@ -242,41 +242,42 @@ Infrastructure ✅
 ├── Prisma
 ├── Config
 └── JWT Config
-        │
-        ▼
+│
+▼
+
 1. User Repository (Prisma)
-        │
-        ▼
+   │
+   ▼
 2. Password Hash (bcrypt)
-        │
-        ▼
+   │
+   ▼
 3. Register
-        │
-        ▼
+   │
+   ▼
 4. Login
-        │
-        ▼
+   │
+   ▼
 5. Generate Access Token
-        │
-        ▼
+   │
+   ▼
 6. Generate Refresh Token
-        │
-        ▼
+   │
+   ▼
 7. Jwt Strategy
-        │
-        ▼
+   │
+   ▼
 8. JwtAuthGuard
-        │
-        ▼
+   │
+   ▼
 9. Current User
-        │
-        ▼
+   │
+   ▼
 10. Roles Guard
-        │
-        ▼
+    │
+    ▼
 11. Permissions Guard
 
-sprint 1: 
+sprint 1:
 POST /auth/register
 
 ↓
@@ -294,7 +295,6 @@ Role mặc định = STUDENT
 ↓
 
 Lưu database
-
 
 <!-- Sprint 2: POST /auth/login -->
 
@@ -320,22 +320,17 @@ generate token
 
 return
 
-
 Sprint 3 JwtStrategy để đọc Access Token.
 
 Sprint 5 CurrentUser Decorator
 @Get("profile")
 getProfile(
-    @CurrentUser() user: JwtPayload
+@CurrentUser() user: JwtPayload
 ){}
 
 Sprint 6 Roles Guard
 
 Sprint 7 Permissions Guard
-
-
-
-
 
 Nguyên tắc build hệ thống
 
@@ -356,5 +351,3 @@ Rate limit (ThrottlerModule)
 Versioning API
 
 -> session chat đang làm: https://chat.deepseek.com/a/chat/s/9389ced3-4c57-4605-a18f-2c1684d6a485
-
-cách
