@@ -120,7 +120,7 @@ RESTful API built with NestJS for the QTQ project backend.
     `,
   });
 
-  const port = configService.get<number>('PORT') || 3000;
+  const port = configService.get<number>('PORT') || 3001;
 
   await app.listen(port);
   console.log('=================================================');
