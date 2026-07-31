@@ -138,27 +138,41 @@ model User {
     @@map("students")
   }
 
+// TEACHER MODULE
+
+  enum TeacherStatus {
+    active
+    inactive
+  }
+
   model Teacher {
-    id                Int      @id @default(autoincrement())
+    id              Int       @id @default(autoincrement())
 
-    user_id           Int      @unique
+    user_id         Int       @unique
 
-    teacher_id        String   @unique
+    department      String    
+    teacher_id      String    @unique
+    first_name      String
+    last_name       String
+    full_name       String
+    email           String    @unique
+    phone           String?
+    academic_title  String?
+    position        String?
+    date_of_birth   DateTime? @db.Date
+    gender          Gender?
+    address         String?
+    status          TeacherStatus @default(active)
 
-    major             String
+    project         Project[]
+    user            User      @relation(fields: [user_id], references: [id])
+    students        Student[]
 
-    project            Project[]
-
-    user              User     @relation(fields: [user_id], references: [id])
-
-    students          Student[]
-
-    created_at        DateTime @default(now())
-    updated_at        DateTime @updatedAt
-    deleted_at        DateTime?
+    created_at      DateTime  @default(now())
+    updated_at      DateTime  @updatedAt
+    deleted_at      DateTime?
 
     @@index([teacher_id])
-
     @@map("teachers")
   }
 
