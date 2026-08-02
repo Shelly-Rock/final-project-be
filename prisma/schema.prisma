@@ -8,6 +8,25 @@
   generator dbml {
     provider = "prisma-dbml-generator"
   }
+
+//ENUM
+  enum TeacherStatus {
+  active
+  inactive
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum AcademicTitle {
+  MASTER
+  DOCTOR
+  ASSOC_PROF
+  PROF
+}
   
   //Quản lý quyền và tài khoản người dùng theo hệ thống RBAC
 
@@ -94,11 +113,6 @@ model User {
   @@index([role_id])
   @@map("users")
 }
-  enum Gender {
-    MALE
-    FEMALE
-    OTHER
-  }
 
   model Student {
     id                Int      @id @default(autoincrement())
@@ -138,29 +152,65 @@ model User {
     @@map("students")
   }
 
-  model Teacher {
-    id                Int      @id @default(autoincrement())
+// Faculty Table
+model Faculty {
+  id          String       @id @db.VarChar(50)
+  name        String       @db.VarChar(255)
+  departments Department[]
+  teachers    Teacher[]
+  
+  created_at  DateTime     @default(now())
+  
+  @@map("faculties")
+}
 
-    user_id           Int      @unique
+// Department Table
+model Department {
+  id          String    @id @db.VarChar(50)
+  name        String    @db.VarChar(255)
+  faculty_id  String    @db.VarChar(50)
+  faculty     Faculty   @relation(fields: [faculty_id], references: [id])
+  teachers    Teacher[]
 
-    teacher_id        String   @unique
+  created_at  DateTime  @default(now())
+  
+  @@map("departments")
+}
 
-    major             String
+model Teacher {
+  id              Int       @id @default(autoincrement())
+  user_id         Int       @unique
+  teacher_id      String    @unique @db.VarChar(50) 
 
-    project            Project[]
+  name            String    @db.VarChar(255)
+  
+  email           String    @unique @db.VarChar(255)
+  phone           String?   @db.VarChar(20)
+  
+  faculty_id      String?   @db.VarChar(50)
+  faculty         Faculty?  @relation(fields: [faculty_id], references: [id])
+  department_id   String?   @db.VarChar(50)
+  department      Department? @relation(fields: [department_id], references: [id])
 
-    user              User     @relation(fields: [user_id], references: [id])
+  academic_title  AcademicTitle?
+  position        String?   @db.VarChar(100)
+  date_of_birth   DateTime? @db.Date
+  gender          Gender?
+  address         String?   @db.Text
+  
+  status          TeacherStatus @default(active)
 
-    students          Student[]
+  project         Project[]
+  user            User      @relation(fields: [user_id], references: [id])
+  students        Student[]
 
-    created_at        DateTime @default(now())
-    updated_at        DateTime @updatedAt
-    deleted_at        DateTime?
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+  deleted_at      DateTime?
 
-    @@index([teacher_id])
-
-    @@map("teachers")
-  }
+  @@index([teacher_id])
+  @@map("teachers")
+}
 
   model Secretary {
     id                Int      @id @default(autoincrement())

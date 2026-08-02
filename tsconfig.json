@@ -42,6 +42,6 @@
     "allowJs": false,
     "checkJs": false
   },
-  "include": ["src/**/*", "test/**/*"],
+  "include": ["src/**/*", "prisma/**/*", "test/**/*"],
   "exclude": ["node_modules", "dist", "coverage"]
 }

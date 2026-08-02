@@ -26,10 +26,10 @@ export class StudentService {
       headers,
     );
     await this.validateStudents(students);
-    const countStudents= await this.createStudent(students);
-    return{
-      countStudents
-    } 
+    const countStudents = await this.createStudent(students);
+    return {
+      countStudents,
+    };
   }
   private checkDuplicateFile(students: CreateStudentReqDTO[]): void {
     const studentCodes = new Set<string>();
@@ -134,7 +134,9 @@ export class StudentService {
       extra_data: (student.extraData as Prisma.InputJsonValue) ?? null,
     }));
 
-    const countStudents =  await this.prismaService.student.createMany({data:studentData});
+    const countStudents = await this.prismaService.student.createMany({
+      data: studentData,
+    });
     return countStudents.count;
   }
 }
