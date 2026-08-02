@@ -9,24 +9,38 @@ export class ListTeacherQueryDto {
   @IsString()
   search?: string;
 
-  @ApiPropertyOptional({ description: 'Lọc theo chuyên ngành' })
+  @ApiPropertyOptional({ description: 'Lọc theo ID Khoa' })
   @IsOptional()
   @IsString()
-  department?: string;
+  facultyId?: string;
 
-  @ApiPropertyOptional({ description: 'Lọc theo trạng thái', enum: TeacherStatus })
+  @ApiPropertyOptional({ description: 'Lọc theo ID Bộ môn' })
+  @IsOptional()
+  @IsString()
+  departmentId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Lọc theo trạng thái',
+    enum: TeacherStatus,
+  })
   @IsOptional()
   @IsEnum(TeacherStatus)
   status?: TeacherStatus;
 
-  @ApiPropertyOptional({ description: 'Trang hiện tại (Mặc định: 1)', default: 1 })
+  @ApiPropertyOptional({
+    description: 'Trang hiện tại (Mặc định: 1)',
+    default: 1,
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
   page?: number = 1;
 
-  @ApiPropertyOptional({ description: 'Số item/trang (Mặc định: 10)', default: 10 })
+  @ApiPropertyOptional({
+    description: 'Số item/trang (Mặc định: 10)',
+    default: 10,
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()

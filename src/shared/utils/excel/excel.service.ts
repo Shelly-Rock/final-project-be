@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import {EXCEL} from "./excel.constant";
+import { EXCEL } from './excel.constant';
 
 import {
   Worksheet,
@@ -19,24 +19,24 @@ export class ExcelService {
   }
 
   //  Hàm đoc sheet
-   getWorksheet(wb: Workbook) : Worksheet{
+  getWorksheet(wb: Workbook): Worksheet {
     const wsh = wb.getWorksheet(EXCEL.DEFAULT_SHEET_INDEX);
-    if(!wsh){
-      throw new BadRequestException("File rỗng");
+    if (!wsh) {
+      throw new BadRequestException('File rỗng');
     }
     return wsh;
-   }
+  }
 
-   // Hàm lấy tên header
-   getHeaders(worksheet: Worksheet): string[] {
+  // Hàm lấy tên header
+  getHeaders(worksheet: Worksheet): string[] {
     const headerRow = worksheet.getRow(EXCEL.HEADER_ROW);
-  
+
     const headers: string[] = [];
-  
+
     headerRow.eachCell((cell) => {
       headers.push(String(this.getCellValue(cell)).trim());
     });
-  
+
     return headers;
   }
 
@@ -98,9 +98,7 @@ export class ExcelService {
       return (value as CellFormulaValue).result;
     }
     if ('richText' in value) {
-      return (value as CellRichTextValue).richText
-        .map((item) => item.text)
-        .join('');
+      return value.richText.map((item) => item.text).join('');
     }
     if ('text' in value) {
       return value.text;

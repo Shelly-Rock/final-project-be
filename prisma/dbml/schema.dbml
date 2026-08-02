@@ -85,17 +85,35 @@ Table students {
   deleted_at DateTime
 }
 
+Table faculties {
+  id String [pk]
+  name String [not null]
+  departments departments [not null]
+  teachers teachers [not null]
+  created_at DateTime [default: `now()`, not null]
+}
+
+Table departments {
+  id String [pk]
+  name String [not null]
+  faculty_id String [not null]
+  faculty faculties [not null]
+  teachers teachers [not null]
+  created_at DateTime [default: `now()`, not null]
+}
+
 Table teachers {
   id Int [pk, increment]
   user_id Int [unique, not null]
-  department String [not null]
   teacher_id String [unique, not null]
-  first_name String [not null]
-  last_name String [not null]
-  full_name String [not null]
+  name String [not null]
   email String [unique, not null]
   phone String
-  academic_title String
+  faculty_id String
+  faculty faculties
+  department_id String
+  department departments
+  academic_title AcademicTitle
   position String
   date_of_birth DateTime
   gender Gender
@@ -133,15 +151,22 @@ Table projects {
   deleted_at DateTime
 }
 
+Enum TeacherStatus {
+  active
+  inactive
+}
+
 Enum Gender {
   MALE
   FEMALE
   OTHER
 }
 
-Enum TeacherStatus {
-  active
-  inactive
+Enum AcademicTitle {
+  MASTER
+  DOCTOR
+  ASSOC_PROF
+  PROF
 }
 
 Ref: role_permissions.role_id > roles.id
@@ -153,6 +178,12 @@ Ref: users.role_id > roles.id
 Ref: students.user_id - users.id
 
 Ref: students.teacher_id > teachers.id
+
+Ref: departments.faculty_id > faculties.id
+
+Ref: teachers.faculty_id > faculties.id
+
+Ref: teachers.department_id > departments.id
 
 Ref: teachers.user_id - users.id
 

@@ -35,22 +35,22 @@ export class AllExceptionsFilter implements ExceptionFilter {
   private getErrorMessage(exception: unknown): string {
     if (exception instanceof HttpException) {
       const response = exception.getResponse();
-  
+
       if (typeof response === 'string') {
         return response;
       }
-  
+
       if (typeof response === 'object' && response !== null) {
         return (response as any).message ?? exception.message;
       }
-  
+
       return exception.message;
     }
-  
+
     if (exception instanceof Error) {
       return exception.message;
     }
-  
+
     return 'Internal server error';
   }
 
