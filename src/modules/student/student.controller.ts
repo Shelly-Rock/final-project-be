@@ -1,22 +1,30 @@
 import {
-  BadRequestException,
   HttpCode,
   HttpStatus,
   Controller,
   Post,
+  Get,
   UseInterceptors,
   UploadedFile,
+  Query,
 } from '@nestjs/common';
+
 import {
   ApiBody,
   ApiConsumes,
   ApiOperation,
   ApiTags,
   ApiCreatedResponse,
+  ApiOkResponse,
 } from '@nestjs/swagger';
+
 import { StudentService } from './student.service';
+
 import { FileInterceptor } from '@nestjs/platform-express';
+
 import type { MulterFile } from '../../shared/types/multer-file.type';
+
+import { PaginationReqDTO } from '@/shared';
 
 @ApiTags('Students')
 @Controller('students')
@@ -51,10 +59,18 @@ export class StudentController {
   // call service
   @UseInterceptors(FileInterceptor('file'))
   async importStudents(@UploadedFile() file: MulterFile) {
-    if (!file) {
-      throw new BadRequestException('Vui lòng chọn file Excel.');
-    }
-
     return this.studentService.importStudents(file);
+  }
+
+  @Get()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Lấy danh sách sinh viên',
+  })
+  @ApiOkResponse({
+    description: 'Lấy danh sách sinh viên thành công',
+  })
+  async getListStudents(@Query() query: PaginationReqDTO) {
+    return this.studentService.getListStudents(query);
   }
 }
