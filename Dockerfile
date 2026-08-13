@@ -1,34 +1,32 @@
+# Development (local)
 FROM node:20-alpine AS development
-
 WORKDIR /app
-
-COPY package*.json ./
-RUN npm install
-
+RUN npm install -g pnpm
+COPY package*.json pnpm-lock.yaml ./
+RUN pnpm install
 COPY . .
 RUN npx prisma generate
-
 EXPOSE 3000
+CMD ["pnpm", "run", "start:dev"]
 
-CMD ["npm", "run", "start:dev"]
+# Builder
+FROM node:20-alpine AS builder
+WORKDIR /app
+RUN npm install -g pnpm
+COPY package*.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY . .
+RUN npx prisma generate
+RUN pnpm run build
 
-
-
-# chuyển sang production
-
-# FROM node:20-alpine AS builder
-# WORKDIR /app
-# COPY package*.json ./
-# RUN npm ci
-# COPY . .
-# RUN npx prisma generate
-# RUN npm run build
-# FROM node:20-alpine AS production
-# WORKDIR /app
-# COPY package*.json ./
-# RUN npm ci --omit=dev
-# COPY --from=builder /app/dist ./dist
-# COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-# COPY --from=builder /app/prisma ./prisma
-# EXPOSE 3000
-# CMD ["node", "dist/main"]
+# Production
+FROM node:20-alpine AS production
+WORKDIR /app
+RUN npm install -g pnpm
+COPY package*.json pnpm-lock.yaml ./
+RUN pnpm install --prod --frozen-lockfile
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/prisma ./prisma
+RUN npx prisma generate
+EXPOSE 3000
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main"]
