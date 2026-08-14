@@ -16,10 +16,12 @@ RUN npm install -g pnpm
 COPY package*.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY . .
-# Đặt biến giả cho Prisma generate (chỉ dùng trong build)
 ENV DATABASE_URL=postgresql://dummy:dummy@dummy:5432/dummy
 RUN npx prisma generate
 RUN pnpm run build
+# KIỂM TRA CẤU TRÚC THƯ MỤC DIST
+RUN ls -la ./dist
+RUN find ./dist -name "main.js"
 
 # Production
 FROM node:20-alpine AS production
@@ -30,8 +32,8 @@ RUN pnpm install --prod --frozen-lockfile
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/prisma.config.ts ./
-# Biến giả để generate Prisma Client trong production stage (sẽ bị ghi đè bởi biến runtime)
 ENV DATABASE_URL=postgresql://dummy:dummy@dummy:5432/dummy
 RUN npx prisma generate
 EXPOSE 3000
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
+# SỬA CMD: chuyển sang dist/src/main.js
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/main.js"]
