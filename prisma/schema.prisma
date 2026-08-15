@@ -1,16 +1,17 @@
-  generator client {
-    provider = "prisma-client-js"
-  } 
+generator client {
+  provider = "prisma-client-js"
+}
 
-  datasource db {
-    provider = "postgresql"
-  }
-  generator dbml {
-    provider = "prisma-dbml-generator"
-  }
+datasource db {
+  provider = "postgresql"
+}
+
+generator dbml {
+  provider = "prisma-dbml-generator"
+}
 
 //ENUM
-  enum TeacherStatus {
+enum TeacherStatus {
   active
   inactive
 }
@@ -26,6 +27,38 @@ enum AcademicTitle {
   DOCTOR
   ASSOC_PROF
   PROF
+}
+
+// Progress Tracking ENUMs
+enum ReportStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REVISION_REQUESTED
+}
+
+enum ProgressStatus {
+  ON_TRACK
+  EXTENDED
+  TOPIC_CHANGED
+  BANNED
+}
+
+enum TemplateType {
+  MONTHLY_REPORT
+  MIDTERM_REPORT
+  FINAL_REPORT
+  PROPOSAL
+  PRESENTATION
+}
+
+enum NotificationType {
+  STATUS_CHANGED
+  REPORT_SUBMITTED
+  REPORT_APPROVED
+  REPORT_REJECTED
+  BAN_APPLIED
+  BAN_WARNING
 }
   
   //Quản lý quyền và tài khoản người dùng theo hệ thống RBAC
@@ -249,4 +282,96 @@ model Teacher {
     @@index([teacher_id])
     @@map("projects")
 
-  }
+}
+
+// Progress Tracking Models
+
+model ReportTemplate {
+  id          Int          @id @default(autoincrement())
+  name        String
+  description String?
+  type        TemplateType
+  file_url    String
+  file_name   String
+  file_size   Int
+  teacher_id  Int
+
+  created_at  DateTime     @default(now())
+  updated_at  DateTime     @updatedAt
+  deleted_at  DateTime?
+
+  @@index([teacher_id])
+  @@map("report_templates")
+}
+
+model ProgressReport {
+  id          Int          @id @default(autoincrement())
+  title       String
+  content     String       @db.Text
+  file_url    String?
+  file_name   String?
+
+  month       Int
+  year        Int
+
+  status      ReportStatus @default(PENDING)
+  feedback    String?      @db.Text
+  score       Int?
+
+  student_id  Int
+  teacher_id  Int
+
+  reviewed_by Int?
+  reviewed_at DateTime?
+
+  created_at  DateTime     @default(now())
+  updated_at  DateTime     @updatedAt
+  deleted_at  DateTime?
+
+  @@index([student_id])
+  @@index([teacher_id])
+  @@map("progress_reports")
+}
+
+model StudentProgress {
+  id                    Int             @id @default(autoincrement())
+  student_id            Int             @unique
+  status                ProgressStatus  @default(ON_TRACK)
+
+  is_banned             Boolean         @default(false)
+  ban_reason            String?
+  banned_at             DateTime?
+
+  total_reports_required Int           @default(6)
+  total_reports_submitted Int          @default(0)
+
+  next_deadline         DateTime?
+  last_report_date      DateTime?
+
+  created_at            DateTime        @default(now())
+  updated_at            DateTime        @updatedAt
+  deleted_at            DateTime?
+
+  @@index([student_id])
+  @@map("student_progress")
+}
+
+model ProgressNotification {
+  id          Int              @id @default(autoincrement())
+  type        NotificationType
+  title       String
+  message     String           @db.Text
+  is_read     Boolean          @default(false)
+
+  sender_id   Int?
+  recipient_id Int
+
+  related_student_id Int?
+  related_report_id  Int?
+
+  created_at  DateTime         @default(now())
+
+  @@index([recipient_id])
+  @@index([sender_id])
+  @@map("progress_notifications")
+}

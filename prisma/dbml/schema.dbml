@@ -151,6 +151,69 @@ Table projects {
   deleted_at DateTime
 }
 
+Table report_templates {
+  id Int [pk, increment]
+  name String [not null]
+  description String
+  type TemplateType [not null]
+  file_url String [not null]
+  file_name String [not null]
+  file_size Int [not null]
+  teacher_id Int [not null]
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [not null]
+  deleted_at DateTime
+}
+
+Table progress_reports {
+  id Int [pk, increment]
+  title String [not null]
+  content String [not null]
+  file_url String
+  file_name String
+  month Int [not null]
+  year Int [not null]
+  status ReportStatus [not null, default: 'PENDING']
+  feedback String
+  score Int
+  student_id Int [not null]
+  teacher_id Int [not null]
+  reviewed_by Int
+  reviewed_at DateTime
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [not null]
+  deleted_at DateTime
+}
+
+Table student_progress {
+  id Int [pk, increment]
+  student_id Int [unique, not null]
+  status ProgressStatus [not null, default: 'ON_TRACK']
+  is_banned Boolean [not null, default: false]
+  ban_reason String
+  banned_at DateTime
+  total_reports_required Int [not null, default: 6]
+  total_reports_submitted Int [not null, default: 0]
+  next_deadline DateTime
+  last_report_date DateTime
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [not null]
+  deleted_at DateTime
+}
+
+Table progress_notifications {
+  id Int [pk, increment]
+  type NotificationType [not null]
+  title String [not null]
+  message String [not null]
+  is_read Boolean [not null, default: false]
+  sender_id Int
+  recipient_id Int [not null]
+  related_student_id Int
+  related_report_id Int
+  created_at DateTime [default: `now()`, not null]
+}
+
 Enum TeacherStatus {
   active
   inactive
@@ -167,6 +230,37 @@ Enum AcademicTitle {
   DOCTOR
   ASSOC_PROF
   PROF
+}
+
+Enum ReportStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REVISION_REQUESTED
+}
+
+Enum ProgressStatus {
+  ON_TRACK
+  EXTENDED
+  TOPIC_CHANGED
+  BANNED
+}
+
+Enum TemplateType {
+  MONTHLY_REPORT
+  MIDTERM_REPORT
+  FINAL_REPORT
+  PROPOSAL
+  PRESENTATION
+}
+
+Enum NotificationType {
+  STATUS_CHANGED
+  REPORT_SUBMITTED
+  REPORT_APPROVED
+  REPORT_REJECTED
+  BAN_APPLIED
+  BAN_WARNING
 }
 
 Ref: role_permissions.role_id > roles.id
