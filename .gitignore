@@ -56,3 +56,14 @@ pids
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 /generated/prisma
+
+# TypeScript incremental build
+*.tsbuildinfo
+
+# Database local volume (nếu dùng docker-compose với postgres data)
+/postgres
+/data
+
+# Ignore mọi file .env riêng, nhưng giữ lại file mẫu
+.env.*
+!.env.example
