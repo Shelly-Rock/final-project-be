@@ -8,6 +8,7 @@ import { ProgressTrackingModule } from './modules/progress-tracking';
 import { SubmissionModule } from './modules/submission/submission.module';
 import { CommitteeModule } from './modules/committee/committee.module';
 import { DefenseModule } from './modules/defense/defense.module';
+import { ScoringModule } from './modules/scoring/scoring.module';
 
 import { StudentModule } from '@/modules';
 
@@ -23,6 +24,7 @@ import { StudentModule } from '@/modules';
     SubmissionModule,
     CommitteeModule,
     DefenseModule,
+    ScoringModule,
   ],
 })
 export class AppModule {}
