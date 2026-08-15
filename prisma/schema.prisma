@@ -52,6 +52,33 @@ enum TemplateType {
   PRESENTATION
 }
 
+// Stage 3 ENUMs - Submission & Committee
+enum SubmissionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum SubmissionType {
+  WORD
+  PDF
+  POWERPOINT
+}
+
+enum CommitteeRole {
+  CHAIRMAN       // Chủ tịch
+  SECRETARY      // Thư ký
+  INTERNAL_REVIEWER  // Phản biện trong
+  EXTERNAL_REVIEWER  // Phản biện ngoài
+}
+
+enum DefenseSessionStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  RESCHEDULED
+}
+
 enum NotificationType {
   STATUS_CHANGED
   REPORT_SUBMITTED
@@ -374,4 +401,159 @@ model ProgressNotification {
   @@index([recipient_id])
   @@index([sender_id])
   @@map("progress_notifications")
+}
+
+// ========== Stage 3: Submission & Committee Models ==========
+
+// Final Submission Model
+model FinalSubmission {
+  id              Int              @id @default(autoincrement())
+  
+  student_id      Int
+  project_id      Int
+  
+  // File info
+  file_url        String
+  file_name       String
+  original_name   String
+  file_size       Int
+  file_type       SubmissionType
+  
+  // Submission metadata
+  status          SubmissionStatus @default(PENDING)
+  submitted_at    DateTime         @default(now())
+  
+  // Review info
+  reviewed_by     Int?
+  reviewed_at     DateTime?
+  rejection_reason String?
+  
+  // Relations
+  student         Student          @relation(fields: [student_id], references: [id])
+  project         Project          @relation(fields: [project_id], references: [id])
+  
+  created_at      DateTime         @default(now())
+  updated_at      DateTime         @updatedAt
+  deleted_at      DateTime?
+  
+  @@index([student_id])
+  @@index([project_id])
+  @@map("final_submissions")
+}
+
+// Defense Committee Model
+model DefenseCommittee {
+  id          Int       @id @default(autoincrement())
+  name        String    // vd: "Hội đồng 1", "Hội đồng chấm luận văn KHDL 2026"
+  
+  // Committee composition (4 members)
+  chairman_id     Int?   // Chủ tịch (Teacher)
+  secretary_id    Int?   // Thư ký (Teacher)
+  internal_1_id   Int?   // Phản biện trong 1 (Teacher)
+  internal_2_id   Int?   // Phản biện trong 2 (Teacher)
+  
+  // External reviewers (can be in multiple committees)
+  external_reviewers CommitteeExternalReviewer[]
+  
+  // Relations
+  chairman        Teacher?  @relation("CommitteeChairman", fields: [chairman_id], references: [id])
+  secretary       Teacher?  @relation("CommitteeSecretary", fields: [secretary_id], references: [id])
+  internal_1      Teacher?  @relation("CommitteeInternal1", fields: [internal_1_id], references: [id])
+  internal_2      Teacher?  @relation("CommitteeInternal2", fields: [internal_2_id], references: [id])
+  
+  // Defense sessions
+  sessions       DefenseSession[]
+  
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+  deleted_at      DateTime?
+  
+  @@map("defense_committees")
+}
+
+// External Reviewer Assignment (many-to-many)
+model CommitteeExternalReviewer {
+  id              Int              @id @default(autoincrement())
+  committee_id    Int
+  teacher_id      Int              // External reviewer (Teacher)
+  
+  committee       DefenseCommittee @relation(fields: [committee_id], references: [id])
+  teacher         Teacher          @relation(fields: [teacher_id], references: [id])
+  
+  created_at      DateTime         @default(now())
+  
+  @@unique([committee_id, teacher_id])
+  @@map("committee_external_reviewers")
+}
+
+// Defense Session Model
+model DefenseSession {
+  id              Int                  @id @default(autoincrement())
+  committee_id    Int
+  defense_date    DateTime
+  start_time      String               // "08:00"
+  end_time        String?              // Calculated: "08:15", "08:30", etc.
+  room            String               // "A101", "B202"
+  
+  // Duration per topic (default 15 minutes)
+  duration_minutes Int                 @default(15)
+  
+  status          DefenseSessionStatus @default(SCHEDULED)
+  
+  // Relations
+  committee       DefenseCommittee     @relation(fields: [committee_id], references: [id])
+  projects        DefenseSessionProject[]
+  
+  created_at      DateTime             @default(now())
+  updated_at      DateTime             @updatedAt
+  deleted_at      DateTime?
+  
+  @@index([committee_id])
+  @@index([defense_date])
+  @@map("defense_sessions")
+}
+
+// Defense Session Project (many-to-many)
+model DefenseSessionProject {
+  id              Int              @id @default(autoincrement())
+  session_id      Int
+  project_id      Int
+  order_index     Int              // Thứ tự bảo vệ: 1, 2, 3...
+  scheduled_time  String           // "08:00", "08:15", "08:30"...
+  
+  // Defense result
+  score           Float?
+  defense_notes   String?
+  defended_at     DateTime?
+  
+  // Relations
+  session         DefenseSession    @relation(fields: [session_id], references: [id])
+  project         Project           @relation(fields: [project_id], references: [id])
+  
+  created_at      DateTime         @default(now())
+  updated_at      DateTime         @updatedAt
+  
+  @@unique([session_id, project_id])
+  @@index([session_id])
+  @@map("defense_session_projects")
+}
+
+// Defense Score
+model DefenseScore {
+  id              Int              @id @default(autoincrement())
+  session_project_id Int
+  teacher_id      Int
+  role            CommitteeRole
+  score           Float            // 0-10
+  notes           String?
+  
+  // Relations
+  session_project DefenseSessionProject @relation(fields: [session_project_id], references: [id])
+  teacher         Teacher          @relation(fields: [teacher_id], references: [id])
+  
+  created_at      DateTime         @default(now())
+  updated_at      DateTime         @updatedAt
+  
+  @@unique([session_project_id, teacher_id])
+  @@map("defense_scores")
 }
