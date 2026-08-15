@@ -22,14 +22,16 @@ services:
       dockerfile: Dockerfile
       target: development
     container_name: be_nestjs
-    command: npm run start:dev
+    command: pnpm run start:dev
     ports:
       - "3000:3000"
     depends_on:
       postgres:
         condition: service_healthy
+    env_file:
+      - .env
     environment:
-      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-be_db}?schema=public
+      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-1}@postgres:5432/${DB_NAME:-be_db}?schema=public
       JWT_SECRET: ${JWT_SECRET:-your-super-secret-key-change-this}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
       PORT: 3000
