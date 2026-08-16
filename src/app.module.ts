@@ -4,6 +4,7 @@ import { PrismaModule } from '@core/database/prisma/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { ExcelModule } from '@/shared/utils';
 import { TeacherModule } from '@/modules/teacher/teacher.module';
+import { RegistrationPeriodModule } from '@/modules/registration-period/registration-period.module';
 
 import { StudentModule } from '@/modules';
 
@@ -15,6 +16,7 @@ import { StudentModule } from '@/modules';
     ExcelModule,
     TeacherModule,
     StudentModule,
+    RegistrationPeriodModule,
   ],
 })
 export class AppModule {}
