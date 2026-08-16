@@ -122,6 +122,9 @@ Table teachers {
   project projects [not null]
   user users [not null]
   students students [not null]
+  teacher_quotas teacher_quotas [not null]
+  topics topics [not null]
+  exception_requests exception_requests [not null]
   created_at DateTime [default: `now()`, not null]
   updated_at DateTime [not null]
   deleted_at DateTime
@@ -151,6 +154,68 @@ Table projects {
   deleted_at DateTime
 }
 
+Table registration_periods {
+  id Int [pk, increment]
+  name String [not null]
+  semester String [not null]
+  school_year String [not null]
+  start_date DateTime [not null]
+  teacher_deadline DateTime [not null]
+  student_deadline DateTime [not null]
+  default_quota Int [not null]
+  status RegistrationPeriodStatus [not null, default: 'UPCOMING']
+  description String
+  department_student_limits Json
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [not null]
+  teacher_quotas teacher_quotas [not null]
+  topics topics [not null]
+}
+
+Table teacher_quotas {
+  id Int [pk, increment]
+  period_id Int [not null]
+  teacher_id Int [not null]
+  assigned_quota Int [not null]
+  submitted_topics Int [not null, default: 0]
+  max_students Int [not null]
+  status TeacherQuotaStatus [not null, default: 'INSUFFICIENT']
+  last_notified_at DateTime
+  period registration_periods [not null]
+  teacher teachers [not null]
+}
+
+Table topics {
+  id Int [pk, increment]
+  period_id Int [not null]
+  teacher_id Int [not null]
+  name String [not null]
+  description String [not null]
+  max_students Int [not null]
+  registered_students Int [not null, default: 0]
+  status TopicStatus [not null, default: 'PENDING']
+  moderator_note String
+  rejection_reason String
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [not null]
+  period registration_periods [not null]
+  teacher teachers [not null]
+  exception_requests exception_requests [not null]
+}
+
+Table exception_requests {
+  id Int [pk, increment]
+  topic_id Int [not null]
+  teacher_id Int [not null]
+  max_students Int [not null]
+  students Json [not null]
+  status ExceptionRequestStatus [not null, default: 'PENDING']
+  rejection_reason String
+  requested_at DateTime [default: `now()`, not null]
+  topic topics [not null]
+  teacher teachers [not null]
+}
+
 Enum TeacherStatus {
   active
   inactive
@@ -167,6 +232,29 @@ Enum AcademicTitle {
   DOCTOR
   ASSOC_PROF
   PROF
+}
+
+Enum RegistrationPeriodStatus {
+  UPCOMING
+  OPEN
+  CLOSED
+}
+
+Enum TeacherQuotaStatus {
+  SUFFICIENT
+  INSUFFICIENT
+}
+
+Enum TopicStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+Enum ExceptionRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 Ref: role_permissions.role_id > roles.id
@@ -192,3 +280,15 @@ Ref: secretaries.user_id - users.id
 Ref: projects.student_id - students.id
 
 Ref: projects.teacher_id > teachers.id
+
+Ref: teacher_quotas.period_id > registration_periods.id [delete: Cascade]
+
+Ref: teacher_quotas.teacher_id > teachers.id
+
+Ref: topics.period_id > registration_periods.id [delete: Cascade]
+
+Ref: topics.teacher_id > teachers.id
+
+Ref: exception_requests.topic_id > topics.id [delete: Cascade]
+
+Ref: exception_requests.teacher_id > teachers.id
