@@ -22,7 +22,10 @@ async function bootstrap() {
 
   const reflector = app.get(Reflector);
 
-  app.setGlobalPrefix(`${env.API_PREFIX}/${env.API_VERSION}`);
+  const apiPrefix = configService.get<string>('API_PREFIX') ?? 'api';
+  const apiVersion = configService.get<string>('API_VERSION') ?? 'v1';
+
+  app.setGlobalPrefix(`${apiPrefix}/${apiVersion}`);
 
   app.useGlobalPipes(
     new ValidationPipe({

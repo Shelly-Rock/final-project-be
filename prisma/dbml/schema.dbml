@@ -80,6 +80,8 @@ Table students {
   extra_data Json
   user users
   teacher teachers
+  finalSubmission final_submissions
+  independentScores independent_scores [not null]
   created_at DateTime [default: `now()`, not null]
   updated_at DateTime [not null]
   deleted_at DateTime
@@ -125,6 +127,13 @@ Table teachers {
   teacher_quotas teacher_quotas [not null]
   topics topics [not null]
   exception_requests exception_requests [not null]
+  chairedCommittees defense_committees [not null]
+  secretaryCommittees defense_committees [not null]
+  internal1Committees defense_committees [not null]
+  internal2Committees defense_committees [not null]
+  externalReviews committee_external_reviewers [not null]
+  defenseScores defense_scores [not null]
+  independentScores independent_scores [not null]
   created_at DateTime [default: `now()`, not null]
   updated_at DateTime [not null]
   deleted_at DateTime
@@ -149,6 +158,10 @@ Table projects {
   teacher_id Int [not null]
   student students [not null]
   teacher teachers [not null]
+  finalSubmission final_submissions
+  defenseSessions defense_session_projects [not null]
+  independentScores independent_scores [not null]
+  scoringResult scoring_results
   created_at DateTime [default: `now()`, not null]
   updated_at DateTime [not null]
   deleted_at DateTime
@@ -216,6 +229,220 @@ Table exception_requests {
   teacher teachers [not null]
 }
 
+Table report_templates {
+  id Int [pk, increment]
+  name String [not null]
+  description String
+  type TemplateType [not null]
+  file_url String [not null]
+  file_name String [not null]
+  file_size Int [not null]
+  teacher_id Int [not null]
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [not null]
+  deleted_at DateTime
+}
+
+Table progress_reports {
+  id Int [pk, increment]
+  title String [not null]
+  content String [not null]
+  file_url String
+  file_name String
+  month Int [not null]
+  year Int [not null]
+  status ReportStatus [not null, default: 'PENDING']
+  feedback String
+  score Int
+  student_id Int [not null]
+  teacher_id Int [not null]
+  reviewed_by Int
+  reviewed_at DateTime
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [not null]
+  deleted_at DateTime
+}
+
+Table student_progress {
+  id Int [pk, increment]
+  student_id Int [unique, not null]
+  status ProgressStatus [not null, default: 'ON_TRACK']
+  is_banned Boolean [not null, default: false]
+  ban_reason String
+  banned_at DateTime
+  total_reports_required Int [not null, default: 6]
+  total_reports_submitted Int [not null, default: 0]
+  next_deadline DateTime
+  last_report_date DateTime
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [not null]
+  deleted_at DateTime
+}
+
+Table progress_notifications {
+  id Int [pk, increment]
+  type NotificationType [not null]
+  title String [not null]
+  message String [not null]
+  is_read Boolean [not null, default: false]
+  sender_id Int
+  recipient_id Int [not null]
+  related_student_id Int
+  related_report_id Int
+  created_at DateTime [default: `now()`, not null]
+}
+
+Table final_submissions {
+  id Int [pk, increment]
+  student_id Int [unique, not null]
+  project_id Int [unique, not null]
+  file_url String [not null]
+  file_name String [not null]
+  original_name String [not null]
+  file_size Int [not null]
+  file_type SubmissionType [not null]
+  status SubmissionStatus [not null, default: 'PENDING']
+  submitted_at DateTime [default: `now()`, not null]
+  reviewed_by Int
+  reviewed_at DateTime
+  rejection_reason String
+  student students [not null]
+  project projects [not null]
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [not null]
+  deleted_at DateTime
+}
+
+Table defense_committees {
+  id Int [pk, increment]
+  name String [not null]
+  chairman_id Int
+  secretary_id Int
+  internal_1_id Int
+  internal_2_id Int
+  external_reviewers committee_external_reviewers [not null]
+  chairman teachers
+  secretary teachers
+  internal_1 teachers
+  internal_2 teachers
+  sessions defense_sessions [not null]
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [not null]
+  deleted_at DateTime
+}
+
+Table committee_external_reviewers {
+  id Int [pk, increment]
+  committee_id Int [not null]
+  teacher_id Int [not null]
+  committee defense_committees [not null]
+  teacher teachers [not null]
+  created_at DateTime [default: `now()`, not null]
+
+  indexes {
+    (committee_id, teacher_id) [unique]
+  }
+}
+
+Table defense_sessions {
+  id Int [pk, increment]
+  committee_id Int [not null]
+  defense_date DateTime [not null]
+  start_time String [not null]
+  end_time String
+  room String [not null]
+  duration_minutes Int [not null, default: 15]
+  status DefenseSessionStatus [not null, default: 'SCHEDULED']
+  committee defense_committees [not null]
+  projects defense_session_projects [not null]
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [not null]
+  deleted_at DateTime
+}
+
+Table defense_session_projects {
+  id Int [pk, increment]
+  session_id Int [not null]
+  project_id Int [not null]
+  order_index Int [not null]
+  scheduled_time String [not null]
+  score Float
+  defense_notes String
+  defended_at DateTime
+  session defense_sessions [not null]
+  project projects [not null]
+  defenseScores defense_scores [not null]
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [not null]
+
+  indexes {
+    (session_id, project_id) [unique]
+  }
+}
+
+Table defense_scores {
+  id Int [pk, increment]
+  session_project_id Int [not null]
+  teacher_id Int [not null]
+  role CommitteeRole [not null]
+  score Float [not null]
+  notes String
+  session_project defense_session_projects [not null]
+  teacher teachers [not null]
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [not null]
+
+  indexes {
+    (session_project_id, teacher_id) [unique]
+  }
+}
+
+Table independent_scores {
+  id Int [pk, increment]
+  project_id Int [not null]
+  student_id Int [not null]
+  teacher_id Int [not null]
+  scoring_type ScoringType [not null]
+  role CommitteeRole
+  score Float
+  max_score Float [not null, default: 10]
+  criteria_scores Json
+  status ScoringStatus [not null, default: 'PENDING']
+  deadline DateTime
+  submitted_at DateTime
+  notes String
+  strengths String
+  weaknesses String
+  project projects [not null]
+  student students [not null]
+  teacher teachers [not null]
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [not null]
+  deleted_at DateTime
+
+  indexes {
+    (project_id, teacher_id, scoring_type) [unique]
+  }
+}
+
+Table scoring_results {
+  id Int [pk, increment]
+  project_id Int [unique, not null]
+  student_id Int [not null]
+  gvhd_score Float
+  gvhd_passed Boolean [not null, default: false]
+  committee_scores Json
+  total_committee_scores Int [not null, default: 0]
+  failed_count Int [not null, default: 0]
+  is_eliminated Boolean [not null, default: false]
+  is_gvhd_failed Boolean [not null, default: false]
+  final_status String
+  score_sheet_url String
+  project projects [not null]
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [not null]
+}
+
 Enum TeacherStatus {
   active
   inactive
@@ -257,6 +484,76 @@ Enum ExceptionRequestStatus {
   REJECTED
 }
 
+Enum ReportStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REVISION_REQUESTED
+}
+
+Enum ProgressStatus {
+  ON_TRACK
+  EXTENDED
+  TOPIC_CHANGED
+  BANNED
+}
+
+Enum TemplateType {
+  MONTHLY_REPORT
+  MIDTERM_REPORT
+  FINAL_REPORT
+  PROPOSAL
+  PRESENTATION
+}
+
+Enum SubmissionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+Enum SubmissionType {
+  WORD
+  PDF
+  POWERPOINT
+}
+
+Enum CommitteeRole {
+  CHAIRMAN
+  SECRETARY
+  INTERNAL_REVIEWER
+  EXTERNAL_REVIEWER
+}
+
+Enum DefenseSessionStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  RESCHEDULED
+}
+
+Enum NotificationType {
+  STATUS_CHANGED
+  REPORT_SUBMITTED
+  REPORT_APPROVED
+  REPORT_REJECTED
+  BAN_APPLIED
+  BAN_WARNING
+}
+
+Enum ScoringStatus {
+  PENDING
+  IN_PROGRESS
+  SUBMITTED
+  FAILED
+  PASSED
+}
+
+Enum ScoringType {
+  GVHD
+  COMMITTEE
+}
+
 Ref: role_permissions.role_id > roles.id
 
 Ref: role_permissions.permission_id > permissions.id
@@ -292,3 +589,37 @@ Ref: topics.teacher_id > teachers.id
 Ref: exception_requests.topic_id > topics.id [delete: Cascade]
 
 Ref: exception_requests.teacher_id > teachers.id
+
+Ref: final_submissions.student_id - students.id
+
+Ref: final_submissions.project_id - projects.id
+
+Ref: defense_committees.chairman_id > teachers.id
+
+Ref: defense_committees.secretary_id > teachers.id
+
+Ref: defense_committees.internal_1_id > teachers.id
+
+Ref: defense_committees.internal_2_id > teachers.id
+
+Ref: committee_external_reviewers.committee_id > defense_committees.id
+
+Ref: committee_external_reviewers.teacher_id > teachers.id
+
+Ref: defense_sessions.committee_id > defense_committees.id
+
+Ref: defense_session_projects.session_id > defense_sessions.id
+
+Ref: defense_session_projects.project_id > projects.id
+
+Ref: defense_scores.session_project_id > defense_session_projects.id
+
+Ref: defense_scores.teacher_id > teachers.id
+
+Ref: independent_scores.project_id > projects.id
+
+Ref: independent_scores.student_id > students.id
+
+Ref: independent_scores.teacher_id > teachers.id
+
+Ref: scoring_results.project_id - projects.id
