@@ -7,6 +7,9 @@ import {
   ImportStudentService,
   CreateStudentService,
   GetStudentListService,
+  GetStudentByIdService,
+  UpdateStudentService,
+  RemoveStudentService,
 } from './services';
 
 @Module({
@@ -17,6 +20,18 @@ import {
     CreateStudentService,
     ImportStudentService,
     GetStudentListService,
+    GetStudentByIdService,
+    UpdateStudentService,
+    RemoveStudentService,
+  ],
+  exports: [
+    StudentService,
+    CreateStudentService,
+    ImportStudentService,
+    GetStudentListService,
+    GetStudentByIdService,
+    UpdateStudentService,
+    RemoveStudentService,
   ],
 })
 export class StudentModule {}
