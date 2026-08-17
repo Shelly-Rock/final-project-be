@@ -25,6 +25,29 @@ enum AcademicTitle {
   PROF
 }
 
+enum RegistrationPeriodStatus {
+  UPCOMING
+  OPEN
+  CLOSED
+}
+
+enum TeacherQuotaStatus {
+  SUFFICIENT
+  INSUFFICIENT
+}
+
+enum TopicStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ExceptionRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 // Progress Tracking ENUMs
 enum ReportStatus {
   PENDING
@@ -82,6 +105,19 @@ enum NotificationType {
   REPORT_REJECTED
   BAN_APPLIED
   BAN_WARNING
+}
+
+enum ScoringStatus {
+  PENDING // Chưa chấm
+  IN_PROGRESS // Đang chấm
+  SUBMITTED // Đã nộp
+  FAILED // Rớt (<4 điểm)
+  PASSED // Đạt
+}
+
+enum ScoringType {
+  GVHD // Giảng viên hướng dẫn
+  COMMITTEE // Thành viên hội đồng
 }
 
 //Quản lý quyền và tài khoản người dùng theo hệ thống RBAC
@@ -257,11 +293,16 @@ model Teacher {
 
   status TeacherStatus @default(active)
 
+  // Registration Period relations
+  teacher_quotas      TeacherQuota[]
+  topics              Topic[]
+  exception_requests  ExceptionRequest[]
+
+  // Committee relations
   project  Project[]
   user     User      @relation(fields: [user_id], references: [id])
   students Student[]
 
-  // Committee relations
   chairedCommittees   DefenseCommittee[]          @relation("CommitteeChairman")
   secretaryCommittees DefenseCommittee[]          @relation("CommitteeSecretary")
   internal1Committees DefenseCommittee[]          @relation("CommitteeInternal1")
@@ -320,6 +361,85 @@ model Project {
 
   @@index([teacher_id])
   @@map("projects")
+}
+
+// MODELS REGISTRATION PERIOD
+
+model RegistrationPeriod {
+  id                        Int                      @id @default(autoincrement())
+  name                      String                   @db.VarChar(255)
+  semester                  String                   @db.VarChar(10)
+  school_year               String                   @db.VarChar(20)
+  start_date                DateTime                 @db.Date
+  teacher_deadline          DateTime                 @db.Date
+  student_deadline          DateTime                 @db.Date
+  default_quota             Int                      
+  status                    RegistrationPeriodStatus @default(UPCOMING)
+  description               String?                  @db.Text
+  
+  department_student_limits Json?                    
+
+  created_at                DateTime                 @default(now())
+  updated_at                DateTime                 @updatedAt
+
+  teacher_quotas            TeacherQuota[]
+  topics                    Topic[]
+
+  @@map("registration_periods")
+}
+
+model TeacherQuota {
+  id                Int                @id @default(autoincrement())
+  period_id         Int
+  teacher_id        Int
+  assigned_quota    Int
+  submitted_topics  Int                @default(0)
+  max_students      Int
+  status            TeacherQuotaStatus @default(INSUFFICIENT)
+  last_notified_at  DateTime?
+
+  period            RegistrationPeriod @relation(fields: [period_id], references: [id], onDelete: Cascade)
+  teacher           Teacher            @relation(fields: [teacher_id], references: [id])
+
+  @@map("teacher_quotas")
+}
+
+model Topic {
+  id                  Int               @id @default(autoincrement())
+  period_id           Int
+  teacher_id          Int
+  name                String            @db.VarChar(255)
+  description         String            @db.Text
+  max_students        Int
+  registered_students Int               @default(0)
+  status              TopicStatus       @default(PENDING)
+  moderator_note      String?           @db.Text
+  rejection_reason    String?           @db.Text
+  created_at          DateTime          @default(now())
+  updated_at          DateTime          @updatedAt
+
+  period              RegistrationPeriod @relation(fields: [period_id], references: [id], onDelete: Cascade)
+  teacher             Teacher            @relation(fields: [teacher_id], references: [id])
+  exception_requests  ExceptionRequest[]
+
+  @@map("topics")
+}
+
+model ExceptionRequest {
+  id                Int                    @id @default(autoincrement())
+  topic_id          Int
+  teacher_id        Int
+  max_students      Int
+
+  students          Json                   
+  status            ExceptionRequestStatus @default(PENDING)
+  rejection_reason  String?                @db.Text
+  requested_at      DateTime               @default(now())
+
+  topic             Topic                  @relation(fields: [topic_id], references: [id], onDelete: Cascade)
+  teacher           Teacher                @relation(fields: [teacher_id], references: [id])
+
+  @@map("exception_requests")
 }
 
 // Progress Tracking Models
@@ -570,19 +690,6 @@ model DefenseScore {
 }
 
 // ========== Stage 4: Independent Scoring (Phiếu chấm độc lập) ==========
-
-enum ScoringStatus {
-  PENDING // Chưa chấm
-  IN_PROGRESS // Đang chấm
-  SUBMITTED // Đã nộp
-  FAILED // Rớt (<4 điểm)
-  PASSED // Đạt
-}
-
-enum ScoringType {
-  GVHD // Giảng viên hướng dẫn
-  COMMITTEE // Thành viên hội đồng
-}
 
 // Independent Score (Phiếu chấm độc lập)
 model IndependentScore {

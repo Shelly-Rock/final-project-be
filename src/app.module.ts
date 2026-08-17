@@ -4,6 +4,7 @@ import { PrismaModule } from '@core/database/prisma/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { ExcelModule } from '@/shared/utils';
 import { TeacherModule } from '@/modules/teacher/teacher.module';
+import { RegistrationPeriodModule } from '@/modules/registration-period/registration-period.module';
 import { ProgressTrackingModule } from './modules/progress-tracking';
 import { SubmissionModule } from './modules/submission/submission.module';
 import { CommitteeModule } from './modules/committee/committee.module';
@@ -20,6 +21,7 @@ import { StudentModule } from '@/modules';
     ExcelModule,
     TeacherModule,
     StudentModule,
+    RegistrationPeriodModule,
     ProgressTrackingModule,
     SubmissionModule,
     CommitteeModule,
