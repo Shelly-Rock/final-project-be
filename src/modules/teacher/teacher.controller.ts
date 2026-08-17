@@ -27,7 +27,7 @@ import {
 
 @ApiTags('Teachers')
 @UseInterceptors(ClassSerializerInterceptor)
-@Controller('api/teachers')
+@Controller('teachers')
 export class TeacherController {
   constructor(private readonly teacherService: TeacherService) {}
 
