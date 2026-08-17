@@ -16,17 +16,13 @@ export class PrismaService
   private readonly logger = new Logger(PrismaService.name);
 
   constructor() {
-    const pool = new Pool({
-      host: process.env.DB_HOST || 'localhost',
-      port: parseInt(process.env.DB_PORT || '5432', 10),
-      user: process.env.DB_USER || 'postgres',
-      password: process.env.DB_PASSWORD || 'postgres',
-      database: process.env.DB_NAME || 'be_db',
-      max: parseInt(process.env.DB_POOL_MAX || '20', 10),
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 2000,
-      maxUses: 7500,
-    });
+    const connectionString = process.env.DATABASE_URL;
+    
+    if (!connectionString) {
+      throw new Error('DATABASE_URL environment variable is not set');
+    }
+
+    const pool = new Pool({ connectionString });
     const adapter = new PrismaPg(pool);
     super({
       adapter,
@@ -58,8 +54,8 @@ export class PrismaService
     try {
       await this.$queryRaw`SELECT 1`;
       return { status: 'healthy', timestamp: new Date() };
-    } catch (error) {
-      return { status: 'unhealthy || disconnect', error: error.message };
+    } catch (error: any) {
+      return { status: 'unhealthy', error: error.message };
     }
   }
 }
