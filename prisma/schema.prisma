@@ -6,11 +6,7 @@ datasource db {
   provider = "postgresql"
 }
 
-generator dbml {
-  provider = "prisma-dbml-generator"
-}
-
-//ENUM
+// ENUMs defined at top for reference
 enum TeacherStatus {
   active
   inactive
