@@ -10,12 +10,23 @@ export class GetStudentByIdService {
     const student = await this.prismaService.student.findUnique({
       where: { id },
       include: {
-        teacher: {
-          select: {
-            id: true,
-            teacher_id: true,
-            name: true,
-            email: true,
+        user: true,
+        project: {
+          include: {
+            teacher: {
+              select: {
+                id: true,
+                teacher_id: true,
+                name: true,
+                email: true,
+              },
+            },
+            topic: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
           },
         },
       },
@@ -32,12 +43,23 @@ export class GetStudentByIdService {
     const student = await this.prismaService.student.findUnique({
       where: { student_id: studentId },
       include: {
-        teacher: {
-          select: {
-            id: true,
-            teacher_id: true,
-            name: true,
-            email: true,
+        user: true,
+        project: {
+          include: {
+            teacher: {
+              select: {
+                id: true,
+                teacher_id: true,
+                name: true,
+                email: true,
+              },
+            },
+            topic: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
           },
         },
       },
@@ -56,7 +78,7 @@ export class GetStudentByIdService {
     return {
       id: student.id,
       studentId: student.student_id,
-      email: student.email,
+      email: student.user?.email || student.email,
       firstName: student.first_name,
       middleName: student.middle_name,
       lastName: student.last_name,
@@ -69,7 +91,8 @@ export class GetStudentByIdService {
       extraData: student.extra_data,
       createdAt: student.created_at.toISOString(),
       updatedAt: student.updated_at.toISOString(),
-      teacher: student.teacher,
+      teacher: student.project?.teacher || null,
+      topic: student.project?.topic || null,
     };
   }
 }

@@ -13,6 +13,13 @@ export class GetStudentListService {
       this.prismaService.student.findMany({
         skip: (page - 1) * limit,
         take: limit,
+        include: {
+          user: {
+            select: {
+              email: true,
+            },
+          },
+        },
       }),
       this.prismaService.student.count(),
     ]);
@@ -20,7 +27,7 @@ export class GetStudentListService {
     const studentsDTO = students.map((student) => ({
       id: student.id,
       studentId: student.student_id,
-      email: student.email,
+      email: student.user?.email || null,
       firstName: student.first_name,
       middleName: student.middle_name,
       lastName: student.last_name,

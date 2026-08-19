@@ -49,42 +49,35 @@ export class ImportStudentService {
     const studentIds = students.map((student) => student.studentId);
     const emails = students.map((student) => student.email);
 
+    // Check student_id trùng lặp
     const existingStudents = await this.prismaService.student.findMany({
       where: {
-        OR: [
-          {
-            student_id: {
-              in: studentIds,
-            },
-          },
-          {
-            email: {
-              in: emails,
-            },
-          },
-        ],
+        student_id: {
+          in: studentIds,
+        },
       },
       select: {
         student_id: true,
+      },
+    });
+
+    // Check email trùng lặp trong User table
+    const existingEmails = await this.prismaService.user.findMany({
+      where: {
+        email: {
+          in: emails,
+        },
+      },
+      select: {
         email: true,
       },
     });
 
-    if (!existingStudents.length) {
+    const duplicateStudentIds: string[] = existingStudents.map((s) => s.student_id);
+    const duplicateEmails: string[] = existingEmails.map((u) => u.email);
+
+    if (!duplicateStudentIds.length && !duplicateEmails.length) {
       return;
-    }
-
-    const duplicateStudentIds: string[] = [];
-    const duplicateEmails: string[] = [];
-
-    for (const student of existingStudents) {
-      if (student.student_id) {
-        duplicateStudentIds.push(student.student_id);
-      }
-
-      if (student.email) {
-        duplicateEmails.push(student.email);
-      }
     }
 
     const duplicateMessages: string[] = [];

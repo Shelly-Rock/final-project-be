@@ -8,9 +8,24 @@ export class CreateStudentService {
   constructor(private readonly prismaSV: PrismaService) {}
 
   async createStudent(students: CreateStudentReqDTO[]): Promise<void> {
-    const studentData = students.map((student) => ({
-      student_id: student.studentId,
+    // Bước 1: Tạo Users trước (với email làm Single Source of Truth)
+    const userData = students.map((student) => ({
       email: student.email,
+      username: student.studentId,
+      password_hash: '', // Sẽ được set sau
+      role_id: 3, // Student role - cần confirm role_id đúng
+    }));
+
+    // Tạo users trước
+    const createdUsers = await this.prismaSV.user.createManyAndReturn({
+      data: userData,
+    });
+
+    // Bước 2: Tạo Students với user_id từ users vừa tạo
+    const studentData = students.map((student, index) => ({
+      user_id: createdUsers[index].id,
+      student_id: student.studentId,
+      // Bỏ email ở đây - dùng user.email
       first_name: student.firstName,
       middle_name: student.middleName,
       last_name: student.lastName,
@@ -22,6 +37,7 @@ export class CreateStudentService {
       academic_year: student.academicYear,
       extra_data: (student.extraData as Prisma.InputJsonValue) ?? null,
     }));
+
     await this.prismaSV.student.createMany({
       data: studentData,
     });

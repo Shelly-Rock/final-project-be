@@ -10,10 +10,7 @@ import {
 import { Gender } from '@prisma/client';
 
 export class UpdateStudentReqDTO {
-  @IsOptional()
-  @IsString()
-  @IsNotEmpty()
-  email?: string;
+  // Note: email đã được chuyển sang User model - không còn trong Student
 
   @IsOptional()
   @IsString()

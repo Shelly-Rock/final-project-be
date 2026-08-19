@@ -256,7 +256,7 @@ export class SubmissionService {
       class_name: student.class_name,
       project_code: student.project?.project_id,
       project_name: student.project?.project_name,
-      email: student.email,
+      email: student.user?.email || null,
     }));
   }
 

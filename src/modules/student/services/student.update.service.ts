@@ -43,23 +43,11 @@ export class UpdateStudentService {
   ): Promise<{ id: number; studentId: string }> {
     await this.getStudentById(id);
 
-    if (dto.email) {
-      const existingWithEmail = await this.prismaService.student.findFirst({
-        where: {
-          email: dto.email,
-          id: { not: id },
-          deleted_at: null,
-        },
-      });
-
-      if (existingWithEmail) {
-        throw new ConflictException('Email đã được sử dụng bởi sinh viên khác');
-      }
-    }
+    // Note: email không còn trong Student - dùng User.email thay thế
+    // Nếu cần update email, phải update qua User model
 
     const updateData: Prisma.StudentUpdateInput = {};
 
-    if (dto.email !== undefined) updateData.email = dto.email;
     if (dto.firstName !== undefined) updateData.first_name = dto.firstName;
     if (dto.middleName !== undefined) updateData.middle_name = dto.middleName;
     if (dto.lastName !== undefined) updateData.last_name = dto.lastName;
