@@ -197,12 +197,31 @@ model User {
   teacher   Teacher?
   secretary Secretary?
 
+  // Email verification tokens
+  email_verification_tokens EmailVerificationToken[]
+
   created_at DateTime  @default(now())
   updated_at DateTime  @updatedAt
   deleted_at DateTime?
 
   @@index([role_id])
   @@map("users")
+}
+
+// Email Verification Token
+model EmailVerificationToken {
+  id        Int       @id @default(autoincrement())
+  user_id   Int
+  token     String    @unique
+  expires_at DateTime
+  used_at   DateTime?
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([token])
+  @@map("email_verification_tokens")
 }
 
 model Student {
