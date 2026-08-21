@@ -46,6 +46,10 @@ export class DefenseService {
   private async validateProjectAssignments(committeeId: number, projectIds: number[]) {
     const committee = await this.prisma.defenseCommittee.findFirst({
       where: { id: committeeId },
+      include: {
+        members: true,
+        external_reviewers: true,
+      },
     });
 
     if (!committee) {
@@ -57,12 +61,8 @@ export class DefenseService {
       include: { student: true },
     });
 
-    const excludedTeacherIds = [
-      committee.chairman_id,
-      committee.secretary_id,
-      committee.internal_1_id,
-      committee.internal_2_id,
-    ].filter(Boolean) as number[];
+    // Get all internal committee members' teacher IDs
+    const excludedTeacherIds = committee.members.map((m) => m.teacher_id);
 
     for (const project of projects) {
       // Check if any excluded teacher is the supervisor
