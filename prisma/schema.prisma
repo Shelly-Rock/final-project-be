@@ -4,10 +4,505 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-   url      = env("DATABASE_URL")
+  url      = env("DATABASE_URL")
 }
 
-// ENUMs defined at top for reference
+model Role {
+  id           Int              @id @default(autoincrement())
+  name         String           @unique
+  display_name String
+  description  String?
+  is_system    Boolean          @default(false)
+  priority     Int              @default(0)
+  created_at   DateTime         @default(now())
+  updated_at   DateTime         @updatedAt
+  deleted_at   DateTime?
+  permissions  RolePermission[]
+  users        User[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          Int              @id @default(autoincrement())
+  name        String           @unique
+  description String?
+  module      String
+  action      String
+  created_at  DateTime         @default(now())
+  updated_at  DateTime         @updatedAt
+  deleted_at  DateTime?
+  roles       RolePermission[]
+
+  @@unique([module, action])
+  @@map("permissions")
+}
+
+model RolePermission {
+  role_id       Int
+  permission_id Int
+  permission    Permission @relation(fields: [permission_id], references: [id])
+  role          Role       @relation(fields: [role_id], references: [id])
+
+  @@id([role_id, permission_id])
+  @@map("role_permissions")
+}
+
+model User {
+  email                     String                      @unique
+  created_at                DateTime                    @default(now())
+  deleted_at                DateTime?
+  email_verified_at         DateTime?
+  is_active                 Boolean                     @default(true)
+  password_hash             String
+  role_id                   Int
+  updated_at                DateTime                    @updatedAt
+  username                  String                      @unique
+  id                        Int                         @id @default(autoincrement())
+  must_change_password      Boolean                     @default(true)
+  email_verification_tokens email_verification_tokens[]
+  secretary                 Secretary?
+  student                   Student?
+  teacher                   Teacher?
+  role                      Role                        @relation(fields: [role_id], references: [id])
+
+  @@index([role_id])
+  @@map("users")
+}
+
+model Student {
+  id                 Int                  @id @default(autoincrement())
+  user_id            Int?                 @unique
+  student_id         String               @unique
+  first_name         String
+  last_name          String
+  date_of_birth      DateTime
+  gender             Gender
+  class_name         String
+  major              String
+  course_year        Int
+  academic_year      String
+  created_at         DateTime             @default(now())
+  updated_at         DateTime             @updatedAt
+  deleted_at         DateTime?
+  middle_name        String
+  extra_data         Json?
+  final_submissions  final_submissions?
+  independent_scores independent_scores[]
+  project            Project?
+  scoring_results    scoring_results[]
+  user               User?                @relation(fields: [user_id], references: [id])
+
+  @@index([student_id])
+  @@index([class_name])
+  @@map("students")
+}
+
+model Faculty {
+  id          String       @id @db.VarChar(50)
+  name        String       @db.VarChar(255)
+  created_at  DateTime     @default(now())
+  departments Department[]
+  teachers    Teacher[]
+
+  @@map("faculties")
+}
+
+model Department {
+  id         String    @id @db.VarChar(50)
+  name       String    @db.VarChar(255)
+  faculty_id String    @db.VarChar(50)
+  created_at DateTime  @default(now())
+  faculty    Faculty   @relation(fields: [faculty_id], references: [id])
+  teachers   Teacher[]
+
+  @@map("departments")
+}
+
+model Teacher {
+  id                           Int                            @id @default(autoincrement())
+  user_id                      Int                            @unique
+  teacher_id                   String                         @unique @db.VarChar(50)
+  created_at                   DateTime                       @default(now())
+  updated_at                   DateTime                       @updatedAt
+  deleted_at                   DateTime?
+  address                      String?
+  date_of_birth                DateTime?                      @db.Date
+  email                        String                         @unique @db.VarChar(255)
+  gender                       Gender?
+  phone                        String?                        @db.VarChar(20)
+  position                     String?                        @db.VarChar(100)
+  status                       TeacherStatus                  @default(active)
+  department_id                String?                        @db.VarChar(50)
+  faculty_id                   String?                        @db.VarChar(50)
+  name                         String                         @db.VarChar(255)
+  academic_title               AcademicTitle?
+  committee_external_reviewers committee_external_reviewers[]
+  committee_members            committee_members[]
+  defense_scores               defense_scores[]
+  exception_requests           exception_requests[]
+  independent_scores           independent_scores[]
+  project                      Project[]
+  teacher_quotas               teacher_quotas[]
+  department                   Department?                    @relation(fields: [department_id], references: [id])
+  faculty                      Faculty?                       @relation(fields: [faculty_id], references: [id])
+  user                         User                           @relation(fields: [user_id], references: [id])
+  topics                       topics[]
+
+  @@index([teacher_id])
+  @@map("teachers")
+}
+
+model Secretary {
+  id           Int       @id @default(autoincrement())
+  user_id      Int       @unique
+  secretary_id String    @unique
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+  deleted_at   DateTime?
+  user         User      @relation(fields: [user_id], references: [id])
+
+  @@map("secretaries")
+}
+
+model Project {
+  id                       Int                        @id @default(autoincrement())
+  project_id               String                     @unique
+  project_name             String
+  description              String
+  student_id               Int                        @unique
+  teacher_id               Int
+  created_at               DateTime                   @default(now())
+  updated_at               DateTime                   @updatedAt
+  deleted_at               DateTime?
+  topic_id                 Int?                       @unique
+  defense_session_projects defense_session_projects[]
+  final_submissions        final_submissions?
+  independent_scores       independent_scores[]
+  student                  Student                    @relation(fields: [student_id], references: [id])
+  teacher                  Teacher                    @relation(fields: [teacher_id], references: [id])
+  topics                   topics?                    @relation(fields: [topic_id], references: [id])
+  scoring_results          scoring_results?
+
+  @@index([teacher_id])
+  @@map("projects")
+}
+
+model committee_external_reviewers {
+  id                 Int                @id @default(autoincrement())
+  committee_id       Int
+  teacher_id         Int
+  created_at         DateTime           @default(now())
+  defense_committees defense_committees @relation(fields: [committee_id], references: [id])
+  teachers           Teacher            @relation(fields: [teacher_id], references: [id])
+
+  @@unique([committee_id, teacher_id])
+}
+
+model committee_members {
+  id                 Int                @id @default(autoincrement())
+  committee_id       Int
+  teacher_id         Int
+  role               CommitteeRole
+  created_at         DateTime           @default(now())
+  defense_committees defense_committees @relation(fields: [committee_id], references: [id], onDelete: Cascade)
+  teachers           Teacher            @relation(fields: [teacher_id], references: [id])
+
+  @@unique([committee_id, teacher_id])
+  @@index([committee_id])
+  @@index([teacher_id])
+}
+
+model defense_committees {
+  id                           Int                            @id @default(autoincrement())
+  name                         String
+  period_id                    Int?
+  created_at                   DateTime                       @default(now())
+  updated_at                   DateTime
+  deleted_at                   DateTime?
+  committee_external_reviewers committee_external_reviewers[]
+  committee_members            committee_members[]
+  defense_sessions             defense_sessions[]
+}
+
+model defense_scores {
+  id                       Int                      @id @default(autoincrement())
+  session_project_id       Int
+  teacher_id               Int
+  role                     CommitteeRole
+  score                    Float
+  notes                    String?
+  created_at               DateTime                 @default(now())
+  updated_at               DateTime
+  defense_session_projects defense_session_projects @relation(fields: [session_project_id], references: [id])
+  teachers                 Teacher                  @relation(fields: [teacher_id], references: [id])
+
+  @@unique([session_project_id, teacher_id])
+}
+
+model defense_session_projects {
+  id               Int              @id @default(autoincrement())
+  session_id       Int
+  project_id       Int
+  order_index      Int
+  scheduled_time   String
+  score            Float?
+  defense_notes    String?
+  defended_at      DateTime?
+  created_at       DateTime         @default(now())
+  updated_at       DateTime
+  defense_scores   defense_scores[]
+  projects         Project          @relation(fields: [project_id], references: [id])
+  defense_sessions defense_sessions @relation(fields: [session_id], references: [id])
+
+  @@unique([session_id, project_id])
+  @@index([session_id])
+}
+
+model defense_sessions {
+  id                       Int                        @id @default(autoincrement())
+  committee_id             Int
+  defense_date             DateTime
+  start_time               String
+  end_time                 String?
+  room                     String
+  duration_minutes         Int                        @default(15)
+  status                   DefenseSessionStatus       @default(SCHEDULED)
+  created_at               DateTime                   @default(now())
+  updated_at               DateTime
+  deleted_at               DateTime?
+  defense_session_projects defense_session_projects[]
+  defense_committees       defense_committees         @relation(fields: [committee_id], references: [id])
+
+  @@index([committee_id])
+  @@index([defense_date])
+}
+
+model email_verification_tokens {
+  id         Int       @id @default(autoincrement())
+  user_id    Int
+  token      String    @unique
+  expires_at DateTime
+  used_at    DateTime?
+  created_at DateTime  @default(now())
+  users      User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([user_id])
+}
+
+model exception_requests {
+  id               Int                    @id @default(autoincrement())
+  topic_id         Int
+  teacher_id       Int
+  max_students     Int
+  students         Json
+  status           ExceptionRequestStatus @default(PENDING)
+  rejection_reason String?
+  requested_at     DateTime               @default(now())
+  teachers         Teacher                @relation(fields: [teacher_id], references: [id])
+  topics           topics                 @relation(fields: [topic_id], references: [id], onDelete: Cascade)
+}
+
+model final_submissions {
+  id               Int              @id @default(autoincrement())
+  student_id       Int              @unique
+  project_id       Int              @unique
+  file_url         String
+  file_name        String
+  original_name    String
+  file_size        Int
+  file_type        SubmissionType
+  status           SubmissionStatus @default(PENDING)
+  submitted_at     DateTime         @default(now())
+  reviewed_by      Int?
+  reviewed_at      DateTime?
+  rejection_reason String?
+  created_at       DateTime         @default(now())
+  updated_at       DateTime
+  deleted_at       DateTime?
+  projects         Project          @relation(fields: [project_id], references: [id])
+  students         Student          @relation(fields: [student_id], references: [id])
+
+  @@index([project_id])
+}
+
+model independent_scores {
+  id              Int            @id @default(autoincrement())
+  project_id      Int
+  student_id      Int
+  teacher_id      Int
+  scoring_type    ScoringType
+  role            CommitteeRole?
+  score           Float?
+  max_score       Float          @default(10)
+  criteria_scores Json?
+  status          ScoringStatus  @default(PENDING)
+  deadline        DateTime?
+  submitted_at    DateTime?
+  notes           String?
+  strengths       String?
+  weaknesses      String?
+  created_at      DateTime       @default(now())
+  updated_at      DateTime
+  deleted_at      DateTime?
+  projects        Project        @relation(fields: [project_id], references: [id])
+  students        Student        @relation(fields: [student_id], references: [id])
+  teachers        Teacher        @relation(fields: [teacher_id], references: [id])
+
+  @@unique([project_id, teacher_id, scoring_type])
+  @@index([project_id])
+  @@index([student_id])
+  @@index([teacher_id])
+}
+
+model progress_notifications {
+  id                 Int              @id @default(autoincrement())
+  type               NotificationType
+  title              String
+  message            String
+  is_read            Boolean          @default(false)
+  sender_id          Int?
+  recipient_id       Int
+  related_student_id Int?
+  related_report_id  Int?
+  created_at         DateTime         @default(now())
+
+  @@index([recipient_id])
+  @@index([sender_id])
+}
+
+model progress_reports {
+  id                   Int                   @id @default(autoincrement())
+  title                String
+  content              String
+  file_url             String?
+  file_name            String?
+  month                Int
+  year                 Int
+  period_id            Int?
+  status               ReportStatus          @default(PENDING)
+  feedback             String?
+  score                Int?
+  student_id           Int
+  teacher_id           Int
+  reviewed_by          Int?
+  reviewed_at          DateTime?
+  created_at           DateTime              @default(now())
+  updated_at           DateTime
+  deleted_at           DateTime?
+  registration_periods registration_periods? @relation(fields: [period_id], references: [id])
+
+  @@index([period_id])
+  @@index([student_id])
+  @@index([teacher_id])
+}
+
+model registration_periods {
+  id                        Int                      @id @default(autoincrement())
+  name                      String                   @db.VarChar(255)
+  semester                  String                   @db.VarChar(10)
+  school_year               String                   @db.VarChar(20)
+  start_date                DateTime                 @db.Date
+  teacher_deadline          DateTime                 @db.Date
+  student_deadline          DateTime                 @db.Date
+  default_quota             Int
+  status                    RegistrationPeriodStatus @default(UPCOMING)
+  description               String?
+  department_student_limits Json?
+  created_at                DateTime                 @default(now())
+  updated_at                DateTime
+  progress_reports          progress_reports[]
+  teacher_quotas            teacher_quotas[]
+  topics                    topics[]
+}
+
+model report_templates {
+  id          Int          @id @default(autoincrement())
+  name        String
+  description String?
+  type        TemplateType
+  file_url    String
+  file_name   String
+  file_size   Int
+  teacher_id  Int
+  created_at  DateTime     @default(now())
+  updated_at  DateTime
+  deleted_at  DateTime?
+
+  @@index([teacher_id])
+}
+
+model scoring_results {
+  id              Int      @id @default(autoincrement())
+  project_id      Int      @unique
+  student_id      Int
+  gvhd_score      Float?
+  review_score    Float?
+  defense_score   Float?
+  final_score     Float?
+  is_gvhd_passed  Boolean  @default(false)
+  is_final_passed Boolean  @default(false)
+  final_status    String?
+  score_sheet_url String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime
+  projects        Project  @relation(fields: [project_id], references: [id])
+  students        Student  @relation(fields: [student_id], references: [id])
+
+  @@index([student_id])
+}
+
+model student_progress {
+  id                      Int            @id @default(autoincrement())
+  student_id              Int            @unique
+  status                  ProgressStatus @default(ON_TRACK)
+  is_banned               Boolean        @default(false)
+  ban_reason              String?
+  banned_at               DateTime?
+  total_reports_required  Int            @default(6)
+  total_reports_submitted Int            @default(0)
+  next_deadline           DateTime?
+  last_report_date        DateTime?
+  created_at              DateTime       @default(now())
+  updated_at              DateTime
+  deleted_at              DateTime?
+
+  @@index([student_id])
+}
+
+model teacher_quotas {
+  id                   Int                  @id @default(autoincrement())
+  period_id            Int
+  teacher_id           Int
+  assigned_quota       Int
+  submitted_topics     Int                  @default(0)
+  max_students         Int
+  status               TeacherQuotaStatus   @default(INSUFFICIENT)
+  last_notified_at     DateTime?
+  registration_periods registration_periods @relation(fields: [period_id], references: [id], onDelete: Cascade)
+  teachers             Teacher              @relation(fields: [teacher_id], references: [id])
+}
+
+model topics {
+  id                   Int                  @id @default(autoincrement())
+  period_id            Int
+  teacher_id           Int
+  name                 String               @db.VarChar(255)
+  description          String
+  max_students         Int
+  registered_students  Int                  @default(0)
+  status               TopicStatus          @default(PENDING)
+  moderator_note       String?
+  rejection_reason     String?
+  created_at           DateTime             @default(now())
+  updated_at           DateTime
+  exception_requests   exception_requests[]
+  projects             Project?
+  registration_periods registration_periods @relation(fields: [period_id], references: [id], onDelete: Cascade)
+  teachers             Teacher              @relation(fields: [teacher_id], references: [id])
+}
+
 enum TeacherStatus {
   active
   inactive
@@ -26,21 +521,18 @@ enum AcademicTitle {
   PROF
 }
 
-enum RegistrationPeriodStatus {
-  UPCOMING
-  OPEN
-  CLOSED
+enum CommitteeRole {
+  CHAIRMAN
+  SECRETARY
+  INTERNAL_REVIEWER
+  EXTERNAL_REVIEWER
 }
 
-enum TeacherQuotaStatus {
-  SUFFICIENT
-  INSUFFICIENT
-}
-
-enum TopicStatus {
-  PENDING
-  APPROVED
-  REJECTED
+enum DefenseSessionStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  RESCHEDULED
 }
 
 enum ExceptionRequestStatus {
@@ -49,12 +541,13 @@ enum ExceptionRequestStatus {
   REJECTED
 }
 
-// Progress Tracking ENUMs
-enum ReportStatus {
-  PENDING
-  APPROVED
-  REJECTED
-  REVISION_REQUESTED
+enum NotificationType {
+  STATUS_CHANGED
+  REPORT_SUBMITTED
+  REPORT_APPROVED
+  REPORT_REJECTED
+  BAN_APPLIED
+  BAN_WARNING
 }
 
 enum ProgressStatus {
@@ -64,15 +557,32 @@ enum ProgressStatus {
   BANNED
 }
 
-enum TemplateType {
-  MONTHLY_REPORT
-  MIDTERM_REPORT
-  FINAL_REPORT
-  PROPOSAL
-  PRESENTATION
+enum RegistrationPeriodStatus {
+  UPCOMING
+  OPEN
+  CLOSED
 }
 
-// Stage 3 ENUMs - Submission & Committee
+enum ReportStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REVISION_REQUESTED
+}
+
+enum ScoringStatus {
+  PENDING
+  IN_PROGRESS
+  SUBMITTED
+  FAILED
+  PASSED
+}
+
+enum ScoringType {
+  GVHD
+  COMMITTEE
+}
+
 enum SubmissionStatus {
   PENDING
   APPROVED
@@ -85,729 +595,21 @@ enum SubmissionType {
   POWERPOINT
 }
 
-enum CommitteeRole {
-  CHAIRMAN // Chủ tịch
-  SECRETARY // Thư ký
-  INTERNAL_REVIEWER // Phản biện trong
-  EXTERNAL_REVIEWER // Phản biện ngoài
+enum TeacherQuotaStatus {
+  SUFFICIENT
+  INSUFFICIENT
 }
 
-enum DefenseSessionStatus {
-  SCHEDULED
-  COMPLETED
-  CANCELLED
-  RESCHEDULED
+enum TemplateType {
+  MONTHLY_REPORT
+  MIDTERM_REPORT
+  FINAL_REPORT
+  PROPOSAL
+  PRESENTATION
 }
 
-enum NotificationType {
-  STATUS_CHANGED
-  REPORT_SUBMITTED
-  REPORT_APPROVED
-  REPORT_REJECTED
-  BAN_APPLIED
-  BAN_WARNING
-}
-
-enum ScoringStatus {
-  PENDING // Chưa chấm
-  IN_PROGRESS // Đang chấm
-  SUBMITTED // Đã nộp
-  FAILED // Rớt (<4 điểm)
-  PASSED // Đạt
-}
-
-enum ScoringType {
-  GVHD // Giảng viên hướng dẫn
-  COMMITTEE // Thành viên hội đồng
-}
-
-//Quản lý quyền và tài khoản người dùng theo hệ thống RBAC
-
-model Role {
-  id Int @id @default(autoincrement())
-
-  name         String @unique
-  display_name String
-
-  description String?
-
-  is_system Boolean @default(false)
-
-  priority Int @default(0)
-
-  permissions RolePermission[]
-
-  users User[]
-
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
-
-  @@map("roles")
-}
-
-model Permission {
-  id Int @id @default(autoincrement())
-
-  name String @unique
-
-  description String?
-
-  module String
-  action String
-
-  roles RolePermission[]
-
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
-
-  @@unique([module, action])
-  @@map("permissions")
-}
-
-model RolePermission {
-  role_id       Int
-  permission_id Int
-
-  role       Role       @relation(fields: [role_id], references: [id])
-  permission Permission @relation(fields: [permission_id], references: [id])
-
-  @@id([role_id, permission_id])
-  @@map("role_permissions")
-}
-
-model User {
-  id Int @id @default(autoincrement())
-
-  email         String @unique
-  username      String @unique
-  password_hash String
-
-  must_change_password Boolean @default(true)
-
-  email_verified_at DateTime?
-
-  is_active Boolean @default(true)
-
-  role_id Int
-  role    Role @relation(fields: [role_id], references: [id])
-
-  student   Student?
-  teacher   Teacher?
-  secretary Secretary?
-
-  // Email verification tokens
-  email_verification_tokens EmailVerificationToken[]
-
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
-
-  @@index([role_id])
-  @@map("users")
-}
-
-// Email Verification Token
-model EmailVerificationToken {
-  id        Int       @id @default(autoincrement())
-  user_id   Int
-  token     String    @unique
-  expires_at DateTime
-  used_at   DateTime?
-  created_at DateTime @default(now())
-
-  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
-
-  @@index([user_id])
-  @@index([token])
-  @@map("email_verification_tokens")
-}
-
-model Student {
-  id Int @id @default(autoincrement())
-
-  user_id Int? @unique  // Nullable - sinh viên có thể chưa có tài khoản
-
-  student_id String @unique
-  // Bỏ email - dùng user.email làm Single Source of Truth
-
-  first_name  String
-  middle_name String
-  last_name   String
-
-  date_of_birth DateTime
-  gender        Gender
-
-  class_name String
-  major      String
-
-  course_year   Int
-  academic_year String
-
-  project Project?
-
-  extra_data Json?
-  user       User?    @relation(fields: [user_id], references: [id])
-  // Note: GVHD được quản lý thông qua Project.topic.teacher hoặc Project.teacher
-
-  // Stage 4 relations
-  finalSubmission   FinalSubmission?
-  independentScores IndependentScore[]
-  scoringResults    ScoringResult[]
-
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
-
-  @@index([student_id])
-  @@index([class_name])
-  @@map("students")
-}
-
-// Faculty Table
-model Faculty {
-  id          String       @id @db.VarChar(50)
-  name        String       @db.VarChar(255)
-  departments Department[]
-  teachers    Teacher[]
-
-  created_at DateTime @default(now())
-
-  @@map("faculties")
-}
-
-// Department Table
-model Department {
-  id         String    @id @db.VarChar(50)
-  name       String    @db.VarChar(255)
-  faculty_id String    @db.VarChar(50)
-  faculty    Faculty   @relation(fields: [faculty_id], references: [id])
-  teachers   Teacher[]
-
-  created_at DateTime @default(now())
-
-  @@map("departments")
-}
-
-model Teacher {
-  id         Int    @id @default(autoincrement())
-  user_id    Int    @unique
-  teacher_id String @unique @db.VarChar(50)
-
-  name String @db.VarChar(255)
-
-  email String  @unique @db.VarChar(255)
-  phone String? @db.VarChar(20)
-
-  faculty_id    String?     @db.VarChar(50)
-  faculty       Faculty?    @relation(fields: [faculty_id], references: [id])
-  department_id String?     @db.VarChar(50)
-  department    Department? @relation(fields: [department_id], references: [id])
-
-  academic_title AcademicTitle?
-  position       String?        @db.VarChar(100)
-  date_of_birth  DateTime?      @db.Date
-  gender         Gender?
-  address        String?        @db.Text
-
-  status TeacherStatus @default(active)
-
-  // Registration Period relations
-  teacher_quotas      TeacherQuota[]
-  topics              Topic[]
-  exception_requests  ExceptionRequest[]
-
-  // Committee relations
-  project  Project[]
-  user     User      @relation(fields: [user_id], references: [id])
-  // Note: Students được quản lý qua Project.teacher (GVHD)
-
-  // Dùng bảng CommitteeMember thay vì hardcode 4 cột
-  committeeMembers CommitteeMember[]
-  externalReviews CommitteeExternalReviewer[]
-  defenseScores  DefenseScore[]
-  independentScores IndependentScore[]
-
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
-
-  @@index([teacher_id])
-  @@map("teachers")
-}
-
-model Secretary {
-  id Int @id @default(autoincrement())
-
-  user_id Int @unique
-
-  secretary_id String @unique
-
-  user User @relation(fields: [user_id], references: [id])
-
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
-
-  @@map("secretaries")
-}
-
-model Project {
-  id           Int    @id @default(autoincrement())
-  project_id   String @unique
-  project_name String
-  description  String @db.Text
-
-  student_id Int @unique
-  teacher_id Int
-
-  topic_id Int? @unique // Liên kết với Topic đã đăng ký ở Stage 2
-
-  student Student @relation(fields: [student_id], references: [id])
-  teacher Teacher @relation(fields: [teacher_id], references: [id])
-  topic   Topic?  @relation(fields: [topic_id], references: [id])
-
-  // Stage 3 relations
-  finalSubmission FinalSubmission?
-  defenseSessions DefenseSessionProject[]
-
-  // Stage 4 relations
-  independentScores IndependentScore[]
-  scoringResult     ScoringResult?
-
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
-
-  @@index([teacher_id])
-  @@map("projects")
-}
-
-// MODELS REGISTRATION PERIOD
-
-model RegistrationPeriod {
-  id                        Int                      @id @default(autoincrement())
-  name                      String                   @db.VarChar(255)
-  semester                  String                   @db.VarChar(10)
-  school_year               String                   @db.VarChar(20)
-  start_date                DateTime                 @db.Date
-  teacher_deadline          DateTime                 @db.Date
-  student_deadline          DateTime                 @db.Date
-  default_quota             Int                      
-  status                    RegistrationPeriodStatus @default(UPCOMING)
-  description               String?                  @db.Text
-  
-  department_student_limits Json?                    
-
-  created_at                DateTime                 @default(now())
-  updated_at                DateTime                 @updatedAt
-
-  teacher_quotas            TeacherQuota[]
-  topics                    Topic[]
-  progressReports           ProgressReport[]
-
-  @@map("registration_periods")
-}
-
-model TeacherQuota {
-  id                Int                @id @default(autoincrement())
-  period_id         Int
-  teacher_id        Int
-  assigned_quota    Int
-  submitted_topics  Int                @default(0)
-  max_students      Int
-  status            TeacherQuotaStatus @default(INSUFFICIENT)
-  last_notified_at  DateTime?
-
-  period            RegistrationPeriod @relation(fields: [period_id], references: [id], onDelete: Cascade)
-  teacher           Teacher            @relation(fields: [teacher_id], references: [id])
-
-  @@map("teacher_quotas")
-}
-
-model Topic {
-  id                  Int               @id @default(autoincrement())
-  period_id           Int
-  teacher_id          Int
-  name                String            @db.VarChar(255)
-  description         String            @db.Text
-  max_students        Int
-  registered_students Int               @default(0)
-  status              TopicStatus       @default(PENDING)
-  moderator_note      String?           @db.Text
-  rejection_reason    String?           @db.Text
-  created_at          DateTime          @default(now())
-  updated_at          DateTime          @updatedAt
-
-  period              RegistrationPeriod @relation(fields: [period_id], references: [id], onDelete: Cascade)
-  teacher             Teacher            @relation(fields: [teacher_id], references: [id])
-  exception_requests  ExceptionRequest[]
-
-  // Reverse relation - Project giữ topic_id làm FK
-  project Project?
-
-  @@map("topics")
-}
-
-model ExceptionRequest {
-  id                Int                    @id @default(autoincrement())
-  topic_id          Int
-  teacher_id        Int
-  max_students      Int
-
-  students          Json                   
-  status            ExceptionRequestStatus @default(PENDING)
-  rejection_reason  String?                @db.Text
-  requested_at      DateTime               @default(now())
-
-  topic             Topic                  @relation(fields: [topic_id], references: [id], onDelete: Cascade)
-  teacher           Teacher                @relation(fields: [teacher_id], references: [id])
-
-  @@map("exception_requests")
-}
-
-// Progress Tracking Models
-
-model ReportTemplate {
-  id          Int          @id @default(autoincrement())
-  name        String
-  description String?
-  type        TemplateType
-  file_url    String
-  file_name   String
-  file_size   Int
-  teacher_id  Int
-
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
-
-  @@index([teacher_id])
-  @@map("report_templates")
-}
-
-model ProgressReport {
-  id        Int     @id @default(autoincrement())
-  title     String
-  content   String  @db.Text
-  file_url  String?
-  file_name String?
-
-  month Int
-  year  Int
-  period_id Int? // Gắn với học kỳ cụ thể
-
-  status   ReportStatus @default(PENDING)
-  feedback String?      @db.Text
-  score    Int?
-
-  student_id Int
-  teacher_id Int
-
-  reviewed_by Int?
-  reviewed_at DateTime?
-
-  // Relations
-  period RegistrationPeriod? @relation(fields: [period_id], references: [id])
-
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
-
-  @@index([student_id])
-  @@index([teacher_id])
-  @@index([period_id])
-  @@map("progress_reports")
-}
-
-model StudentProgress {
-  id         Int            @id @default(autoincrement())
-  student_id Int            @unique
-  status     ProgressStatus @default(ON_TRACK)
-
-  is_banned  Boolean   @default(false)
-  ban_reason String?
-  banned_at  DateTime?
-
-  total_reports_required  Int @default(6)
-  total_reports_submitted Int @default(0)
-
-  next_deadline    DateTime?
-  last_report_date DateTime?
-
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
-
-  @@index([student_id])
-  @@map("student_progress")
-}
-
-model ProgressNotification {
-  id      Int              @id @default(autoincrement())
-  type    NotificationType
-  title   String
-  message String           @db.Text
-  is_read Boolean          @default(false)
-
-  sender_id    Int?
-  recipient_id Int
-
-  related_student_id Int?
-  related_report_id  Int?
-
-  created_at DateTime @default(now())
-
-  @@index([recipient_id])
-  @@index([sender_id])
-  @@map("progress_notifications")
-}
-
-// ========== Stage 3: Submission & Committee Models ==========
-
-// Final Submission Model
-model FinalSubmission {
-  id Int @id @default(autoincrement())
-
-  student_id Int @unique
-  project_id Int @unique
-
-  // File info
-  file_url      String
-  file_name     String
-  original_name String
-  file_size     Int
-  file_type     SubmissionType
-
-  // Submission metadata
-  status       SubmissionStatus @default(PENDING)
-  submitted_at DateTime         @default(now())
-
-  // Review info
-  reviewed_by      Int?
-  reviewed_at      DateTime?
-  rejection_reason String?
-
-  // Relations
-  student Student @relation(fields: [student_id], references: [id])
-  project Project @relation(fields: [project_id], references: [id])
-
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
-
-  @@index([project_id])
-  @@map("final_submissions")
-}
-
-// Defense Committee Model
-model DefenseCommittee {
-  id        Int     @id @default(autoincrement())
-  name      String  // vd: "Hội đồng 1", "Hội đồng chấm luận văn KHDL 2026"
-  period_id Int?    // Gắn với đợt bảo vệ/RegistrationPeriod
-
-  // Linh hoạt: dùng bảng CommitteeMember thay vì hardcode 4 cột
-  members CommitteeMember[]
-  // Giữ lại external_reviewers vì nó cũng là loại member
-  external_reviewers CommitteeExternalReviewer[]
-
-  // Defense sessions
-  sessions DefenseSession[]
-
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
-
-  @@map("defense_committees")
-}
-
-// Committee Member (bảng trung gian linh hoạt)
-model CommitteeMember {
-  id           Int           @id @default(autoincrement())
-  committee_id Int
-  teacher_id   Int
-  role         CommitteeRole // CHAIRMAN, SECRETARY, INTERNAL_REVIEWER, EXTERNAL_REVIEWER
-
-  committee DefenseCommittee @relation(fields: [committee_id], references: [id], onDelete: Cascade)
-  teacher   Teacher          @relation(fields: [teacher_id], references: [id])
-
-  created_at DateTime @default(now())
-
-  @@unique([committee_id, teacher_id])
-  @@index([committee_id])
-  @@index([teacher_id])
-  @@map("committee_members")
-}
-
-// External Reviewer Assignment (many-to-many) - Giữ lại vì tương thích ngược
-model CommitteeExternalReviewer {
-  id           Int @id @default(autoincrement())
-  committee_id Int
-  teacher_id   Int
-
-  committee DefenseCommittee @relation(fields: [committee_id], references: [id])
-  teacher   Teacher          @relation(fields: [teacher_id], references: [id])
-
-  created_at DateTime @default(now())
-
-  @@unique([committee_id, teacher_id])
-  @@map("committee_external_reviewers")
-}
-
-// Defense Session Model
-model DefenseSession {
-  id           Int      @id @default(autoincrement())
-  committee_id Int
-  defense_date DateTime
-  start_time   String // "08:00"
-  end_time     String? // Calculated: "08:15", "08:30", etc.
-  room         String // "A101", "B202"
-
-  // Duration per topic (default 15 minutes)
-  duration_minutes Int @default(15)
-
-  status DefenseSessionStatus @default(SCHEDULED)
-
-  // Relations
-  committee DefenseCommittee        @relation(fields: [committee_id], references: [id])
-  projects  DefenseSessionProject[]
-
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
-
-  @@index([committee_id])
-  @@index([defense_date])
-  @@map("defense_sessions")
-}
-
-// Defense Session Project (many-to-many)
-model DefenseSessionProject {
-  id             Int    @id @default(autoincrement())
-  session_id     Int
-  project_id     Int
-  order_index    Int // Thứ tự bảo vệ: 1, 2, 3...
-  scheduled_time String // "08:00", "08:15", "08:30"...
-
-  // Defense result
-  score         Float?
-  defense_notes String?
-  defended_at   DateTime?
-
-  // Relations
-  session       DefenseSession @relation(fields: [session_id], references: [id])
-  project       Project        @relation(fields: [project_id], references: [id])
-  defenseScores DefenseScore[]
-
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
-
-  @@unique([session_id, project_id])
-  @@index([session_id])
-  @@map("defense_session_projects")
-}
-
-// Defense Score
-model DefenseScore {
-  id                 Int           @id @default(autoincrement())
-  session_project_id Int
-  teacher_id         Int
-  role               CommitteeRole
-  score              Float // 0-10
-  notes              String?
-
-  // Relations
-  session_project DefenseSessionProject @relation(fields: [session_project_id], references: [id])
-  teacher         Teacher               @relation(fields: [teacher_id], references: [id])
-
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
-
-  @@unique([session_project_id, teacher_id])
-  @@map("defense_scores")
-}
-
-// ========== Stage 4: Independent Scoring (Phiếu chấm độc lập) ==========
-
-// Independent Score (Phiếu chấm độc lập)
-model IndependentScore {
-  id Int @id @default(autoincrement())
-
-  // What is being scored
-  project_id Int
-  student_id Int
-
-  // Who scored
-  teacher_id   Int
-  scoring_type ScoringType // GVHD or COMMITTEE
-  role         CommitteeRole? // Only for COMMITTEE type
-
-  // Score info
-  score     Float? // 0-10, null if not yet scored
-  max_score Float  @default(10)
-
-  // Criteria scores (JSON for flexibility)
-  criteria_scores Json? // { content: 8, methodology: 7, presentation: 8 }
-
-  // Status
-  status ScoringStatus @default(PENDING)
-
-  // Timing
-  deadline     DateTime? // 7 days for GVHD, 3 days for committee
-  submitted_at DateTime?
-
-  // Feedback
-  notes      String? @db.Text
-  strengths  String? @db.Text
-  weaknesses String? @db.Text
-
-  // Relations
-  project Project @relation(fields: [project_id], references: [id])
-  student Student @relation(fields: [student_id], references: [id])
-  teacher Teacher @relation(fields: [teacher_id], references: [id])
-
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
-
-  @@unique([project_id, teacher_id, scoring_type])
-  @@index([project_id])
-  @@index([teacher_id])
-  @@index([student_id])
-  @@map("independent_scores")
-}
-
-// Scoring Result Summary (Tổng hợp kết quả cuối cùng)
-model ScoringResult {
-  id Int @id @default(autoincrement())
-
-  project_id Int @unique
-  student_id Int
-
-  // Điểm tổng hợp cuối cùng (từ GVHD + Hội đồng)
-  gvhd_score   Float? // Điểm GVHD
-  review_score Float? // Điểm phản biện trung bình
-  defense_score Float? // Điểm hội đồng trung bình
-  final_score   Float? // Điểm tổng kết (hệ 10)
-
-  // Trạng thái đạt/không đạt
-  is_gvhd_passed   Boolean @default(false) // GVHD >= 4
-  is_final_passed  Boolean @default(false)  // Tổng kết >= 4
-
-  // Quyết định cuối cùng
-  final_status String? // PASSED, REJECTED_GVHD, REJECTED_DEFENSE
-
-  // File export
-  score_sheet_url String? // URL to generated PDF
-
-  // Relations
-  project Project @relation(fields: [project_id], references: [id])
-  student Student @relation(fields: [student_id], references: [id])
-
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
-
-  @@index([student_id])
-  @@map("scoring_results")
+enum TopicStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }

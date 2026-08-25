@@ -44,11 +44,11 @@ export class DefenseService {
 
   // Validate that no teacher in committee is supervising assigned projects
   private async validateProjectAssignments(committeeId: number, projectIds: number[]) {
-    const committee = await this.prisma.defenseCommittee.findFirst({
+    const committee = await this.prisma.defense_committees.findFirst({
       where: { id: committeeId },
       include: {
-        members: true,
-        external_reviewers: true,
+        committee_members: true,
+        committee_external_reviewers: true,
       },
     });
 
@@ -62,7 +62,7 @@ export class DefenseService {
     });
 
     // Get all internal committee members' teacher IDs
-    const excludedTeacherIds = committee.members.map((m) => m.teacher_id);
+    const excludedTeacherIds = committee.committee_members.map((m) => m.teacher_id);
 
     for (const project of projects) {
       // Check if any excluded teacher is the supervisor
@@ -81,7 +81,7 @@ export class DefenseService {
 
   async createDefenseSession(dto: CreateDefenseSessionDto) {
     // Verify committee exists
-    const committee = await this.prisma.defenseCommittee.findFirst({
+    const committee = await this.prisma.defense_committees.findFirst({
       where: { id: dto.committee_id, deleted_at: null },
     });
 
@@ -96,7 +96,7 @@ export class DefenseService {
     }
 
     // Create session
-    const session = await this.prisma.defenseSession.create({
+    const session = await this.prisma.defense_sessions.create({
       data: {
         committee_id: dto.committee_id,
         defense_date: new Date(dto.defense_date),
@@ -104,6 +104,7 @@ export class DefenseService {
         room: dto.room,
         duration_minutes: dto.duration_minutes || 15,
         status: DefenseSessionStatus.SCHEDULED,
+        updated_at: new Date(),
       },
     });
 
@@ -115,12 +116,13 @@ export class DefenseService {
         dto.duration_minutes || 15,
       );
 
-      await this.prisma.defenseSessionProject.createMany({
+      await this.prisma.defense_session_projects.createMany({
         data: dto.project_ids.map((projectId, index) => ({
           session_id: session.id,
           project_id: projectId,
           order_index: index + 1,
           scheduled_time: times[index],
+          updated_at: new Date(),
         })),
       });
     }
@@ -146,13 +148,13 @@ export class DefenseService {
     const skip = (page - 1) * limit;
 
     const [data, total] = await Promise.all([
-      this.prisma.defenseSession.findMany({
+      this.prisma.defense_sessions.findMany({
         where,
         skip,
         take: limit,
         orderBy: { defense_date: 'desc' },
       }),
-      this.prisma.defenseSession.count({ where }),
+      this.prisma.defense_sessions.count({ where }),
     ]);
 
     const enrichedData = await Promise.all(
@@ -169,7 +171,7 @@ export class DefenseService {
   }
 
   async getDefenseSessionById(id: number) {
-    const session = await this.prisma.defenseSession.findFirst({
+    const session = await this.prisma.defense_sessions.findFirst({
       where: { id, deleted_at: null },
     });
 
@@ -181,11 +183,11 @@ export class DefenseService {
   }
 
   private async enrichSession(session: any) {
-    const committee = await this.prisma.defenseCommittee.findFirst({
+    const committee = await this.prisma.defense_committees.findFirst({
       where: { id: session.committee_id },
     });
 
-    const sessionProjects = await this.prisma.defenseSessionProject.findMany({
+    const sessionProjects = await this.prisma.defense_session_projects.findMany({
       where: { session_id: session.id },
       orderBy: { order_index: 'asc' },
     });
@@ -238,7 +240,7 @@ export class DefenseService {
   }
 
   async updateDefenseSession(id: number, dto: UpdateDefenseSessionDto) {
-    const session = await this.prisma.defenseSession.findFirst({
+    const session = await this.prisma.defense_sessions.findFirst({
       where: { id, deleted_at: null },
     });
 
@@ -250,7 +252,7 @@ export class DefenseService {
       throw new BadRequestException('Không thể cập nhật phiên bảo vệ đã hoàn thành');
     }
 
-    const updated = await this.prisma.defenseSession.update({
+    const updated = await this.prisma.defense_sessions.update({
       where: { id },
       data: {
         defense_date: dto.defense_date ? new Date(dto.defense_date) : undefined,
@@ -263,7 +265,7 @@ export class DefenseService {
 
     // Recalculate project times if start_time changed
     if (dto.start_time) {
-      const sessionProjects = await this.prisma.defenseSessionProject.findMany({
+      const sessionProjects = await this.prisma.defense_session_projects.findMany({
         where: { session_id: id },
         orderBy: { order_index: 'asc' },
       });
@@ -275,7 +277,7 @@ export class DefenseService {
       );
 
       for (let i = 0; i < sessionProjects.length; i++) {
-        await this.prisma.defenseSessionProject.update({
+        await this.prisma.defense_session_projects.update({
           where: { id: sessionProjects[i].id },
           data: { scheduled_time: times[i] },
         });
@@ -286,7 +288,7 @@ export class DefenseService {
   }
 
   async addProjectsToSession(id: number, dto: AddProjectsToSessionDto) {
-    const session = await this.prisma.defenseSession.findFirst({
+    const session = await this.prisma.defense_sessions.findFirst({
       where: { id, deleted_at: null },
     });
 
@@ -298,7 +300,7 @@ export class DefenseService {
     await this.validateProjectAssignments(session.committee_id, dto.project_ids);
 
     // Get current max order index
-    const lastProject = await this.prisma.defenseSessionProject.findFirst({
+    const lastProject = await this.prisma.defense_session_projects.findFirst({
       where: { session_id: id },
       orderBy: { order_index: 'desc' },
     });
@@ -312,12 +314,13 @@ export class DefenseService {
     );
 
     // Add new projects
-    await this.prisma.defenseSessionProject.createMany({
+    await this.prisma.defense_session_projects.createMany({
       data: dto.project_ids.map((projectId, index) => ({
         session_id: id,
         project_id: projectId,
         order_index: startIndex + index,
         scheduled_time: times[index],
+        updated_at: new Date(),
       })),
       skipDuplicates: true,
     });
@@ -331,7 +334,7 @@ export class DefenseService {
   }
 
   async removeProjectFromSession(id: number, projectId: number) {
-    const sessionProject = await this.prisma.defenseSessionProject.findFirst({
+    const sessionProject = await this.prisma.defense_session_projects.findFirst({
       where: {
         session_id: id,
         project_id: projectId,
@@ -343,7 +346,7 @@ export class DefenseService {
     }
 
     // Check if already scored
-    const scores = await this.prisma.defenseScore.findMany({
+    const scores = await this.prisma.defense_scores.findMany({
       where: { session_project_id: sessionProject.id },
     });
 
@@ -351,24 +354,24 @@ export class DefenseService {
       throw new BadRequestException('Đề tài đã được chấm điểm, không thể xóa');
     }
 
-    await this.prisma.defenseSessionProject.delete({
+    await this.prisma.defense_session_projects.delete({
       where: { id: sessionProject.id },
     });
 
     // Reorder remaining projects
-    const remainingProjects = await this.prisma.defenseSessionProject.findMany({
+    const remainingProjects = await this.prisma.defense_session_projects.findMany({
       where: { session_id: id },
       orderBy: { order_index: 'asc' },
     });
 
     const times = this.calculateProjectTimes(
-      (await this.prisma.defenseSession.findFirst({ where: { id } }))!.start_time,
+      (await this.prisma.defense_sessions.findFirst({ where: { id } }))!.start_time,
       remainingProjects.length,
-      (await this.prisma.defenseSession.findFirst({ where: { id } }))!.duration_minutes,
+      (await this.prisma.defense_sessions.findFirst({ where: { id } }))!.duration_minutes,
     );
 
     for (let i = 0; i < remainingProjects.length; i++) {
-      await this.prisma.defenseSessionProject.update({
+      await this.prisma.defense_session_projects.update({
         where: { id: remainingProjects[i].id },
         data: {
           order_index: i + 1,
@@ -381,7 +384,7 @@ export class DefenseService {
   }
 
   async scoreProject(sessionProjectId: number, dto: ScoreProjectDto) {
-    const sessionProject = await this.prisma.defenseSessionProject.findFirst({
+    const sessionProject = await this.prisma.defense_session_projects.findFirst({
       where: { id: sessionProjectId },
     });
 
@@ -390,7 +393,7 @@ export class DefenseService {
     }
 
     // Check if session is in valid state
-    const session = await this.prisma.defenseSession.findFirst({
+    const session = await this.prisma.defense_sessions.findFirst({
       where: { id: sessionProject.session_id },
     });
 
@@ -399,7 +402,7 @@ export class DefenseService {
     }
 
     // Create or update score
-    const existingScore = await this.prisma.defenseScore.findFirst({
+    const existingScore = await this.prisma.defense_scores.findFirst({
       where: {
         session_project_id: sessionProjectId,
         teacher_id: dto.teacher_id,
@@ -407,7 +410,7 @@ export class DefenseService {
     });
 
     if (existingScore) {
-      return this.prisma.defenseScore.update({
+      return this.prisma.defense_scores.update({
         where: { id: existingScore.id },
         data: {
           score: dto.score,
@@ -416,19 +419,20 @@ export class DefenseService {
       });
     }
 
-    return this.prisma.defenseScore.create({
+    return this.prisma.defense_scores.create({
       data: {
         session_project_id: sessionProjectId,
         teacher_id: dto.teacher_id,
         role: dto.role as any,
         score: dto.score,
         notes: dto.notes,
+        updated_at: new Date(),
       },
     });
   }
 
   async completeDefenseSession(id: number) {
-    const session = await this.prisma.defenseSession.findFirst({
+    const session = await this.prisma.defense_sessions.findFirst({
       where: { id, deleted_at: null },
     });
 
@@ -437,19 +441,19 @@ export class DefenseService {
     }
 
     // Mark all projects as defended
-    const sessionProjects = await this.prisma.defenseSessionProject.findMany({
+    const sessionProjects = await this.prisma.defense_session_projects.findMany({
       where: { session_id: id },
     });
 
     for (const sp of sessionProjects) {
       // Calculate average score
-      const scores = await this.prisma.defenseScore.findMany({
+      const scores = await this.prisma.defense_scores.findMany({
         where: { session_project_id: sp.id },
       });
 
       if (scores.length > 0) {
         const avgScore = scores.reduce((sum, s) => sum + s.score, 0) / scores.length;
-        await this.prisma.defenseSessionProject.update({
+        await this.prisma.defense_session_projects.update({
           where: { id: sp.id },
           data: {
             score: avgScore,
@@ -459,14 +463,14 @@ export class DefenseService {
       }
     }
 
-    return this.prisma.defenseSession.update({
+    return this.prisma.defense_sessions.update({
       where: { id },
       data: { status: DefenseSessionStatus.COMPLETED },
     });
   }
 
   async deleteDefenseSession(id: number) {
-    const session = await this.prisma.defenseSession.findFirst({
+    const session = await this.prisma.defense_sessions.findFirst({
       where: { id, deleted_at: null },
     });
 
@@ -475,12 +479,12 @@ export class DefenseService {
     }
 
     // Check for existing scores
-    const sessionProjects = await this.prisma.defenseSessionProject.findMany({
+    const sessionProjects = await this.prisma.defense_session_projects.findMany({
       where: { session_id: id },
     });
 
     for (const sp of sessionProjects) {
-      const scores = await this.prisma.defenseScore.findMany({
+      const scores = await this.prisma.defense_scores.findMany({
         where: { session_project_id: sp.id },
       });
 
@@ -492,11 +496,11 @@ export class DefenseService {
     }
 
     // Soft delete session and projects
-    await this.prisma.defenseSessionProject.deleteMany({
+    await this.prisma.defense_session_projects.deleteMany({
       where: { session_id: id },
     });
 
-    return this.prisma.defenseSession.update({
+    return this.prisma.defense_sessions.update({
       where: { id },
       data: { deleted_at: new Date() },
     });
@@ -529,21 +533,21 @@ export class DefenseService {
 
   async getStats() {
     const [sessions, completedSessions, scores] = await Promise.all([
-      this.prisma.defenseSession.count({ where: { deleted_at: null } }),
-      this.prisma.defenseSession.count({
+      this.prisma.defense_sessions.count({ where: { deleted_at: null } }),
+      this.prisma.defense_sessions.count({
         where: { status: DefenseSessionStatus.COMPLETED, deleted_at: null },
       }),
-      this.prisma.defenseScore.findMany(),
+      this.prisma.defense_scores.findMany(),
     ]);
 
-    const scheduled = await this.prisma.defenseSession.count({
+    const scheduled = await this.prisma.defense_sessions.count({
       where: { status: DefenseSessionStatus.SCHEDULED, deleted_at: null },
     });
-    const cancelled = await this.prisma.defenseSession.count({
+    const cancelled = await this.prisma.defense_sessions.count({
       where: { status: DefenseSessionStatus.CANCELLED, deleted_at: null },
     });
 
-    const sessionProjects = await this.prisma.defenseSessionProject.findMany({
+    const sessionProjects = await this.prisma.defense_session_projects.findMany({
       where: { defended_at: { not: null } },
     });
 

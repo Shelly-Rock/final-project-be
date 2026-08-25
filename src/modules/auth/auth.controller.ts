@@ -32,6 +32,7 @@ import {
   ResendVerificationReqDTO,
   ResendVerificationRespDTO,
 } from './dto/auth.dto';
+import { RegisterReqDTO, RegisterRespDTO } from './dto/register.dto';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -48,6 +49,17 @@ export class AuthController {
   @ApiForbiddenResponse({ description: 'Email not verified or must change password' })
   async login(@Body() dto: LoginReqDTO): Promise<LoginRespDTO> {
     return this.authService.login(dto);
+  }
+
+  @Public()
+  @Post('register')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Register a new student account' })
+  @ApiBody({ type: RegisterReqDTO })
+  @ApiOkResponse({ type: RegisterRespDTO, description: 'Account created, verification email sent' })
+  @ApiBadRequestResponse({ description: 'Validation error or user already exists' })
+  async register(@Body() dto: RegisterReqDTO): Promise<RegisterRespDTO> {
+    return this.authService.register(dto);
   }
 
   @Public()

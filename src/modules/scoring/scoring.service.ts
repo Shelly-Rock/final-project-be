@@ -15,7 +15,7 @@ export class ScoringService {
     const deadline = new Date();
     deadline.setDate(deadline.getDate() + (scoringType === ScoringType.GVHD ? 7 : 3));
 
-    const existing = await this.prisma.independentScore.findFirst({
+    const existing = await this.prisma.independent_scores.findFirst({
       where: {
         project_id: projectId,
         teacher_id: teacherId,
@@ -27,7 +27,7 @@ export class ScoringService {
       throw new BadRequestException('Score record already exists for this project and teacher');
     }
 
-    return this.prisma.independentScore.create({
+    return this.prisma.independent_scores.create({
       data: {
         project_id: projectId,
         student_id: studentId,
@@ -37,12 +37,13 @@ export class ScoringService {
         deadline,
         status: ScoringStatus.PENDING,
         max_score: 10,
+        updated_at: new Date(),
       },
     });
   }
 
   async updateScore(id: number, teacherId: number, dto: UpdateScoreDto) {
-    const score = await this.prisma.independentScore.findUnique({
+    const score = await this.prisma.independent_scores.findUnique({
       where: { id },
     });
 
@@ -58,7 +59,7 @@ export class ScoringService {
       throw new BadRequestException('Cannot update a submitted score');
     }
 
-    return this.prisma.independentScore.update({
+    return this.prisma.independent_scores.update({
       where: { id },
       data: {
         score: dto.score,
@@ -73,7 +74,7 @@ export class ScoringService {
   }
 
   async submitScore(id: number, teacherId: number, dto: SubmitScoreDto) {
-    const score = await this.prisma.independentScore.findUnique({
+    const score = await this.prisma.independent_scores.findUnique({
       where: { id },
     });
 
@@ -91,7 +92,7 @@ export class ScoringService {
 
     const isFailed = dto.score < 4;
 
-    const updatedScore = await this.prisma.independentScore.update({
+    const updatedScore = await this.prisma.independent_scores.update({
       where: { id },
       data: {
         score: dto.score,
@@ -118,21 +119,22 @@ export class ScoringService {
 
     if (!project) return;
 
-    let result = await this.prisma.scoringResult.findUnique({
+    let result = await this.prisma.scoring_results.findUnique({
       where: { project_id: projectId },
     });
 
     if (!result) {
-      result = await this.prisma.scoringResult.create({
+      result = await this.prisma.scoring_results.create({
         data: {
           project_id: projectId,
           student_id: project.student_id,
+          updated_at: new Date(),
         },
       });
     }
 
     const isPassed = score >= 4;
-    const updateData: Prisma.ScoringResultUpdateInput = {};
+    const updateData: Prisma.scoring_resultsUpdateInput = {};
 
     if (scoringType === ScoringType.GVHD) {
       updateData.gvhd_score = score;
@@ -143,7 +145,7 @@ export class ScoringService {
       }
     } else {
       // Committee score - get all committee scores from IndependentScore table
-      const committeeScores = await this.prisma.independentScore.findMany({
+      const committeeScores = await this.prisma.independent_scores.findMany({
         where: {
           project_id: projectId,
           scoring_type: ScoringType.COMMITTEE,
@@ -172,7 +174,7 @@ export class ScoringService {
     }
 
     // Calculate final score if both GVHD and defense scores are available
-    const allScores = await this.prisma.independentScore.findMany({
+    const allScores = await this.prisma.independent_scores.findMany({
       where: {
         project_id: projectId,
         status: ScoringStatus.SUBMITTED,
@@ -187,7 +189,7 @@ export class ScoringService {
       updateData.final_score = ((gvhdScore.score || 0) + avgCommittee) / 2;
     }
 
-    return this.prisma.scoringResult.update({
+    return this.prisma.scoring_results.update({
       where: { project_id: projectId },
       data: updateData,
     });
@@ -196,16 +198,16 @@ export class ScoringService {
   // ============ QUERIES ============
 
   async getScoreById(id: number) {
-    const score = await this.prisma.independentScore.findUnique({
+    const score = await this.prisma.independent_scores.findUnique({
       where: { id },
       include: {
-        project: {
+        projects: {
           select: {
             project_id: true,
             project_name: true,
           },
         },
-        student: {
+        students: {
           select: {
             student_id: true,
             first_name: true,
@@ -214,7 +216,7 @@ export class ScoringService {
             class_name: true,
           },
         },
-        teacher: {
+        teachers: {
           select: {
             teacher_id: true,
             name: true,
@@ -234,7 +236,7 @@ export class ScoringService {
     const { page = 1, limit = 20, status, scoringType } = query;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.IndependentScoreWhereInput = {
+    const where: Prisma.independent_scoresWhereInput = {
       teacher_id: teacherId,
     };
 
@@ -247,16 +249,16 @@ export class ScoringService {
     }
 
     const [scores, total] = await Promise.all([
-      this.prisma.independentScore.findMany({
+      this.prisma.independent_scores.findMany({
         where,
         include: {
-          project: {
+          projects: {
             select: {
               project_id: true,
               project_name: true,
             },
           },
-          student: {
+          students: {
             select: {
               student_id: true,
               first_name: true,
@@ -270,7 +272,7 @@ export class ScoringService {
         take: limit,
         orderBy: { deadline: 'asc' },
       }),
-      this.prisma.independentScore.count({ where }),
+      this.prisma.independent_scores.count({ where }),
     ]);
 
     return {
@@ -285,10 +287,10 @@ export class ScoringService {
   }
 
   async getScoresByProject(projectId: number) {
-    return this.prisma.independentScore.findMany({
+    return this.prisma.independent_scores.findMany({
       where: { project_id: projectId },
       include: {
-        teacher: {
+        teachers: {
           select: {
             teacher_id: true,
             name: true,
@@ -303,7 +305,7 @@ export class ScoringService {
     const { page = 1, limit = 20, scoringType, status, teacherId, projectId, studentId } = query;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.IndependentScoreWhereInput = {};
+    const where: Prisma.independent_scoresWhereInput = {};
 
     if (scoringType) where.scoring_type = scoringType;
     if (status) where.status = status;
@@ -312,16 +314,16 @@ export class ScoringService {
     if (studentId) where.student_id = studentId;
 
     const [scores, total] = await Promise.all([
-      this.prisma.independentScore.findMany({
+      this.prisma.independent_scores.findMany({
         where,
         include: {
-          project: {
+          projects: {
             select: {
               project_id: true,
               project_name: true,
             },
           },
-          student: {
+          students: {
             select: {
               student_id: true,
               first_name: true,
@@ -330,7 +332,7 @@ export class ScoringService {
               class_name: true,
             },
           },
-          teacher: {
+          teachers: {
             select: {
               teacher_id: true,
               name: true,
@@ -341,7 +343,7 @@ export class ScoringService {
         take: limit,
         orderBy: { created_at: 'desc' },
       }),
-      this.prisma.independentScore.count({ where }),
+      this.prisma.independent_scores.count({ where }),
     ]);
 
     return {
@@ -356,7 +358,7 @@ export class ScoringService {
   }
 
   async getMyStats(teacherId: number) {
-    const scores = await this.prisma.independentScore.findMany({
+    const scores = await this.prisma.independent_scores.findMany({
       where: { teacher_id: teacherId },
     });
 
@@ -372,7 +374,7 @@ export class ScoringService {
   // ============ SCORING RESULTS ============
 
   async getScoringResult(projectId: number) {
-    const result = await this.prisma.scoringResult.findUnique({
+    const result = await this.prisma.scoring_results.findUnique({
       where: { project_id: projectId },
     });
 
@@ -381,10 +383,10 @@ export class ScoringService {
     }
 
     // Get individual scores for detailed view
-    const scores = await this.prisma.independentScore.findMany({
+    const scores = await this.prisma.independent_scores.findMany({
       where: { project_id: projectId },
       include: {
-        teacher: {
+        teachers: {
           select: {
             teacher_id: true,
             name: true,
@@ -398,7 +400,7 @@ export class ScoringService {
       .map((s) => ({
         role: s.role,
         teacherId: s.teacher_id,
-        teacherName: s.teacher.name,
+        teacherName: s.teachers.name,
         score: s.score,
         passed: s.score !== null && s.score >= 4,
       }));
@@ -426,13 +428,13 @@ export class ScoringService {
     const { page = 1, limit = 20 } = query;
     const skip = (page - 1) * limit;
 
-    const results = await this.prisma.scoringResult.findMany({
+    const results = await this.prisma.scoring_results.findMany({
       skip,
       take: limit,
       orderBy: { created_at: 'desc' },
     });
 
-    const total = await this.prisma.scoringResult.count();
+    const total = await this.prisma.scoring_results.count();
 
     const enrichedResults = await Promise.all(
       results.map(async (result) => {
@@ -476,10 +478,10 @@ export class ScoringService {
   // ============ ASSIGN SCORES TO COMMITTEE ============
 
   async assignScoresToCommittee(sessionProjectId: number, committeeId: number) {
-    const sessionProject = await this.prisma.defenseSessionProject.findUnique({
+    const sessionProject = await this.prisma.defense_session_projects.findUnique({
       where: { id: sessionProjectId },
       include: {
-        project: true,
+        projects: true,
       },
     });
 
@@ -488,17 +490,17 @@ export class ScoringService {
     }
 
     // Get committee members using the new CommitteeMember table
-    const committee = await this.prisma.defenseCommittee.findUnique({
+    const committee = await this.prisma.defense_committees.findUnique({
       where: { id: committeeId },
       include: {
-        members: {
+        committee_members: {
           include: {
-            teacher: true,
+            teachers: true,
           },
         },
-        external_reviewers: {
+        committee_external_reviewers: {
           include: {
-            teacher: true,
+            teachers: true,
           },
         },
       },
@@ -514,10 +516,10 @@ export class ScoringService {
     const scoresToCreate = [];
 
     // Add internal members
-    for (const member of committee.members) {
+    for (const member of committee.committee_members) {
       scoresToCreate.push({
-        project_id: sessionProject.project_id,
-        student_id: sessionProject.project.student_id,
+        project_id: sessionProject.projects.id,
+        student_id: sessionProject.projects.student_id,
         teacher_id: member.teacher_id,
         scoring_type: ScoringType.COMMITTEE,
         role: member.role,
@@ -528,10 +530,10 @@ export class ScoringService {
     }
 
     // Add external reviewers
-    for (const reviewer of committee.external_reviewers) {
+    for (const reviewer of committee.committee_external_reviewers) {
       scoresToCreate.push({
-        project_id: sessionProject.project_id,
-        student_id: sessionProject.project.student_id,
+        project_id: sessionProject.projects.id,
+        student_id: sessionProject.projects.student_id,
         teacher_id: reviewer.teacher_id,
         scoring_type: ScoringType.COMMITTEE,
         role: CommitteeRole.EXTERNAL_REVIEWER,
@@ -542,7 +544,7 @@ export class ScoringService {
     }
 
     // Create all scores
-    return this.prisma.independentScore.createMany({
+    return this.prisma.independent_scores.createMany({
       data: scoresToCreate,
       skipDuplicates: true,
     });
@@ -551,7 +553,7 @@ export class ScoringService {
   // ============ DELETE ============
 
   async deleteScore(id: number) {
-    const score = await this.prisma.independentScore.findUnique({
+    const score = await this.prisma.independent_scores.findUnique({
       where: { id },
     });
 
@@ -563,7 +565,7 @@ export class ScoringService {
       throw new BadRequestException('Cannot delete a submitted score');
     }
 
-    return this.prisma.independentScore.delete({
+    return this.prisma.independent_scores.delete({
       where: { id },
     });
   }

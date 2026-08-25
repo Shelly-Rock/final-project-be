@@ -76,7 +76,7 @@ export class SubmissionService {
 
     // Check if student has permission to submit
     // Must have APPROVED progress status (not banned, submitted all reports)
-    const progress = await this.prisma.studentProgress.findUnique({
+    const progress = await this.prisma.student_progress.findUnique({
       where: { student_id: dto.student_id },
     });
 
@@ -85,7 +85,7 @@ export class SubmissionService {
     }
 
     // Check if already submitted
-    const existingSubmission = await this.prisma.finalSubmission.findFirst({
+    const existingSubmission = await this.prisma.final_submissions.findFirst({
       where: {
         student_id: dto.student_id,
         project_id: dto.project_id,
@@ -97,7 +97,7 @@ export class SubmissionService {
       throw new BadRequestException('Đã nộp bài cho đề tài này rồi');
     }
 
-    return this.prisma.finalSubmission.create({
+    return this.prisma.final_submissions.create({
       data: {
         student_id: dto.student_id,
         project_id: dto.project_id,
@@ -107,6 +107,7 @@ export class SubmissionService {
         file_size: dto.file_size,
         file_type: fileType,
         status: SubmissionStatus.PENDING,
+        updated_at: new Date(),
       },
     });
   }
@@ -122,13 +123,13 @@ export class SubmissionService {
     const skip = (page - 1) * limit;
 
     const [data, total] = await Promise.all([
-      this.prisma.finalSubmission.findMany({
+      this.prisma.final_submissions.findMany({
         where,
         skip,
         take: limit,
         orderBy: { submitted_at: 'desc' },
       }),
-      this.prisma.finalSubmission.count({ where }),
+      this.prisma.final_submissions.count({ where }),
     ]);
 
     // Enrich with student and project info
@@ -169,7 +170,7 @@ export class SubmissionService {
   }
 
   async getSubmissionById(id: number) {
-    const submission = await this.prisma.finalSubmission.findFirst({
+    const submission = await this.prisma.final_submissions.findFirst({
       where: { id, deleted_at: null },
     });
 
@@ -203,7 +204,7 @@ export class SubmissionService {
   }
 
   async reviewSubmission(id: number, reviewerId: number, dto: ReviewSubmissionDto) {
-    const submission = await this.prisma.finalSubmission.findFirst({
+    const submission = await this.prisma.final_submissions.findFirst({
       where: { id, deleted_at: null },
     });
 
@@ -215,7 +216,7 @@ export class SubmissionService {
       throw new BadRequestException('Bài nộp đã được duyệt hoặc từ chối trước đó');
     }
 
-    return this.prisma.finalSubmission.update({
+    return this.prisma.final_submissions.update({
       where: { id },
       data: {
         status: dto.status,
@@ -230,7 +231,7 @@ export class SubmissionService {
     // Get students who:
     // 1. Have APPROVED progress status (not banned)
     // 2. Have submitted all required reports
-    const eligibleProgress = await this.prisma.studentProgress.findMany({
+    const eligibleProgress = await this.prisma.student_progress.findMany({
       where: {
         is_banned: false,
         status: { in: ['ON_TRACK', 'EXTENDED'] },
@@ -262,14 +263,14 @@ export class SubmissionService {
 
   async getStats() {
     const [total, pending, approved, rejected] = await Promise.all([
-      this.prisma.finalSubmission.count({ where: { deleted_at: null } }),
-      this.prisma.finalSubmission.count({
+      this.prisma.final_submissions.count({ where: { deleted_at: null } }),
+      this.prisma.final_submissions.count({
         where: { status: SubmissionStatus.PENDING, deleted_at: null },
       }),
-      this.prisma.finalSubmission.count({
+      this.prisma.final_submissions.count({
         where: { status: SubmissionStatus.APPROVED, deleted_at: null },
       }),
-      this.prisma.finalSubmission.count({
+      this.prisma.final_submissions.count({
         where: { status: SubmissionStatus.REJECTED, deleted_at: null },
       }),
     ]);

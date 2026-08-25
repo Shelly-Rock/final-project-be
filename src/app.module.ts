@@ -12,6 +12,7 @@ import { DefenseModule } from './modules/defense/defense.module';
 import { ScoringModule } from './modules/scoring/scoring.module';
 
 import { StudentModule } from '@/modules';
+import { RoleModule } from '@/modules/role';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { StudentModule } from '@/modules';
     ExcelModule,
     TeacherModule,
     StudentModule,
+    RoleModule,
     RegistrationPeriodModule,
     ProgressTrackingModule,
     SubmissionModule,

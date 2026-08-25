@@ -14,7 +14,7 @@ export class RemoveStudentService {
       where: { id },
       include: {
         project: true,
-        finalSubmission: true,
+        final_submissions: true,
       },
     });
 
@@ -30,7 +30,7 @@ export class RemoveStudentService {
       where: { student_id: studentId },
       include: {
         project: true,
-        finalSubmission: true,
+        final_submissions: true,
       },
     });
 
@@ -48,7 +48,7 @@ export class RemoveStudentService {
 
     const hasActiveProject =
       student.project && !student.project.deleted_at;
-    const hasFinalSubmission = !!student.finalSubmission;
+    const hasFinalSubmission = !!student.final_submissions;
 
     if (hardDelete) {
       if (hasActiveProject) {

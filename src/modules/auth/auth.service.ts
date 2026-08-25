@@ -22,6 +22,7 @@ import {
   ResendVerificationRespDTO,
   UserRespDTO,
 } from './dto/auth.dto';
+import { RegisterReqDTO, RegisterRespDTO } from './dto/register.dto';
 
 const BCRYPT_SALT_ROUNDS = 10;
 const DEFAULT_PASSWORD = '1111';
@@ -73,9 +74,9 @@ export class AuthService {
   }
 
   async verifyEmail(dto: VerifyEmailReqDTO): Promise<VerifyEmailRespDTO> {
-    const token = await this.prisma.emailVerificationToken.findUnique({
+    const token = await this.prisma.email_verification_tokens.findUnique({
       where: { token: dto.token },
-      include: { user: true },
+      include: { users: true },
     });
 
     if (!token) {
@@ -95,7 +96,7 @@ export class AuthService {
         where: { id: token.user_id },
         data: { email_verified_at: new Date() },
       }),
-      this.prisma.emailVerificationToken.update({
+      this.prisma.email_verification_tokens.update({
         where: { id: token.id },
         data: { used_at: new Date() },
       }),
@@ -134,7 +135,7 @@ export class AuthService {
     }
 
     if (dto.token) {
-      const token = await this.prisma.emailVerificationToken.findUnique({
+      const token = await this.prisma.email_verification_tokens.findUnique({
         where: { token: dto.token },
       });
 
@@ -154,7 +155,7 @@ export class AuthService {
     });
 
     if (dto.token) {
-      await this.prisma.emailVerificationToken.update({
+      await this.prisma.email_verification_tokens.update({
         where: { token: dto.token },
         data: { used_at: new Date() },
       });
@@ -185,6 +186,102 @@ export class AuthService {
     return {
       success: true,
       message: 'Verification email sent successfully',
+    };
+  }
+
+  async register(dto: RegisterReqDTO): Promise<RegisterRespDTO> {
+    const existingUserByEmail = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+
+    if (existingUserByEmail) {
+      throw new BadRequestException(`Email ${dto.email} already has an account`);
+    }
+
+    const existingUserByUsername = await this.prisma.user.findUnique({
+      where: { username: dto.studentId },
+    });
+
+    if (existingUserByUsername) {
+      throw new BadRequestException(`Student ID ${dto.studentId} already has an account`);
+    }
+
+    const existingStudent = await this.prisma.student.findUnique({
+      where: { student_id: dto.studentId },
+    });
+
+    if (existingStudent && existingStudent.user_id) {
+      throw new BadRequestException(`Student ID ${dto.studentId} is already linked to an account`);
+    }
+
+    const studentRole = await this.prisma.role.findUnique({
+      where: { name: 'STUDENT' },
+    });
+
+    if (!studentRole) {
+      throw new BadRequestException('STUDENT role not found');
+    }
+
+    const hashedPassword = await bcrypt.hash(DEFAULT_PASSWORD, BCRYPT_SALT_ROUNDS);
+
+    const fullName = [dto.firstName, dto.middleName, dto.lastName]
+      .filter(Boolean)
+      .join(' ');
+
+    await this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email: dto.email,
+          username: dto.studentId,
+          password_hash: hashedPassword,
+          role_id: studentRole.id,
+          must_change_password: true,
+          email_verified_at: null,
+          is_active: true,
+        },
+      });
+
+      if (existingStudent) {
+        await tx.user.update({
+          where: { id: user.id },
+          data: { student: { connect: { id: existingStudent.id } } },
+        });
+      } else {
+        await tx.student.create({
+          data: {
+            student_id: dto.studentId,
+            first_name: dto.firstName,
+            last_name: dto.lastName,
+            middle_name: dto.middleName || '',
+            date_of_birth: new Date(dto.dateOfBirth),
+            gender: dto.gender,
+            class_name: dto.className,
+            major: dto.major,
+            course_year: dto.courseYear,
+            academic_year: dto.academicYear,
+            user_id: user.id,
+          },
+        });
+      }
+
+      const token = uuidv4();
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + TOKEN_EXPIRY_HOURS);
+
+      await tx.email_verification_tokens.create({
+        data: {
+          user_id: user.id,
+          token,
+          expires_at: expiresAt,
+        },
+      });
+
+      await this.emailService.sendVerificationEmail(dto.email, token, fullName);
+    });
+
+    return {
+      success: true,
+      message: 'Tài khoản đã được tạo. Vui lòng kiểm tra email để xác minh.',
     };
   }
 
@@ -256,7 +353,7 @@ export class AuthService {
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + TOKEN_EXPIRY_HOURS);
 
-    await this.prisma.emailVerificationToken.create({
+    await this.prisma.email_verification_tokens.create({
       data: {
         user_id: user.id,
         token,

@@ -21,7 +21,7 @@ export class GetStudentByIdService {
                 email: true,
               },
             },
-            topic: {
+            topics: {
               select: {
                 id: true,
                 name: true,
@@ -54,7 +54,7 @@ export class GetStudentByIdService {
                 email: true,
               },
             },
-            topic: {
+            topics: {
               select: {
                 id: true,
                 name: true,
@@ -92,7 +92,7 @@ export class GetStudentByIdService {
       createdAt: student.created_at.toISOString(),
       updatedAt: student.updated_at.toISOString(),
       teacher: student.project?.teacher || null,
-      topic: student.project?.topic || null,
+      topic: student.project?.topics || null,
     };
   }
 }

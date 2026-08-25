@@ -27,10 +27,11 @@ export class ProgressTrackingService {
   // ========== Template Methods ==========
 
   async createTemplate(teacherId: number, dto: CreateTemplateDto) {
-    return this.prisma.reportTemplate.create({
+    return this.prisma.report_templates.create({
       data: {
         ...dto,
         teacher_id: teacherId,
+        updated_at: new Date(),
       },
     });
   }
@@ -45,13 +46,13 @@ export class ProgressTrackingService {
     const skip = (page - 1) * limit;
 
     const [data, total] = await Promise.all([
-      this.prisma.reportTemplate.findMany({
+      this.prisma.report_templates.findMany({
         where,
         skip,
         take: limit,
         orderBy: { created_at: 'desc' },
       }),
-      this.prisma.reportTemplate.count({ where }),
+      this.prisma.report_templates.count({ where }),
     ]);
 
     return {
@@ -64,7 +65,7 @@ export class ProgressTrackingService {
   }
 
   async getTemplateById(id: number) {
-    const template = await this.prisma.reportTemplate.findFirst({
+    const template = await this.prisma.report_templates.findFirst({
       where: { id, deleted_at: null },
     });
     if (!template) throw new NotFoundException('Template not found');
@@ -73,7 +74,7 @@ export class ProgressTrackingService {
 
   async deleteTemplate(id: number) {
     const template = await this.getTemplateById(id);
-    return this.prisma.reportTemplate.update({
+    return this.prisma.report_templates.update({
       where: { id: template.id },
       data: { deleted_at: new Date() },
     });
@@ -83,7 +84,7 @@ export class ProgressTrackingService {
 
   async createReport(studentId: number, dto: CreateReportDto) {
     // Check if report for this month/year already exists
-    const existingReport = await this.prisma.progressReport.findFirst({
+    const existingReport = await this.prisma.progress_reports.findFirst({
       where: {
         student_id: studentId,
         month: dto.month,
@@ -105,11 +106,12 @@ export class ProgressTrackingService {
       throw new BadRequestException('Student has no project');
     }
 
-    const report = await this.prisma.progressReport.create({
+    const report = await this.prisma.progress_reports.create({
       data: {
         ...dto,
         student_id: studentId,
         teacher_id: project.teacher_id,
+        updated_at: new Date(),
       },
     });
 
@@ -140,14 +142,14 @@ export class ProgressTrackingService {
 
     const skip = (page - 1) * limit;
 
-    const data = await this.prisma.progressReport.findMany({
+    const data = await this.prisma.progress_reports.findMany({
       where,
       skip,
       take: limit,
       orderBy: { created_at: 'desc' },
     });
 
-    const total = await this.prisma.progressReport.count({ where });
+    const total = await this.prisma.progress_reports.count({ where });
 
     // Transform data with student name (simple join not available, fetch separately)
     const transformedData = await Promise.all(
@@ -179,7 +181,7 @@ export class ProgressTrackingService {
   }
 
   async getReportById(id: number) {
-    const report = await this.prisma.progressReport.findFirst({
+    const report = await this.prisma.progress_reports.findFirst({
       where: { id, deleted_at: null },
     }) as any;
     if (!report) throw new NotFoundException('Report not found');
@@ -202,13 +204,13 @@ export class ProgressTrackingService {
   }
 
   async reviewReport(reportId: number, reviewerId: number, dto: ReviewReportDto) {
-    const report = await this.prisma.progressReport.findFirst({
+    const report = await this.prisma.progress_reports.findFirst({
       where: { id: reportId },
     });
 
     if (!report) throw new NotFoundException('Report not found');
 
-    const updatedReport = await this.prisma.progressReport.update({
+    const updatedReport = await this.prisma.progress_reports.update({
       where: { id: reportId },
       data: {
         status: dto.status,
@@ -253,14 +255,14 @@ export class ProgressTrackingService {
 
     const skip = (page - 1) * limit;
 
-    const data = await this.prisma.studentProgress.findMany({
+    const data = await this.prisma.student_progress.findMany({
       where,
       skip,
       take: limit,
       orderBy: { created_at: 'desc' },
     });
 
-    const total = await this.prisma.studentProgress.count({ where });
+    const total = await this.prisma.student_progress.count({ where });
 
     // Transform and enrich data
     const transformedData = await Promise.all(
@@ -295,7 +297,7 @@ export class ProgressTrackingService {
   }
 
   async getStudentProgressById(studentId: number) {
-    const progress = await this.prisma.studentProgress.findFirst({
+    const progress = await this.prisma.student_progress.findFirst({
       where: { student_id: studentId },
     }) as any;
     if (!progress) throw new NotFoundException('Student progress not found');
@@ -314,16 +316,17 @@ export class ProgressTrackingService {
   }
 
   async updateStudentProgress(studentId: number, dto: UpdateStudentProgressDto) {
-    let progress = await this.prisma.studentProgress.findFirst({
+    let progress = await this.prisma.student_progress.findFirst({
       where: { student_id: studentId },
     });
 
     if (!progress) {
       // Create if not exists
-      progress = await this.prisma.studentProgress.create({
+      progress = await this.prisma.student_progress.create({
         data: {
           student_id: studentId,
           status: dto.status || ProgressStatus.ON_TRACK,
+          updated_at: new Date(),
         },
       });
       return progress;
@@ -360,23 +363,24 @@ export class ProgressTrackingService {
       });
     }
 
-    return this.prisma.studentProgress.update({
+    return this.prisma.student_progress.update({
       where: { id: progress.id },
       data: updateData,
     });
   }
 
   async getOrCreateStudentProgress(studentId: number) {
-    let progress = await this.prisma.studentProgress.findFirst({
+    let progress = await this.prisma.student_progress.findFirst({
       where: { student_id: studentId },
     });
 
     if (!progress) {
-      progress = await this.prisma.studentProgress.create({
+      progress = await this.prisma.student_progress.create({
         data: {
           student_id: studentId,
           status: ProgressStatus.ON_TRACK,
           total_reports_required: 6,
+          updated_at: new Date(),
         },
       });
     }
@@ -387,7 +391,7 @@ export class ProgressTrackingService {
   // ========== Notification Methods ==========
 
   async createNotification(dto: CreateNotificationDto) {
-    return this.prisma.progressNotification.create({
+    return this.prisma.progress_notifications.create({
       data: dto as any,
     });
   }
@@ -402,13 +406,13 @@ export class ProgressTrackingService {
     const skip = (page - 1) * limit;
 
     const [data, total] = await Promise.all([
-      this.prisma.progressNotification.findMany({
+      this.prisma.progress_notifications.findMany({
         where,
         skip,
         take: limit,
         orderBy: { created_at: 'desc' },
       }),
-      this.prisma.progressNotification.count({ where }),
+      this.prisma.progress_notifications.count({ where }),
     ]);
 
     return {
@@ -421,21 +425,21 @@ export class ProgressTrackingService {
   }
 
   async markNotificationAsRead(id: number) {
-    return this.prisma.progressNotification.update({
+    return this.prisma.progress_notifications.update({
       where: { id },
       data: { is_read: true },
     });
   }
 
   async markAllNotificationsAsRead(recipientId: number) {
-    return this.prisma.progressNotification.updateMany({
+    return this.prisma.progress_notifications.updateMany({
       where: { recipient_id: recipientId, is_read: false },
       data: { is_read: true },
     });
   }
 
   async getUnreadNotificationCount(recipientId: number) {
-    return this.prisma.progressNotification.count({
+    return this.prisma.progress_notifications.count({
       where: { recipient_id: recipientId, is_read: false },
     });
   }
@@ -445,14 +449,14 @@ export class ProgressTrackingService {
   async getStats() {
     const [total, onTrack, extended, topicChanged, banned, pending, approved, rejected] =
       await Promise.all([
-        this.prisma.studentProgress.count(),
-        this.prisma.studentProgress.count({ where: { status: ProgressStatus.ON_TRACK } }),
-        this.prisma.studentProgress.count({ where: { status: ProgressStatus.EXTENDED } }),
-        this.prisma.studentProgress.count({ where: { status: ProgressStatus.TOPIC_CHANGED } }),
-        this.prisma.studentProgress.count({ where: { is_banned: true } }),
-        this.prisma.progressReport.count({ where: { status: ReportStatus.PENDING } }),
-        this.prisma.progressReport.count({ where: { status: ReportStatus.APPROVED } }),
-        this.prisma.progressReport.count({ where: { status: ReportStatus.REJECTED } }),
+        this.prisma.student_progress.count(),
+        this.prisma.student_progress.count({ where: { status: ProgressStatus.ON_TRACK } }),
+        this.prisma.student_progress.count({ where: { status: ProgressStatus.EXTENDED } }),
+        this.prisma.student_progress.count({ where: { status: ProgressStatus.TOPIC_CHANGED } }),
+        this.prisma.student_progress.count({ where: { is_banned: true } }),
+        this.prisma.progress_reports.count({ where: { status: ReportStatus.PENDING } }),
+        this.prisma.progress_reports.count({ where: { status: ReportStatus.APPROVED } }),
+        this.prisma.progress_reports.count({ where: { status: ReportStatus.REJECTED } }),
       ]);
 
     return {
@@ -471,7 +475,7 @@ export class ProgressTrackingService {
     const warnings: BanWarningDto[] = [];
 
     // Get students who haven't submitted reports recently
-    const progressRecords = await this.prisma.studentProgress.findMany({
+    const progressRecords = await this.prisma.student_progress.findMany({
       where: {
         is_banned: false,
         status: 'ON_TRACK',
@@ -509,7 +513,7 @@ export class ProgressTrackingService {
   }
 
   async getBannedStudents() {
-    const bannedRecords = await this.prisma.studentProgress.findMany({
+    const bannedRecords = await this.prisma.student_progress.findMany({
       where: { is_banned: true },
     });
 
@@ -538,7 +542,7 @@ export class ProgressTrackingService {
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     // Find students with no reports in 30 days
-    const inactiveProgress = await this.prisma.studentProgress.findMany({
+    const inactiveProgress = await this.prisma.student_progress.findMany({
       where: {
         is_banned: false,
         OR: [
@@ -567,11 +571,11 @@ export class ProgressTrackingService {
   // ========== Helper Methods ==========
 
   private async updateStudentReportCount(studentId: number) {
-    const count = await this.prisma.progressReport.count({
+    const count = await this.prisma.progress_reports.count({
       where: { student_id: studentId, deleted_at: null },
     });
 
-    await this.prisma.studentProgress.updateMany({
+    await this.prisma.student_progress.updateMany({
       where: { student_id: studentId },
       data: {
         total_reports_submitted: count,

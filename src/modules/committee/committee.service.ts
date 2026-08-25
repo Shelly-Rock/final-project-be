@@ -34,12 +34,12 @@ export class CommitteeService {
       ? { id: { not: excludeCommitteeId }, deleted_at: null }
       : { deleted_at: null };
 
-    const committees = await this.prisma.defenseCommittee.findMany({
+    const committees = await this.prisma.defense_committees.findMany({
       where: whereClause,
       include: {
-        members: {
+        committee_members: {
           include: {
-            teacher: {
+            teachers: {
               select: { name: true },
             },
           },
@@ -48,10 +48,10 @@ export class CommitteeService {
     });
 
     for (const committee of committees) {
-      const isMember = committee.members.some((m) => m.teacher_id === teacherId);
+      const isMember = committee.committee_members.some((m) => m.teacher_id === teacherId);
       if (isMember) {
-        const member = committee.members.find((m) => m.teacher_id === teacherId);
-        conflicts.push(`Đã là thành viên của "${committee.name}" (${member?.teacher.name})`);
+        const member = committee.committee_members.find((m) => m.teacher_id === teacherId);
+        conflicts.push(`Đã là thành viên của "${committee.name}" (${member?.teachers.name})`);
       }
     }
 
@@ -117,10 +117,11 @@ export class CommitteeService {
     }
 
     // Create committee
-    const committee = await this.prisma.defenseCommittee.create({
+    const committee = await this.prisma.defense_committees.create({
       data: {
         name: dto.name,
         period_id: dto.period_id,
+        updated_at: new Date(),
       },
     });
 
@@ -160,14 +161,14 @@ export class CommitteeService {
     }
 
     if (membersToAdd.length > 0) {
-      await this.prisma.committeeMember.createMany({
+      await this.prisma.committee_members.createMany({
         data: membersToAdd,
       });
     }
 
     // Add external reviewers
     if (dto.external_reviewer_ids && dto.external_reviewer_ids.length > 0) {
-      await this.prisma.committeeExternalReviewer.createMany({
+      await this.prisma.committee_external_reviewers.createMany({
         data: dto.external_reviewer_ids.map((teacherId) => ({
           committee_id: committee.id,
           teacher_id: teacherId,
@@ -189,13 +190,13 @@ export class CommitteeService {
     const skip = (page - 1) * limit;
 
     const [data, total] = await Promise.all([
-      this.prisma.defenseCommittee.findMany({
+      this.prisma.defense_committees.findMany({
         where,
         skip,
         take: limit,
         orderBy: { created_at: 'desc' },
       }),
-      this.prisma.defenseCommittee.count({ where }),
+      this.prisma.defense_committees.count({ where }),
     ]);
 
     const enrichedData = await Promise.all(
@@ -212,7 +213,7 @@ export class CommitteeService {
   }
 
   async getCommitteeById(id: number) {
-    const committee = await this.prisma.defenseCommittee.findFirst({
+    const committee = await this.prisma.defense_committees.findFirst({
       where: { id, deleted_at: null },
     });
 
@@ -224,19 +225,19 @@ export class CommitteeService {
   }
 
   private async enrichCommittee(committeeId: number) {
-    const committee = await this.prisma.defenseCommittee.findUnique({
+    const committee = await this.prisma.defense_committees.findUnique({
       where: { id: committeeId },
       include: {
-        members: {
+        committee_members: {
           include: {
-            teacher: {
+            teachers: {
               select: { id: true, teacher_id: true, name: true, email: true },
             },
           },
         },
-        external_reviewers: {
+        committee_external_reviewers: {
           include: {
-            teacher: {
+            teachers: {
               select: { id: true, teacher_id: true, name: true, email: true },
             },
           },
@@ -247,36 +248,36 @@ export class CommitteeService {
     if (!committee) return null;
 
     // Extract members by role
-    const chairman = committee.members.find((m) => m.role === CommitteeRole.CHAIRMAN);
-    const secretary = committee.members.find((m) => m.role === CommitteeRole.SECRETARY);
-    const internalReviewers = committee.members.filter((m) => m.role === CommitteeRole.INTERNAL_REVIEWER);
+    const chairman = committee.committee_members.find((m) => m.role === CommitteeRole.CHAIRMAN);
+    const secretary = committee.committee_members.find((m) => m.role === CommitteeRole.SECRETARY);
+    const internalReviewers = committee.committee_members.filter((m) => m.role === CommitteeRole.INTERNAL_REVIEWER);
 
     return {
       id: committee.id,
       name: committee.name,
       period_id: committee.period_id,
       chairman_id: chairman?.teacher_id || null,
-      chairman_name: chairman?.teacher.name || null,
+      chairman_name: chairman?.teachers.name || null,
       secretary_id: secretary?.teacher_id || null,
-      secretary_name: secretary?.teacher.name || null,
+      secretary_name: secretary?.teachers.name || null,
       internal_1_id: internalReviewers[0]?.teacher_id || null,
-      internal_1_name: internalReviewers[0]?.teacher.name || null,
+      internal_1_name: internalReviewers[0]?.teachers.name || null,
       internal_2_id: internalReviewers[1]?.teacher_id || null,
-      internal_2_name: internalReviewers[1]?.teacher.name || null,
-      members: committee.members.map((m) => ({
-        id: m.teacher.id,
-        teacher_id: m.teacher.teacher_id,
-        name: m.teacher.name,
-        email: m.teacher.email,
+      internal_2_name: internalReviewers[1]?.teachers.name || null,
+      members: committee.committee_members.map((m) => ({
+        id: m.teachers.id,
+        teacher_id: m.teachers.teacher_id,
+        name: m.teachers.name,
+        email: m.teachers.email,
         role: m.role,
       })),
-      external_reviewers: committee.external_reviewers.map((er) => ({
-        id: er.teacher.id,
-        teacher_id: er.teacher.teacher_id,
-        name: er.teacher.name,
-        email: er.teacher.email,
+      external_reviewers: committee.committee_external_reviewers.map((er) => ({
+        id: er.teachers.id,
+        teacher_id: er.teachers.teacher_id,
+        name: er.teachers.name,
+        email: er.teachers.email,
       })),
-      member_count: committee.members.length + committee.external_reviewers.length,
+      member_count: committee.committee_members.length + committee.committee_external_reviewers.length,
       created_at: committee.created_at,
       updated_at: committee.updated_at,
     };
@@ -287,7 +288,7 @@ export class CommitteeService {
   }
 
   async updateCommittee(id: number, dto: UpdateCommitteeDto) {
-    const committee = await this.prisma.defenseCommittee.findFirst({
+    const committee = await this.prisma.defense_committees.findFirst({
       where: { id, deleted_at: null },
     });
 
@@ -296,7 +297,7 @@ export class CommitteeService {
     }
 
     // Get current members
-    const currentMembers = await this.prisma.committeeMember.findMany({
+    const currentMembers = await this.prisma.committee_members.findMany({
       where: { committee_id: id },
     });
 
@@ -318,7 +319,7 @@ export class CommitteeService {
     if (dto.name !== undefined) updateData.name = dto.name;
     if (dto.period_id !== undefined) updateData.period_id = dto.period_id;
 
-    await this.prisma.defenseCommittee.update({
+    await this.prisma.defense_committees.update({
       where: { id },
       data: updateData,
     });
@@ -328,7 +329,7 @@ export class CommitteeService {
         dto.internal_1_id !== undefined || dto.internal_2_id !== undefined) {
       
       // Delete existing internal members
-      await this.prisma.committeeMember.deleteMany({
+      await this.prisma.committee_members.deleteMany({
         where: {
           committee_id: id,
           role: { in: [CommitteeRole.CHAIRMAN, CommitteeRole.SECRETARY, CommitteeRole.INTERNAL_REVIEWER] },
@@ -371,7 +372,7 @@ export class CommitteeService {
       }
 
       if (membersToAdd.length > 0) {
-        await this.prisma.committeeMember.createMany({
+        await this.prisma.committee_members.createMany({
           data: membersToAdd,
           skipDuplicates: true,
         });
@@ -381,13 +382,13 @@ export class CommitteeService {
     // Update external reviewers if provided
     if (dto.external_reviewer_ids !== undefined) {
       // Remove existing
-      await this.prisma.committeeExternalReviewer.deleteMany({
+      await this.prisma.committee_external_reviewers.deleteMany({
         where: { committee_id: id },
       });
 
       // Add new
       if (dto.external_reviewer_ids.length > 0) {
-        await this.prisma.committeeExternalReviewer.createMany({
+        await this.prisma.committee_external_reviewers.createMany({
           data: dto.external_reviewer_ids.map((teacherId) => ({
             committee_id: id,
             teacher_id: teacherId,
@@ -400,7 +401,7 @@ export class CommitteeService {
   }
 
   async deleteCommittee(id: number) {
-    const committee = await this.prisma.defenseCommittee.findFirst({
+    const committee = await this.prisma.defense_committees.findFirst({
       where: { id, deleted_at: null },
     });
 
@@ -409,7 +410,7 @@ export class CommitteeService {
     }
 
     // Check if has defense sessions
-    const sessions = await this.prisma.defenseSession.findMany({
+    const sessions = await this.prisma.defense_sessions.findMany({
       where: { committee_id: id, deleted_at: null },
     });
 
@@ -420,18 +421,18 @@ export class CommitteeService {
     }
 
     // Soft delete (cascade will delete members)
-    return this.prisma.defenseCommittee.update({
+    return this.prisma.defense_committees.update({
       where: { id },
       data: { deleted_at: new Date() },
     });
   }
 
   async getStats() {
-    const committees = await this.prisma.defenseCommittee.findMany({
+    const committees = await this.prisma.defense_committees.findMany({
       where: { deleted_at: null },
       include: {
-        members: true,
-        external_reviewers: true,
+        committee_members: true,
+        committee_external_reviewers: true,
       },
     });
 
@@ -439,7 +440,7 @@ export class CommitteeService {
     let missingMembers = 0;
 
     for (const c of committees) {
-      const memberCount = this.countMembers(c.members.length, c.external_reviewers.length);
+      const memberCount = this.countMembers(c.committee_members.length, c.committee_external_reviewers.length);
       if (memberCount >= 4) {
         fullMembers++;
       } else {
@@ -447,7 +448,7 @@ export class CommitteeService {
       }
     }
 
-    const externalReviewers = await this.prisma.committeeExternalReviewer.findMany({
+    const externalReviewers = await this.prisma.committee_external_reviewers.findMany({
       distinct: ['teacher_id'],
     });
 
@@ -467,21 +468,21 @@ export class CommitteeService {
       ? { id: { not: committeeId }, deleted_at: null }
       : { deleted_at: null };
 
-    const committees = await this.prisma.defenseCommittee.findMany({
+    const committees = await this.prisma.defense_committees.findMany({
       where: whereClause,
       include: {
-        members: {
+        committee_members: {
           where: {
             role: { in: [CommitteeRole.CHAIRMAN, CommitteeRole.SECRETARY, CommitteeRole.INTERNAL_REVIEWER] },
           },
         },
-        external_reviewers: true,
+        committee_external_reviewers: true,
       },
     });
 
     for (const c of committees) {
       // Only exclude internal members (not external reviewers)
-      for (const member of c.members) {
+      for (const member of c.committee_members) {
         excludedIds.push(member.teacher_id);
       }
       // External reviewers CAN be in multiple committees, so don't exclude
