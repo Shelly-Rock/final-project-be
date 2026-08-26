@@ -38,8 +38,10 @@ export class AuthService {
   ) {}
 
   async login(dto: LoginReqDTO): Promise<LoginRespDTO> {
-    const user = await this.prisma.user.findUnique({
-      where: { username: dto.username },
+    const user = await this.prisma.user.findFirst({
+      where: {
+        OR: [{ username: dto.username }, { email: dto.username }],
+      },
       include: { role: true },
     });
 
@@ -55,16 +57,25 @@ export class AuthService {
       throw new ForbiddenException('Please verify your email first');
     }
 
-    const isPasswordValid = await bcrypt.compare(dto.password, user.password_hash);
+    const isPasswordValid = await bcrypt.compare(
+      dto.password,
+      user.password_hash,
+    );
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid username or password');
     }
 
     if (user.must_change_password) {
-      throw new ForbiddenException('You must change your password before logging in');
+      throw new ForbiddenException(
+        'You must change your password before logging in',
+      );
     }
 
-    const tokens = await this.generateTokens(user.id, user.email, user.role.name);
+    const tokens = await this.generateTokens(
+      user.id,
+      user.email,
+      user.role.name,
+    );
 
     return {
       accessToken: tokens.accessToken,
@@ -84,7 +95,9 @@ export class AuthService {
     }
 
     if (token.used_at) {
-      throw new BadRequestException('This verification link has already been used');
+      throw new BadRequestException(
+        'This verification link has already been used',
+      );
     }
 
     if (token.expires_at < new Date()) {
@@ -144,7 +157,10 @@ export class AuthService {
       }
     }
 
-    const hashedPassword = await bcrypt.hash(dto.newPassword, BCRYPT_SALT_ROUNDS);
+    const hashedPassword = await bcrypt.hash(
+      dto.newPassword,
+      BCRYPT_SALT_ROUNDS,
+    );
 
     await this.prisma.user.update({
       where: { id: userId || undefined },
@@ -167,7 +183,9 @@ export class AuthService {
     };
   }
 
-  async resendVerification(dto: ResendVerificationReqDTO): Promise<ResendVerificationRespDTO> {
+  async resendVerification(
+    dto: ResendVerificationReqDTO,
+  ): Promise<ResendVerificationRespDTO> {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
       include: { student: true },
@@ -195,7 +213,9 @@ export class AuthService {
     });
 
     if (existingUserByEmail) {
-      throw new BadRequestException(`Email ${dto.email} already has an account`);
+      throw new BadRequestException(
+        `Email ${dto.email} already has an account`,
+      );
     }
 
     const existingUserByUsername = await this.prisma.user.findUnique({
@@ -203,7 +223,9 @@ export class AuthService {
     });
 
     if (existingUserByUsername) {
-      throw new BadRequestException(`Student ID ${dto.studentId} already has an account`);
+      throw new BadRequestException(
+        `Student ID ${dto.studentId} already has an account`,
+      );
     }
 
     const existingStudent = await this.prisma.student.findUnique({
@@ -211,7 +233,9 @@ export class AuthService {
     });
 
     if (existingStudent && existingStudent.user_id) {
-      throw new BadRequestException(`Student ID ${dto.studentId} is already linked to an account`);
+      throw new BadRequestException(
+        `Student ID ${dto.studentId} is already linked to an account`,
+      );
     }
 
     const studentRole = await this.prisma.role.findUnique({
@@ -222,7 +246,10 @@ export class AuthService {
       throw new BadRequestException('STUDENT role not found');
     }
 
-    const hashedPassword = await bcrypt.hash(DEFAULT_PASSWORD, BCRYPT_SALT_ROUNDS);
+    const hashedPassword = await bcrypt.hash(
+      DEFAULT_PASSWORD,
+      BCRYPT_SALT_ROUNDS,
+    );
 
     const fullName = [dto.firstName, dto.middleName, dto.lastName]
       .filter(Boolean)
@@ -320,7 +347,9 @@ export class AuthService {
     });
 
     if (existingStudentUser) {
-      throw new BadRequestException(`Student ID ${studentId} already has an account`);
+      throw new BadRequestException(
+        `Student ID ${studentId} already has an account`,
+      );
     }
 
     const studentRole = await this.prisma.role.findUnique({
@@ -331,7 +360,10 @@ export class AuthService {
       throw new BadRequestException('STUDENT role not found');
     }
 
-    const hashedPassword = await bcrypt.hash(DEFAULT_PASSWORD, BCRYPT_SALT_ROUNDS);
+    const hashedPassword = await bcrypt.hash(
+      DEFAULT_PASSWORD,
+      BCRYPT_SALT_ROUNDS,
+    );
 
     const user = await this.prisma.user.create({
       data: {
@@ -348,7 +380,10 @@ export class AuthService {
     await this.sendVerificationEmail(user, studentName);
   }
 
-  private async sendVerificationEmail(user: any, studentName?: string): Promise<void> {
+  private async sendVerificationEmail(
+    user: any,
+    studentName?: string,
+  ): Promise<void> {
     const token = uuidv4();
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + TOKEN_EXPIRY_HOURS);

@@ -1,11 +1,17 @@
-import { IsEmail, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MinLength,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 // ========== Login ==========
 export class LoginReqDTO {
   @ApiProperty({
     example: 'SV001',
-    description: 'Username (student_id, teacher_id, etc.)',
+    description: 'Username, student ID, teacher ID, or email',
   })
   @IsNotEmpty()
   @IsString()
@@ -35,7 +41,9 @@ export class VerifyEmailRespDTO {
   @ApiProperty({ example: true })
   success: boolean;
 
-  @ApiProperty({ example: 'Email verified successfully. Please change your password.' })
+  @ApiProperty({
+    example: 'Email verified successfully. Please change your password.',
+  })
   message: string;
 }
 
