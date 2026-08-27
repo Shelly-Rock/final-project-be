@@ -1,9 +1,7 @@
 import { registerAs } from '@nestjs/config';
 
 export default registerAs('mail', () => ({
-  provider:
-    process.env.EMAIL_PROVIDER?.trim().toLowerCase() ||
-    (process.env.RESEND_API_KEY ? 'resend' : 'smtp'),
+  provider: process.env.EMAIL_PROVIDER?.trim().toLowerCase() || 'smtp',
   resendApiKey: process.env.RESEND_API_KEY,
   service:
     process.env.EMAIL_SERVICE ||
@@ -12,14 +10,8 @@ export default registerAs('mail', () => ({
     process.env.EMAIL_HOST === 'smtp.gmail.com'
       ? undefined
       : process.env.EMAIL_HOST,
-  port:
-    process.env.EMAIL_HOST === 'smtp.gmail.com'
-      ? 465
-      : parseInt(process.env.EMAIL_PORT, 10) || 587,
-  secure:
-    process.env.EMAIL_HOST === 'smtp.gmail.com'
-      ? true
-      : process.env.EMAIL_SECURE === 'true',
+  port: parseInt(process.env.EMAIL_PORT, 10) || 587,
+  secure: process.env.EMAIL_SECURE === 'true',
   connectionTimeout:
     parseInt(process.env.EMAIL_CONNECTION_TIMEOUT, 10) || 10000,
   greetingTimeout: parseInt(process.env.EMAIL_GREETING_TIMEOUT, 10) || 10000,
