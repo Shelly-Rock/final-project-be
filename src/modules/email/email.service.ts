@@ -45,8 +45,9 @@ export class EmailService {
     token: string,
     studentName: string,
   ): Promise<void> {
-    const appUrl = this.configService.get<string>('app.url') || 'http://localhost:3000';
-    const verifyUrl = `${appUrl}/auth/verify-email?token=${token}`;
+    const appUrl =
+      this.configService.get<string>('app.url') || 'http://localhost:3000';
+    const verifyUrl = `${appUrl}/change-password?token=${encodeURIComponent(token)}`;
 
     const html = `
 <!DOCTYPE html>
@@ -108,7 +109,10 @@ export class EmailService {
     });
   }
 
-  async sendPasswordChangedNotification(to: string, studentName: string): Promise<void> {
+  async sendPasswordChangedNotification(
+    to: string,
+    studentName: string,
+  ): Promise<void> {
     const html = `
 <!DOCTYPE html>
 <html>
