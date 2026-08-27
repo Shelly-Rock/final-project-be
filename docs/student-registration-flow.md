@@ -61,19 +61,20 @@ CREATE TABLE email_verification_tokens (
 
 ### Updated User Fields (already existed)
 
-| Field | Type | Description |
-|-------|------|-------------|
-| email | String | Student's Gmail |
-| username | String | Student ID (e.g., SV001) |
-| password_hash | String | Default: 1111 |
-| must_change_password | Boolean | Default: true |
-| email_verified_at | DateTime? | NULL initially |
-| is_active | Boolean | Default: true |
-| role_id | Int | STUDENT role |
+| Field                | Type      | Description              |
+| -------------------- | --------- | ------------------------ |
+| email                | String    | Student's Gmail          |
+| username             | String    | Student ID (e.g., SV001) |
+| password_hash        | String    | Default: 1111            |
+| must_change_password | Boolean   | Default: true            |
+| email_verified_at    | DateTime? | NULL initially           |
+| is_active            | Boolean   | Default: true            |
+| role_id              | Int       | STUDENT role             |
 
 ## API Endpoints
 
 ### 1. Import Students
+
 ```
 POST /students/import
 - Secretary uploads Excel file
@@ -82,6 +83,7 @@ POST /students/import
 ```
 
 ### 2. Verify Email
+
 ```
 POST /auth/verify-email
 Body: { token: "abc123xyz" }
@@ -94,6 +96,7 @@ Body: { token: "abc123xyz" }
 ```
 
 ### 3. Change Password
+
 ```
 POST /auth/change-password
 Body: {
@@ -108,6 +111,7 @@ Body: {
 ```
 
 ### 4. Login
+
 ```
 POST /auth/login
 Body: {
@@ -122,6 +126,7 @@ Body: {
 ```
 
 ### 5. Resend Verification Email
+
 ```
 POST /auth/resend-verification
 Body: { email: "sv001@gmail.com" }
@@ -131,6 +136,7 @@ Body: { email: "sv001@gmail.com" }
 ```
 
 ### 6. Get Current User
+
 ```
 GET /auth/me
 Headers: Authorization: Bearer <token>
@@ -163,8 +169,8 @@ When a student account is created, an email is sent with:
 ```env
 # Email Configuration
 EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
-EMAIL_SECURE=false
+EMAIL_PORT=465
+EMAIL_SECURE=true
 EMAIL_USER=your_email@gmail.com
 EMAIL_PASSWORD=your_app_password
 EMAIL_FROM="Thesis Management System <noreply@thesis.edu.vn>"
