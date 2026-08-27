@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 
 export interface SendEmailOptions {
   to: string;
@@ -10,24 +11,31 @@ export interface SendEmailOptions {
 
 @Injectable()
 export class EmailService {
-  private transporter: nodemailer.Transporter;
+  private transporter?: nodemailer.Transporter;
+  private resend?: Resend;
 
   constructor(private readonly configService: ConfigService) {
-    this.transporter = nodemailer.createTransport({
-      service: this.configService.get<string>('mail.service'),
-      host: this.configService.get<string>('mail.host'),
-      port: this.configService.get<number>('mail.port'),
-      secure: this.configService.get<boolean>('mail.secure'),
-      connectionTimeout: this.configService.get<number>(
-        'mail.connectionTimeout',
-      ),
-      greetingTimeout: this.configService.get<number>('mail.greetingTimeout'),
-      socketTimeout: this.configService.get<number>('mail.socketTimeout'),
-      auth: {
-        user: this.configService.get<string>('mail.user'),
-        pass: this.configService.get<string>('mail.password'),
-      },
-    });
+    if (this.configService.get<string>('mail.provider') === 'resend') {
+      this.resend = new Resend(
+        this.configService.getOrThrow<string>('mail.resendApiKey'),
+      );
+    } else {
+      this.transporter = nodemailer.createTransport({
+        service: this.configService.get<string>('mail.service'),
+        host: this.configService.get<string>('mail.host'),
+        port: this.configService.get<number>('mail.port'),
+        secure: this.configService.get<boolean>('mail.secure'),
+        connectionTimeout: this.configService.get<number>(
+          'mail.connectionTimeout',
+        ),
+        greetingTimeout: this.configService.get<number>('mail.greetingTimeout'),
+        socketTimeout: this.configService.get<number>('mail.socketTimeout'),
+        auth: {
+          user: this.configService.get<string>('mail.user'),
+          pass: this.configService.get<string>('mail.password'),
+        },
+      });
+    }
   }
 
   async sendEmail(options: SendEmailOptions): Promise<void> {
@@ -39,10 +47,33 @@ export class EmailService {
     };
 
     try {
-      await this.transporter.sendMail(mailOptions);
+      if (this.configService.get<string>('mail.provider') === 'resend') {
+        await this.sendWithResend(mailOptions);
+      } else {
+        await this.transporter?.sendMail(mailOptions);
+      }
     } catch (error) {
       console.error('Failed to send email:', error);
       throw error;
+    }
+  }
+
+  private async sendWithResend(
+    mailOptions: nodemailer.SendMailOptions,
+  ): Promise<void> {
+    if (!this.resend) {
+      throw new Error('Resend client is not configured');
+    }
+
+    const { error } = await this.resend.emails.send({
+      from: mailOptions.from as string,
+      to: mailOptions.to as string | string[],
+      subject: mailOptions.subject as string,
+      html: mailOptions.html as string,
+    });
+
+    if (error) {
+      throw new Error(`Resend API error: ${error.message}`);
     }
   }
 

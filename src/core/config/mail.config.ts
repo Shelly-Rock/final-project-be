@@ -1,6 +1,8 @@
 import { registerAs } from '@nestjs/config';
 
 export default registerAs('mail', () => ({
+  provider: process.env.EMAIL_PROVIDER || 'smtp',
+  resendApiKey: process.env.RESEND_API_KEY,
   service:
     process.env.EMAIL_SERVICE ||
     (process.env.EMAIL_HOST === 'smtp.gmail.com' ? 'gmail' : undefined),
