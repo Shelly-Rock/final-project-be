@@ -88,6 +88,7 @@ RESTful API built with NestJS for the QTQ project backend.
       },
       'api-key',
     )
+    .addBearerAuth()
     .build();
 
   const documentOptions: SwaggerDocumentOptions = {

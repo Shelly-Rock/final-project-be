@@ -5,6 +5,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { ExcelModule } from '@/shared/utils';
 import { TeacherModule } from '@/modules/teacher/teacher.module';
 import { RegistrationPeriodModule } from '@/modules/registration-period/registration-period.module';
+import { MyTopicsModule } from '@/modules/my-topics/my-topics.module';
 import { ProgressTrackingModule } from './modules/progress-tracking';
 import { SubmissionModule } from './modules/submission/submission.module';
 import { CommitteeModule } from './modules/committee/committee.module';
@@ -22,6 +23,7 @@ import { StudentModule } from '@/modules';
     TeacherModule,
     StudentModule,
     RegistrationPeriodModule,
+    MyTopicsModule,
     ProgressTrackingModule,
     SubmissionModule,
     CommitteeModule,

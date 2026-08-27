@@ -41,9 +41,23 @@ enum TopicStatus {
   PENDING
   APPROVED
   REJECTED
+  DRAFT 
+  WAITING_FOR_SECRETARY
 }
 
 enum ExceptionRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum RegistrationStatus {
+  OPEN
+  FULL
+  LOCKED
+}
+
+enum StudentRegistrationStatus {
   PENDING
   APPROVED
   REJECTED
@@ -192,6 +206,8 @@ model User {
 
   role_id Int
   role    Role @relation(fields: [role_id], references: [id])
+  approvedRegistrations RegisteredStudent[] @relation("ApprovedRegistrations")
+  rejectedRegistrations RegisteredStudent[] @relation("RejectedRegistrations")
 
   student   Student?
   teacher   Teacher?
@@ -255,6 +271,8 @@ model Student {
   finalSubmission   FinalSubmission?
   independentScores IndependentScore[]
   scoringResults    ScoringResult[]
+  registrations         RegisteredStudent[]
+  preAssignments        PreAssignedStudent[]
 
   created_at DateTime  @default(now())
   updated_at DateTime  @updatedAt
@@ -431,7 +449,12 @@ model Topic {
   period_id           Int
   teacher_id          Int
   name                String            @db.VarChar(255)
+  english_name        String?            @db.VarChar(255)
   description         String            @db.Text
+  objectives          String?            @db.Text
+  technologies        String?            @db.Text
+  is_exception        Boolean            @default(false)
+  department          String?            @db.VarChar(100)
   max_students        Int
   registered_students Int               @default(0)
   status              TopicStatus       @default(PENDING)
@@ -439,12 +462,13 @@ model Topic {
   rejection_reason    String?           @db.Text
   created_at          DateTime          @default(now())
   updated_at          DateTime          @updatedAt
-
+  registration_status RegistrationStatus @default(OPEN)
   period              RegistrationPeriod @relation(fields: [period_id], references: [id], onDelete: Cascade)
   teacher             Teacher            @relation(fields: [teacher_id], references: [id])
   exception_requests  ExceptionRequest[]
+  registrations       RegisteredStudent[]
+  pre_assignments     PreAssignedStudent[]
 
-  // Reverse relation - Project giữ topic_id làm FK
   project Project?
 
   @@map("topics")
@@ -465,6 +489,48 @@ model ExceptionRequest {
   teacher           Teacher                @relation(fields: [teacher_id], references: [id])
 
   @@map("exception_requests")
+}
+
+model RegisteredStudent {
+  id               Int                       @id @default(autoincrement())
+  topic_id         Int
+  student_id       Int
+  status           StudentRegistrationStatus @default(PENDING)
+  registered_at    DateTime                  @default(now())
+  
+  approved_at      DateTime?                 
+  approved_by_id   Int?                      
+  rejected_at      DateTime?                 
+  rejected_by_id   Int?                      
+  rejection_reason String?                   @db.Text
+
+  assigned_role    String?                   @db.VarChar(100)
+  assigned_task    String?                   @db.Text
+
+  topic            Topic   @relation(fields: [topic_id], references: [id], onDelete: Cascade)
+  student          Student @relation(fields: [student_id], references: [id])
+
+  approved_by      User?   @relation("ApprovedRegistrations", fields: [approved_by_id], references: [id])
+  rejected_by      User?   @relation("RejectedRegistrations", fields: [rejected_by_id], references: [id])
+
+  @@unique([topic_id, student_id])
+  @@map("registered_students")
+}
+
+model PreAssignedStudent {
+  id               Int     @id @default(autoincrement())
+  topic_id         Int
+  student_id       Int
+  student_name     String? @db.VarChar(255)
+  student_code     String? @db.VarChar(50)
+  assignment_order Int?    
+
+  // --- Relations ---
+  topic            Topic   @relation(fields: [topic_id], references: [id], onDelete: Cascade)
+  student          Student @relation(fields: [student_id], references: [id])
+
+  @@unique([topic_id, student_id])
+  @@map("pre_assigned_students")
 }
 
 // Progress Tracking Models
