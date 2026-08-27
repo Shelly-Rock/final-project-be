@@ -255,7 +255,7 @@ export class AuthService {
       .filter(Boolean)
       .join(' ');
 
-    await this.prisma.$transaction(async (tx) => {
+    const verificationEmail = await this.prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
           email: dto.email,
@@ -303,12 +303,29 @@ export class AuthService {
         },
       });
 
-      await this.emailService.sendVerificationEmail(dto.email, token, fullName);
+      return { email: dto.email, token, fullName };
     });
+
+    let emailSent = true;
+    try {
+      await this.emailService.sendVerificationEmail(
+        verificationEmail.email,
+        verificationEmail.token,
+        verificationEmail.fullName,
+      );
+    } catch (error) {
+      emailSent = false;
+      console.error(
+        'Registration succeeded, but verification email failed:',
+        error,
+      );
+    }
 
     return {
       success: true,
-      message: 'Tài khoản đã được tạo. Vui lòng kiểm tra email để xác minh.',
+      message: emailSent
+        ? 'Tài khoản đã được tạo. Vui lòng kiểm tra email để xác minh.'
+        : 'Tài khoản đã được tạo nhưng không thể gửi email xác minh. Vui lòng yêu cầu gửi lại email.',
     };
   }
 

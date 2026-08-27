@@ -4,6 +4,10 @@ export default registerAs('mail', () => ({
   host: process.env.EMAIL_HOST,
   port: parseInt(process.env.EMAIL_PORT, 10) || 587,
   secure: process.env.EMAIL_SECURE === 'true',
+  connectionTimeout:
+    parseInt(process.env.EMAIL_CONNECTION_TIMEOUT, 10) || 10000,
+  greetingTimeout: parseInt(process.env.EMAIL_GREETING_TIMEOUT, 10) || 10000,
+  socketTimeout: parseInt(process.env.EMAIL_SOCKET_TIMEOUT, 10) || 20000,
   user: process.env.EMAIL_USER,
   password: process.env.EMAIL_PASSWORD,
   from: process.env.EMAIL_FROM,
