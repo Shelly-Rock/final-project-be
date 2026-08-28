@@ -179,12 +179,12 @@ export class EmailService {
     const message = [
       `From: ${from}`,
       `To: ${to}`,
-      `Subject: ${subject}`,
+      `Subject: ${this.encodeMimeHeader(subject)}`,
       'MIME-Version: 1.0',
       'Content-Type: text/html; charset=UTF-8',
-      'Content-Transfer-Encoding: 8bit',
+      'Content-Transfer-Encoding: base64',
       '',
-      html,
+      Buffer.from(html, 'utf8').toString('base64'),
     ].join('\r\n');
 
     return Buffer.from(message)
@@ -192,6 +192,14 @@ export class EmailService {
       .replace(/\+/g, '-')
       .replace(/\//g, '_')
       .replace(/=+$/, '');
+  }
+
+  private encodeMimeHeader(value: string): string {
+    if (/^[\x00-\x7F]*$/.test(value)) {
+      return value;
+    }
+
+    return `=?UTF-8?B?${Buffer.from(value, 'utf8').toString('base64')}?=`;
   }
 
   private parseFromAddress(from: string): { email: string; name?: string } {
