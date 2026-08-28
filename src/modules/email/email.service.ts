@@ -3,6 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import { Resend } from 'resend';
 
+const BREVO_EMAIL_API_URL = 'https://api.brevo.com/v3/smtp/email';
+
 export interface SendEmailOptions {
   to: string;
   subject: string;
@@ -13,13 +15,16 @@ export interface SendEmailOptions {
 export class EmailService {
   private transporter?: nodemailer.Transporter;
   private resend?: Resend;
+  private readonly provider: string;
 
   constructor(private readonly configService: ConfigService) {
-    if (this.configService.get<string>('mail.provider') === 'resend') {
+    this.provider = this.configService.get<string>('mail.provider') || 'smtp';
+
+    if (this.provider === 'resend') {
       this.resend = new Resend(
         this.configService.getOrThrow<string>('mail.resendApiKey'),
       );
-    } else {
+    } else if (this.provider !== 'brevo' && this.provider !== 'gmail-api') {
       this.transporter = nodemailer.createTransport({
         service: this.configService.get<string>('mail.service'),
         host: this.configService.get<string>('mail.host'),
@@ -47,8 +52,12 @@ export class EmailService {
     };
 
     try {
-      if (this.configService.get<string>('mail.provider') === 'resend') {
+      if (this.provider === 'resend') {
         await this.sendWithResend(mailOptions);
+      } else if (this.provider === 'brevo') {
+        await this.sendWithBrevo(mailOptions);
+      } else if (this.provider === 'gmail-api') {
+        await this.sendWithGmailApi(mailOptions);
       } else {
         await this.transporter?.sendMail(mailOptions);
       }
@@ -75,6 +84,124 @@ export class EmailService {
     if (error) {
       throw new Error(`Resend API error: ${error.message}`);
     }
+  }
+
+  private async sendWithBrevo(
+    mailOptions: nodemailer.SendMailOptions,
+  ): Promise<void> {
+    const apiKey = this.configService.getOrThrow<string>('mail.brevoApiKey');
+    const from = this.parseFromAddress(mailOptions.from as string);
+
+    const response = await fetch(BREVO_EMAIL_API_URL, {
+      method: 'POST',
+      headers: {
+        accept: 'application/json',
+        'api-key': apiKey,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        sender: from,
+        to: [{ email: mailOptions.to as string }],
+        subject: mailOptions.subject,
+        htmlContent: mailOptions.html,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`Brevo API error (${response.status}): ${errorBody}`);
+    }
+  }
+
+  private async sendWithGmailApi(
+    mailOptions: nodemailer.SendMailOptions,
+  ): Promise<void> {
+    const clientId =
+      this.configService.getOrThrow<string>('mail.gmailClientId');
+    const clientSecret = this.configService.getOrThrow<string>(
+      'mail.gmailClientSecret',
+    );
+    const refreshToken = this.configService.getOrThrow<string>(
+      'mail.gmailRefreshToken',
+    );
+    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken,
+        grant_type: 'refresh_token',
+      }),
+    });
+
+    if (!tokenResponse.ok) {
+      const errorBody = await tokenResponse.text();
+      throw new Error(
+        `Google OAuth token error (${tokenResponse.status}): ${errorBody}`,
+      );
+    }
+
+    const { access_token: accessToken } = (await tokenResponse.json()) as {
+      access_token?: string;
+    };
+
+    if (!accessToken) {
+      throw new Error(
+        'Google OAuth token response did not include access_token',
+      );
+    }
+
+    const rawMessage = this.createRawMessage(mailOptions);
+    const response = await fetch(
+      'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ raw: rawMessage }),
+      },
+    );
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`Gmail API error (${response.status}): ${errorBody}`);
+    }
+  }
+
+  private createRawMessage(mailOptions: nodemailer.SendMailOptions): string {
+    const from = mailOptions.from as string;
+    const to = mailOptions.to as string;
+    const subject = mailOptions.subject as string;
+    const html = mailOptions.html as string;
+    const message = [
+      `From: ${from}`,
+      `To: ${to}`,
+      `Subject: ${subject}`,
+      'MIME-Version: 1.0',
+      'Content-Type: text/html; charset=UTF-8',
+      'Content-Transfer-Encoding: 8bit',
+      '',
+      html,
+    ].join('\r\n');
+
+    return Buffer.from(message)
+      .toString('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+  }
+
+  private parseFromAddress(from: string): { email: string; name?: string } {
+    const match = from.match(/^(.+?)\s*<([^<>]+)>$/);
+
+    if (match) {
+      return { name: match[1].trim(), email: match[2].trim() };
+    }
+
+    return { email: from.trim() };
   }
 
   async sendVerificationEmail(
