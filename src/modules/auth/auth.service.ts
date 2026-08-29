@@ -65,12 +65,6 @@ export class AuthService {
       throw new UnauthorizedException('Invalid username or password');
     }
 
-    if (user.must_change_password) {
-      throw new ForbiddenException(
-        'You must change your password before logging in',
-      );
-    }
-
     const tokens = await this.generateTokens(
       user.id,
       user.email,
@@ -104,16 +98,10 @@ export class AuthService {
       throw new BadRequestException('This verification link has expired');
     }
 
-    await this.prisma.$transaction([
-      this.prisma.user.update({
-        where: { id: token.user_id },
-        data: { email_verified_at: new Date() },
-      }),
-      this.prisma.email_verification_tokens.update({
-        where: { id: token.id },
-        data: { used_at: new Date() },
-      }),
-    ]);
+    await this.prisma.user.update({
+      where: { id: token.user_id },
+      data: { email_verified_at: new Date() },
+    });
 
     return {
       success: true,
@@ -125,11 +113,40 @@ export class AuthService {
     dto: ChangePasswordReqDTO,
     userId?: number,
   ): Promise<ChangePasswordRespDTO> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-    });
+    let user = userId
+      ? await this.prisma.user.findUnique({
+          where: { id: userId },
+          include: { student: true },
+        })
+      : null;
 
-    if (!user && !dto.token) {
+    let verificationToken: { id: number; user_id: number } | null = null;
+
+    if (dto.token) {
+      const token = await this.prisma.email_verification_tokens.findUnique({
+        where: { token: dto.token },
+        select: {
+          id: true,
+          user_id: true,
+          used_at: true,
+          expires_at: true,
+          users: { include: { student: true } },
+        },
+      });
+
+      if (!token || token.used_at || token.expires_at < new Date()) {
+        throw new BadRequestException('Invalid or expired token');
+      }
+
+      if (userId && token.user_id !== userId) {
+        throw new BadRequestException('Token does not belong to this user');
+      }
+
+      verificationToken = token;
+      user = token.users;
+    }
+
+    if (!user) {
       throw new BadRequestException('User not found or token required');
     }
 
@@ -147,34 +164,38 @@ export class AuthService {
       }
     }
 
-    if (dto.token) {
-      const token = await this.prisma.email_verification_tokens.findUnique({
-        where: { token: dto.token },
-      });
-
-      if (!token || token.used_at || token.expires_at < new Date()) {
-        throw new BadRequestException('Invalid or expired token');
-      }
-    }
-
     const hashedPassword = await bcrypt.hash(
       dto.newPassword,
       BCRYPT_SALT_ROUNDS,
     );
 
-    await this.prisma.user.update({
-      where: { id: userId || undefined },
-      data: {
-        password_hash: hashedPassword,
-        must_change_password: false,
-      },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: user!.id },
+        data: {
+          password_hash: hashedPassword,
+          must_change_password: false,
+          ...(dto.token
+            ? { email_verified_at: user!.email_verified_at ?? new Date() }
+            : {}),
+        },
+      });
+
+      if (verificationToken) {
+        await tx.email_verification_tokens.update({
+          where: { id: verificationToken.id },
+          data: { used_at: new Date() },
+        });
+      }
     });
 
-    if (dto.token) {
-      await this.prisma.email_verification_tokens.update({
-        where: { token: dto.token },
-        data: { used_at: new Date() },
-      });
+    try {
+      await this.emailService.sendPasswordChangedNotification(
+        user.email,
+        user.student?.first_name || 'Sinh viên',
+      );
+    } catch (error) {
+      console.error('Password changed, but notification email failed:', error);
     }
 
     return {

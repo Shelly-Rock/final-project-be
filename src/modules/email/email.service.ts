@@ -218,7 +218,10 @@ export class EmailService {
     studentName: string,
   ): Promise<void> {
     const appUrl =
-      this.configService.get<string>('app.url') || 'http://localhost:3000';
+      this.configService.get<string>('APP_URL') ||
+      this.configService.get<string>('FRONTEND_URL') ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '') ||
+      'http://localhost:3000';
     const verifyUrl = `${appUrl}/change-password?token=${encodeURIComponent(token)}`;
 
     const html = `
