@@ -132,7 +132,7 @@ export class RoleService {
   ): Promise<{ success: boolean; message: string }> {
     const role = await this.prisma.role.findUnique({
       where: { id },
-      include: { users: true },
+      include: { user_roles: true },
     });
 
     if (!role || role.deleted_at) {
@@ -143,9 +143,9 @@ export class RoleService {
       throw new BadRequestException('Không thể xóa role hệ thống');
     }
 
-    if (role.users.length > 0) {
+    if (role.user_roles.length > 0) {
       throw new ConflictException(
-        `Role đang được sử dụng bởi ${role.users.length} user(s). Không thể xóa.`,
+        `Role đang được sử dụng bởi ${role.user_roles.length} user(s). Không thể xóa.`,
       );
     }
 
@@ -230,6 +230,55 @@ export class RoleService {
     }
 
     return role.permissions.map(({ permission }) => permission);
+  }
+
+  async getUserRoles(userId: number) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        user_roles: { include: { role: true } },
+      },
+    });
+
+    if (!user || user.deleted_at) {
+      throw new NotFoundException(`User với ID ${userId} không tìm thấy`);
+    }
+
+    return user.user_roles
+      .map(({ role }) => role)
+      .sort((a, b) => b.priority - a.priority);
+  }
+
+  async assignUserRoles(userId: number, roleIds: number[]) {
+    const uniqueRoleIds = [...new Set(roleIds)];
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user || user.deleted_at) {
+      throw new NotFoundException(`User với ID ${userId} không tìm thấy`);
+    }
+
+    const roles = await this.prisma.role.findMany({
+      where: { id: { in: uniqueRoleIds }, deleted_at: null },
+    });
+
+    if (roles.length !== uniqueRoleIds.length) {
+      throw new BadRequestException('Một số role ID không hợp lệ');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.userRole.deleteMany({ where: { user_id: userId } });
+      await tx.userRole.createMany({
+        data: uniqueRoleIds.map((role_id) => ({
+          user_id: userId,
+          role_id,
+        })),
+      });
+    });
+
+    return this.getUserRoles(userId);
   }
 
   private toResponse(role: RoleWithPermissions): RoleResponseDto {

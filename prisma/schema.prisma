@@ -18,7 +18,7 @@ model Role {
   updated_at   DateTime         @updatedAt
   deleted_at   DateTime?
   permissions  RolePermission[]
-  users        User[]
+  user_roles   UserRole[]
 
   @@map("roles")
 }
@@ -55,7 +55,6 @@ model User {
   email_verified_at         DateTime?
   is_active                 Boolean                     @default(true)
   password_hash             String
-  role_id                   Int
   updated_at                DateTime                    @updatedAt
   username                  String                      @unique
   id                        Int                         @id @default(autoincrement())
@@ -64,10 +63,20 @@ model User {
   secretary                 Secretary?
   student                   Student?
   teacher                   Teacher?
-  role                      Role                        @relation(fields: [role_id], references: [id])
+  user_roles                UserRole[]
 
-  @@index([role_id])
   @@map("users")
+}
+
+model UserRole {
+  user_id Int
+  role_id Int
+  user    User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  role    Role @relation(fields: [role_id], references: [id])
+
+  @@id([user_id, role_id])
+  @@index([role_id])
+  @@map("user_roles")
 }
 
 model Student {

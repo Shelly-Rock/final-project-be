@@ -25,6 +25,7 @@ import {
   CreateRoleDto,
   UpdateRoleDto,
   RoleResponseDto,
+  AssignUserRolesDto,
 } from './dto';
 
 @ApiTags('Roles')
@@ -68,6 +69,35 @@ export class RoleController {
       success: true,
       data: roles,
       total: roles.length,
+    };
+  }
+
+  @Get('users/:userId')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Lấy danh sách roles của user' })
+  @ApiParam({ name: 'userId', description: 'ID của user', type: Number })
+  async getUserRoles(@Param('userId', ParseIntPipe) userId: number) {
+    const roles = await this.roleService.getUserRoles(userId);
+    return {
+      success: true,
+      data: roles,
+      total: roles.length,
+    };
+  }
+
+  @Put('users/:userId')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Gán nhiều roles cho user (thay thế toàn bộ)' })
+  @ApiParam({ name: 'userId', description: 'ID của user', type: Number })
+  async assignUserRoles(
+    @Param('userId', ParseIntPipe) userId: number,
+    @Body() dto: AssignUserRolesDto,
+  ) {
+    const roles = await this.roleService.assignUserRoles(userId, dto.role_ids);
+    return {
+      success: true,
+      message: 'Gán roles cho user thành công',
+      data: roles,
     };
   }
 

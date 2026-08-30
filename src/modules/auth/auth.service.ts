@@ -21,6 +21,7 @@ import {
   ResendVerificationReqDTO,
   ResendVerificationRespDTO,
   UserRespDTO,
+  RoleRespDTO,
 } from './dto/auth.dto';
 import { RegisterReqDTO, RegisterRespDTO } from './dto/register.dto';
 
@@ -42,7 +43,9 @@ export class AuthService {
       where: {
         OR: [{ username: dto.username }, { email: dto.username }],
       },
-      include: { role: true },
+      include: {
+        user_roles: { include: { role: true } },
+      },
     });
 
     if (!user) {
@@ -65,10 +68,18 @@ export class AuthService {
       throw new UnauthorizedException('Invalid username or password');
     }
 
+    const roles = this.mapRoles(user);
+    const primaryRole = this.pickPrimaryRole(roles);
+
+    if (!primaryRole) {
+      throw new UnauthorizedException('User has no role assigned');
+    }
+
     const tokens = await this.generateTokens(
       user.id,
       user.email,
-      user.role.name,
+      primaryRole.name,
+      roles.map((r) => r.name),
     );
 
     return {
@@ -282,10 +293,12 @@ export class AuthService {
           email: dto.email,
           username: dto.studentId,
           password_hash: hashedPassword,
-          role_id: studentRole.id,
           must_change_password: true,
           email_verified_at: null,
           is_active: true,
+          user_roles: {
+            create: [{ role_id: studentRole.id }],
+          },
         },
       });
 
@@ -408,10 +421,12 @@ export class AuthService {
         email,
         username: studentId,
         password_hash: hashedPassword,
-        role_id: studentRole.id,
         must_change_password: true,
         email_verified_at: null,
         is_active: true,
+        user_roles: {
+          create: [{ role_id: studentRole.id }],
+        },
       },
     });
 
@@ -442,8 +457,9 @@ export class AuthService {
     userId: number,
     email: string,
     role: string,
+    roles: string[],
   ): Promise<{ accessToken: string; refreshToken: string }> {
-    const payload = { sub: userId, email, role };
+    const payload = { sub: userId, email, role, roles };
 
     const accessToken = this.jwtService.sign(payload);
     const refreshToken = this.jwtService.sign(payload, {
@@ -454,18 +470,40 @@ export class AuthService {
     return { accessToken, refreshToken };
   }
 
+  private mapRoles(user: {
+    user_roles?: { role: { id: number; name: string; display_name: string; priority: number } }[];
+  }): RoleRespDTO[] {
+    return (user.user_roles ?? [])
+      .map(({ role }) => ({
+        id: role.id,
+        name: role.name,
+        displayName: role.display_name,
+        priority: role.priority,
+      }))
+      .sort((a, b) => b.priority - a.priority)
+      .map(({ id, name, displayName }) => ({ id, name, displayName }));
+  }
+
+  private pickPrimaryRole(roles: RoleRespDTO[]): RoleRespDTO | undefined {
+    return roles[0];
+  }
+
   private mapToUserResp(user: any): UserRespDTO {
+    const roles = this.mapRoles(user);
+    const primaryRole = this.pickPrimaryRole(roles);
+
+    if (!primaryRole) {
+      throw new UnauthorizedException('User has no role assigned');
+    }
+
     return {
       id: user.id,
       email: user.email,
       username: user.username,
       mustChangePassword: user.must_change_password,
       emailVerifiedAt: user.email_verified_at,
-      role: {
-        id: user.role.id,
-        name: user.role.name,
-        displayName: user.role.display_name,
-      },
+      role: primaryRole,
+      roles,
     };
   }
 }

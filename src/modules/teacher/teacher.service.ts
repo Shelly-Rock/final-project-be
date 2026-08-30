@@ -66,7 +66,9 @@ export class TeacherService {
           email: dto.email,
           username: dto.code,
           password_hash: 'hashed_default_password',
-          role_id: teacherRole.id,
+          user_roles: {
+            create: [{ role_id: teacherRole.id }],
+          },
         },
       });
       const newTeacher = await tx.teacher.create({

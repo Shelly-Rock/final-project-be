@@ -115,6 +115,7 @@ export class UserRespDTO {
   mustChangePassword: boolean;
   emailVerifiedAt: Date | null;
   role: RoleRespDTO;
+  roles: RoleRespDTO[];
 }
 
 export class LoginRespDTO {

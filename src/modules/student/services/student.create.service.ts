@@ -33,7 +33,6 @@ export class CreateStudentService {
       email: student.email,
       username: student.studentId,
       password_hash: hashedPassword,
-      role_id: studentRole.id,
       must_change_password: true,
       email_verified_at: null,
       is_active: true,
@@ -42,6 +41,13 @@ export class CreateStudentService {
     // Tạo users trước
     const createdUsers = await this.prismaSV.user.createManyAndReturn({
       data: userData,
+    });
+
+    await this.prismaSV.userRole.createMany({
+      data: createdUsers.map((user) => ({
+        user_id: user.id,
+        role_id: studentRole.id,
+      })),
     });
 
     // Bước 4: Tạo Students với user_id từ users vừa tạo
