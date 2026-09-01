@@ -118,7 +118,9 @@ async function main() {
       create: data,
     });
     permissions.push(permission);
-    console.log(`✅ Đã tạo Permission: ${permission.name} - ID: ${permission.id}`);
+    console.log(
+      `✅ Đã tạo Permission: ${permission.name} - ID: ${permission.id}`,
+    );
   }
 
   // 3. Tạo 4 Roles
@@ -328,7 +330,9 @@ async function main() {
       });
     }
 
-    console.log(`✅ Đã tạo tài khoản (${userData.role.name}): ${user.email} | Username: ${user.username}`);
+    console.log(
+      `✅ Đã tạo tài khoản (${userData.role.name}): ${user.email} | Username: ${user.username}`,
+    );
   }
 
   console.log('🎉 Seed dữ liệu mẫu hoàn tất!');
@@ -342,11 +346,3 @@ main().catch((e) => {
   console.error('❌ Lỗi khi seed database:', e);
   process.exit(1);
 });
-
-
-
-
-// {
-//   "username": "admin@system.com",
-//   "password": "123456@Aa"
-// }
