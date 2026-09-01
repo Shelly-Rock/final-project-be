@@ -21,7 +21,7 @@ export class RegistrationPeriodService {
   constructor(private prisma: PrismaService) {}
 
   async create(dto: CreateRegistrationPeriodDto) {
-    return this.prisma.registrationPeriod.create({
+    return this.prisma.registration_periods.create({
       data: {
         name: dto.name,
         semester: dto.semester,
@@ -34,6 +34,7 @@ export class RegistrationPeriodService {
         department_student_limits:
           dto.departmentStudentLimits as unknown as Prisma.InputJsonArray,
         status: RegistrationPeriodStatus.UPCOMING,
+        updated_at: new Date(),
       },
     });
   }
@@ -44,7 +45,7 @@ export class RegistrationPeriodService {
     schoolYear?: string,
     status?: RegistrationPeriodStatus,
   ) {
-    return this.prisma.registrationPeriod.findMany({
+    return this.prisma.registration_periods.findMany({
       where: {
         ...(search && { name: { contains: search, mode: 'insensitive' } }),
         ...(semester && { semester }),
@@ -56,7 +57,7 @@ export class RegistrationPeriodService {
   }
 
   async findOne(id: number) {
-    const period = await this.prisma.registrationPeriod.findUnique({
+    const period = await this.prisma.registration_periods.findUnique({
       where: { id },
     });
     if (!period)
@@ -74,7 +75,7 @@ export class RegistrationPeriodService {
       );
     }
 
-    return this.prisma.registrationPeriod.update({
+    return this.prisma.registration_periods.update({
       where: { id },
       data: {
         name: dto.name,
@@ -101,7 +102,7 @@ export class RegistrationPeriodService {
       );
     }
 
-    return this.prisma.registrationPeriod.update({
+    return this.prisma.registration_periods.update({
       where: { id },
       data: { status: RegistrationPeriodStatus.OPEN },
     });
@@ -116,7 +117,7 @@ export class RegistrationPeriodService {
       );
     }
 
-    return this.prisma.registrationPeriod.update({
+    return this.prisma.registration_periods.update({
       where: { id },
       data: { status: RegistrationPeriodStatus.CLOSED },
     });
@@ -125,7 +126,7 @@ export class RegistrationPeriodService {
   async remove(id: number) {
     await this.findOne(id);
 
-    return this.prisma.registrationPeriod.delete({
+    return this.prisma.registration_periods.delete({
       where: { id },
     });
   }
@@ -133,9 +134,9 @@ export class RegistrationPeriodService {
   // Lấy danh sách chỉ tiêu theo đợt
   async getTeacherQuotas(periodId: number) {
     await this.findOne(periodId); // Kiểm tra đợt tồn tại
-    return this.prisma.teacherQuota.findMany({
+    return this.prisma.teacher_quotas.findMany({
       where: { period_id: periodId },
-      include: { teacher: { select: { name: true, department_id: true } } },
+      include: { teachers: { select: { name: true, department_id: true } } },
     });
   }
 
@@ -145,7 +146,7 @@ export class RegistrationPeriodService {
     teacherId: number,
     dto: UpdateTeacherQuotaDto,
   ) {
-    const quota = await this.prisma.teacherQuota.findFirst({
+    const quota = await this.prisma.teacher_quotas.findFirst({
       where: { period_id: periodId, teacher_id: teacherId },
     });
 
@@ -168,7 +169,7 @@ export class RegistrationPeriodService {
       deptMaxStudents = 3;
     }
 
-    return this.prisma.teacherQuota.update({
+    return this.prisma.teacher_quotas.update({
       where: { id: quota.id },
       data: {
         assigned_quota: dto.assignedQuota,
@@ -179,14 +180,14 @@ export class RegistrationPeriodService {
   }
 
   async notifyInsufficientTeachers(periodId: number) {
-    const insufficientQuotas = await this.prisma.teacherQuota.findMany({
+    const insufficientQuotas = await this.prisma.teacher_quotas.findMany({
       where: {
         period_id: periodId,
         status: TeacherQuotaStatus.INSUFFICIENT,
       },
     });
 
-    await this.prisma.teacherQuota.updateMany({
+    await this.prisma.teacher_quotas.updateMany({
       where: {
         period_id: periodId,
         status: TeacherQuotaStatus.INSUFFICIENT,
@@ -212,21 +213,21 @@ export class RegistrationPeriodService {
       totalQuotasRaw,
       insufficientTeachers,
     ] = await Promise.all([
-      this.prisma.topic.count({ where: { period_id: periodId } }),
-      this.prisma.topic.count({
+      this.prisma.topics.count({ where: { period_id: periodId } }),
+      this.prisma.topics.count({
         where: { period_id: periodId, status: TopicStatus.PENDING },
       }),
-      this.prisma.topic.count({
+      this.prisma.topics.count({
         where: { period_id: periodId, status: TopicStatus.APPROVED },
       }),
-      this.prisma.topic.count({
+      this.prisma.topics.count({
         where: { period_id: periodId, status: TopicStatus.REJECTED },
       }),
-      this.prisma.teacherQuota.aggregate({
+      this.prisma.teacher_quotas.aggregate({
         where: { period_id: periodId },
         _sum: { assigned_quota: true },
       }),
-      this.prisma.teacherQuota.count({
+      this.prisma.teacher_quotas.count({
         where: { period_id: periodId, status: TeacherQuotaStatus.INSUFFICIENT },
       }),
     ]);

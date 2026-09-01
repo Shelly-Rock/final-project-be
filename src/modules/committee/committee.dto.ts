@@ -24,6 +24,11 @@ export class CreateCommitteeDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
+  period_id?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
   chairman_id?: number;
 
   @IsOptional()
@@ -51,6 +56,11 @@ export class UpdateCommitteeDto {
   @IsOptional()
   @IsString()
   name?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  period_id?: number;
 
   @IsOptional()
   @Type(() => Number)
@@ -102,6 +112,7 @@ export class CommitteeMemberDto {
   id: number;
   name: string;
   teacher_id: string;
+  email: string;
   role: CommitteeRole;
   role_label: string;
 }
@@ -109,6 +120,7 @@ export class CommitteeMemberDto {
 export class CommitteeResponseDto {
   id: number;
   name: string;
+  period_id: number | null;
   chairman_id: number | null;
   chairman_name: string | null;
   secretary_id: number | null;
@@ -117,6 +129,7 @@ export class CommitteeResponseDto {
   internal_1_name: string | null;
   internal_2_id: number | null;
   internal_2_name: string | null;
+  members: CommitteeMemberDto[];
   external_reviewers: ExternalReviewerDto[];
   member_count: number;
   created_at: Date;

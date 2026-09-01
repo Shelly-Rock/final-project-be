@@ -12,12 +12,10 @@ export class ScoringService {
   async createScore(dto: CreateIndependentScoreDto) {
     const { projectId, studentId, teacherId, scoringType, role } = dto;
 
-    // Calculate deadline based on scoring type
     const deadline = new Date();
     deadline.setDate(deadline.getDate() + (scoringType === ScoringType.GVHD ? 7 : 3));
 
-    // Check if score already exists
-    const existing = await this.prisma.independentScore.findFirst({
+    const existing = await this.prisma.independent_scores.findFirst({
       where: {
         project_id: projectId,
         teacher_id: teacherId,
@@ -29,7 +27,7 @@ export class ScoringService {
       throw new BadRequestException('Score record already exists for this project and teacher');
     }
 
-    return this.prisma.independentScore.create({
+    return this.prisma.independent_scores.create({
       data: {
         project_id: projectId,
         student_id: studentId,
@@ -39,12 +37,13 @@ export class ScoringService {
         deadline,
         status: ScoringStatus.PENDING,
         max_score: 10,
+        updated_at: new Date(),
       },
     });
   }
 
   async updateScore(id: number, teacherId: number, dto: UpdateScoreDto) {
-    const score = await this.prisma.independentScore.findUnique({
+    const score = await this.prisma.independent_scores.findUnique({
       where: { id },
     });
 
@@ -60,7 +59,7 @@ export class ScoringService {
       throw new BadRequestException('Cannot update a submitted score');
     }
 
-    return this.prisma.independentScore.update({
+    return this.prisma.independent_scores.update({
       where: { id },
       data: {
         score: dto.score,
@@ -75,11 +74,8 @@ export class ScoringService {
   }
 
   async submitScore(id: number, teacherId: number, dto: SubmitScoreDto) {
-    const score = await this.prisma.independentScore.findUnique({
+    const score = await this.prisma.independent_scores.findUnique({
       where: { id },
-      include: {
-        project: true,
-      },
     });
 
     if (!score) {
@@ -96,8 +92,7 @@ export class ScoringService {
 
     const isFailed = dto.score < 4;
 
-    // Update score
-    const updatedScore = await this.prisma.independentScore.update({
+    const updatedScore = await this.prisma.independent_scores.update({
       where: { id },
       data: {
         score: dto.score,
@@ -124,79 +119,77 @@ export class ScoringService {
 
     if (!project) return;
 
-    let result = await this.prisma.scoringResult.findUnique({
+    let result = await this.prisma.scoring_results.findUnique({
       where: { project_id: projectId },
     });
 
     if (!result) {
-      result = await this.prisma.scoringResult.create({
+      result = await this.prisma.scoring_results.create({
         data: {
           project_id: projectId,
           student_id: project.student_id,
+          updated_at: new Date(),
         },
       });
     }
 
     const isPassed = score >= 4;
-    const updateData: Prisma.ScoringResultUpdateInput = {};
+    const updateData: Prisma.scoring_resultsUpdateInput = {};
 
     if (scoringType === ScoringType.GVHD) {
       updateData.gvhd_score = score;
-      updateData.is_gvhd_failed = !isPassed;
-      updateData.gvhd_passed = isPassed;
+      updateData.is_gvhd_passed = isPassed;
 
       if (!isPassed) {
-        updateData.is_eliminated = true;
-        updateData.final_status = 'ELIMINATED_GVHD';
+        updateData.final_status = 'REJECTED_GVHD';
       }
     } else {
-      // Committee score - update committee scores array
-      const committeeScores = (result.committee_scores as any[]) || [];
-      const existingIndex = committeeScores.findIndex(s => s.teacherId === project.teacher_id);
-      
-      if (existingIndex >= 0) {
-        committeeScores[existingIndex] = {
-          ...committeeScores[existingIndex],
-          score,
-          passed: isPassed,
-        };
-      } else {
-        committeeScores.push({
-          teacherId: project.teacher_id,
-          score,
-          passed: isPassed,
-        });
-      }
-
-      updateData.committee_scores = committeeScores as Prisma.JsonValue;
-      updateData.total_committee_scores = committeeScores.length;
-      
-      // Count failed scores
-      const failedCount = committeeScores.filter(s => !s.passed).length;
-      updateData.failed_count = failedCount;
-
-      // If any committee member scored < 4, eliminate
-      if (!isPassed) {
-        updateData.is_eliminated = true;
-        updateData.final_status = 'ELIMINATED_COMMITTEE';
-      }
-    }
-
-    // If not eliminated yet, check if all scores are in
-    if (!result.is_eliminated) {
-      const allScores = await this.prisma.independentScore.findMany({
+      // Committee score - get all committee scores from IndependentScore table
+      const committeeScores = await this.prisma.independent_scores.findMany({
         where: {
           project_id: projectId,
+          scoring_type: ScoringType.COMMITTEE,
           status: ScoringStatus.SUBMITTED,
         },
       });
 
-      if (allScores.length === 5) { // 1 GVHD + 4 committee members
-        updateData.final_status = 'APPROVED';
+      // Calculate average defense score
+      if (committeeScores.length > 0) {
+        const totalScore = committeeScores.reduce((sum, s) => sum + (s.score || 0), 0);
+        updateData.defense_score = totalScore / committeeScores.length;
+      }
+
+      // Count passed/failed
+      const failedCount = committeeScores.filter((s) => (s.score || 0) < 4).length;
+
+      // If any committee member scored < 4, mark as not passed
+      if (failedCount > 0) {
+        updateData.is_final_passed = false;
+        updateData.final_status = 'REJECTED_DEFENSE';
+      } else if (committeeScores.length >= 3) {
+        // Minimum 3 committee members for final approval
+        updateData.is_final_passed = true;
+        updateData.final_status = 'PASSED';
       }
     }
 
-    return this.prisma.scoringResult.update({
+    // Calculate final score if both GVHD and defense scores are available
+    const allScores = await this.prisma.independent_scores.findMany({
+      where: {
+        project_id: projectId,
+        status: ScoringStatus.SUBMITTED,
+      },
+    });
+
+    const gvhdScore = allScores.find((s) => s.scoring_type === ScoringType.GVHD);
+    const allCommitteeScores = allScores.filter((s) => s.scoring_type === ScoringType.COMMITTEE);
+
+    if (gvhdScore?.score !== null && allCommitteeScores.length > 0) {
+      const avgCommittee = allCommitteeScores.reduce((sum, s) => sum + (s.score || 0), 0) / allCommitteeScores.length;
+      updateData.final_score = ((gvhdScore.score || 0) + avgCommittee) / 2;
+    }
+
+    return this.prisma.scoring_results.update({
       where: { project_id: projectId },
       data: updateData,
     });
@@ -205,16 +198,16 @@ export class ScoringService {
   // ============ QUERIES ============
 
   async getScoreById(id: number) {
-    const score = await this.prisma.independentScore.findUnique({
+    const score = await this.prisma.independent_scores.findUnique({
       where: { id },
       include: {
-        project: {
+        projects: {
           select: {
             project_id: true,
             project_name: true,
           },
         },
-        student: {
+        students: {
           select: {
             student_id: true,
             first_name: true,
@@ -223,7 +216,7 @@ export class ScoringService {
             class_name: true,
           },
         },
-        teacher: {
+        teachers: {
           select: {
             teacher_id: true,
             name: true,
@@ -243,7 +236,7 @@ export class ScoringService {
     const { page = 1, limit = 20, status, scoringType } = query;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.IndependentScoreWhereInput = {
+    const where: Prisma.independent_scoresWhereInput = {
       teacher_id: teacherId,
     };
 
@@ -256,16 +249,16 @@ export class ScoringService {
     }
 
     const [scores, total] = await Promise.all([
-      this.prisma.independentScore.findMany({
+      this.prisma.independent_scores.findMany({
         where,
         include: {
-          project: {
+          projects: {
             select: {
               project_id: true,
               project_name: true,
             },
           },
-          student: {
+          students: {
             select: {
               student_id: true,
               first_name: true,
@@ -279,7 +272,7 @@ export class ScoringService {
         take: limit,
         orderBy: { deadline: 'asc' },
       }),
-      this.prisma.independentScore.count({ where }),
+      this.prisma.independent_scores.count({ where }),
     ]);
 
     return {
@@ -294,10 +287,10 @@ export class ScoringService {
   }
 
   async getScoresByProject(projectId: number) {
-    return this.prisma.independentScore.findMany({
+    return this.prisma.independent_scores.findMany({
       where: { project_id: projectId },
       include: {
-        teacher: {
+        teachers: {
           select: {
             teacher_id: true,
             name: true,
@@ -312,7 +305,7 @@ export class ScoringService {
     const { page = 1, limit = 20, scoringType, status, teacherId, projectId, studentId } = query;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.IndependentScoreWhereInput = {};
+    const where: Prisma.independent_scoresWhereInput = {};
 
     if (scoringType) where.scoring_type = scoringType;
     if (status) where.status = status;
@@ -321,16 +314,16 @@ export class ScoringService {
     if (studentId) where.student_id = studentId;
 
     const [scores, total] = await Promise.all([
-      this.prisma.independentScore.findMany({
+      this.prisma.independent_scores.findMany({
         where,
         include: {
-          project: {
+          projects: {
             select: {
               project_id: true,
               project_name: true,
             },
           },
-          student: {
+          students: {
             select: {
               student_id: true,
               first_name: true,
@@ -339,7 +332,7 @@ export class ScoringService {
               class_name: true,
             },
           },
-          teacher: {
+          teachers: {
             select: {
               teacher_id: true,
               name: true,
@@ -350,7 +343,7 @@ export class ScoringService {
         take: limit,
         orderBy: { created_at: 'desc' },
       }),
-      this.prisma.independentScore.count({ where }),
+      this.prisma.independent_scores.count({ where }),
     ]);
 
     return {
@@ -365,23 +358,23 @@ export class ScoringService {
   }
 
   async getMyStats(teacherId: number) {
-    const scores = await this.prisma.independentScore.findMany({
+    const scores = await this.prisma.independent_scores.findMany({
       where: { teacher_id: teacherId },
     });
 
     return {
       total: scores.length,
-      pending: scores.filter(s => s.status === ScoringStatus.PENDING || s.status === ScoringStatus.IN_PROGRESS).length,
-      submitted: scores.filter(s => s.status === ScoringStatus.SUBMITTED).length,
-      failed: scores.filter(s => s.status === ScoringStatus.FAILED).length,
-      passed: scores.filter(s => s.status === ScoringStatus.PASSED).length,
+      pending: scores.filter((s) => s.status === ScoringStatus.PENDING || s.status === ScoringStatus.IN_PROGRESS).length,
+      submitted: scores.filter((s) => s.status === ScoringStatus.SUBMITTED).length,
+      failed: scores.filter((s) => s.status === ScoringStatus.FAILED).length,
+      passed: scores.filter((s) => s.status === ScoringStatus.PASSED).length,
     };
   }
 
   // ============ SCORING RESULTS ============
 
   async getScoringResult(projectId: number) {
-    const result = await this.prisma.scoringResult.findUnique({
+    const result = await this.prisma.scoring_results.findUnique({
       where: { project_id: projectId },
     });
 
@@ -390,10 +383,10 @@ export class ScoringService {
     }
 
     // Get individual scores for detailed view
-    const scores = await this.prisma.independentScore.findMany({
+    const scores = await this.prisma.independent_scores.findMany({
       where: { project_id: projectId },
       include: {
-        teacher: {
+        teachers: {
           select: {
             teacher_id: true,
             name: true,
@@ -403,28 +396,29 @@ export class ScoringService {
     });
 
     const committeeScoresList = scores
-      .filter(s => s.scoring_type === ScoringType.COMMITTEE)
-      .map(s => ({
+      .filter((s) => s.scoring_type === ScoringType.COMMITTEE)
+      .map((s) => ({
         role: s.role,
         teacherId: s.teacher_id,
-        teacherName: s.teacher.name,
+        teacherName: s.teachers.name,
         score: s.score,
         passed: s.score !== null && s.score >= 4,
       }));
 
-    const gvhdScore = scores.find(s => s.scoring_type === ScoringType.GVHD);
+    const gvhdScore = scores.find((s) => s.scoring_type === ScoringType.GVHD);
 
     return {
       id: result.id,
       projectId: result.project_id,
       studentId: result.student_id,
       gvhdScore: gvhdScore?.score || null,
-      gvhdPassed: result.gvhd_passed,
+      gvhdPassed: result.is_gvhd_passed,
+      reviewScore: result.review_score,
+      defenseScore: result.defense_score,
+      finalScore: result.final_score,
       committeeScores: committeeScoresList,
-      totalCommitteeScores: result.total_committee_scores,
-      failedCount: result.failed_count,
-      isEliminated: result.is_eliminated,
-      isGvhdFailed: result.is_gvhd_failed,
+      totalCommitteeScores: committeeScoresList.length,
+      isFinalPassed: result.is_final_passed,
       finalStatus: result.final_status,
       scoreSheetUrl: result.score_sheet_url,
     };
@@ -434,15 +428,14 @@ export class ScoringService {
     const { page = 1, limit = 20 } = query;
     const skip = (page - 1) * limit;
 
-    const results = await this.prisma.scoringResult.findMany({
+    const results = await this.prisma.scoring_results.findMany({
       skip,
       take: limit,
       orderBy: { created_at: 'desc' },
     });
 
-    const total = await this.prisma.scoringResult.count();
+    const total = await this.prisma.scoring_results.count();
 
-    // Enrich with project info
     const enrichedResults = await Promise.all(
       results.map(async (result) => {
         const project = await this.prisma.project.findUnique({
@@ -468,7 +461,7 @@ export class ScoringService {
           project,
           student,
         };
-      })
+      }),
     );
 
     return {
@@ -485,11 +478,10 @@ export class ScoringService {
   // ============ ASSIGN SCORES TO COMMITTEE ============
 
   async assignScoresToCommittee(sessionProjectId: number, committeeId: number) {
-    // Get session project
-    const sessionProject = await this.prisma.defenseSessionProject.findUnique({
+    const sessionProject = await this.prisma.defense_session_projects.findUnique({
       where: { id: sessionProjectId },
       include: {
-        project: true,
+        projects: true,
       },
     });
 
@@ -497,17 +489,18 @@ export class ScoringService {
       throw new NotFoundException('Session project not found');
     }
 
-    // Get committee members
-    const committee = await this.prisma.defenseCommittee.findUnique({
+    // Get committee members using the new CommitteeMember table
+    const committee = await this.prisma.defense_committees.findUnique({
       where: { id: committeeId },
       include: {
-        chairman: true,
-        secretary: true,
-        internal_1: true,
-        internal_2: true,
-        external_reviewers: {
+        committee_members: {
           include: {
-            teacher: true,
+            teachers: true,
+          },
+        },
+        committee_external_reviewers: {
+          include: {
+            teachers: true,
           },
         },
       },
@@ -522,55 +515,14 @@ export class ScoringService {
 
     const scoresToCreate = [];
 
-    // Add chairman
-    if (committee.chairman) {
+    // Add internal members
+    for (const member of committee.committee_members) {
       scoresToCreate.push({
-        project_id: sessionProject.project_id,
-        student_id: sessionProject.project.student_id,
-        teacher_id: committee.chairman.id,
+        project_id: sessionProject.projects.id,
+        student_id: sessionProject.projects.student_id,
+        teacher_id: member.teacher_id,
         scoring_type: ScoringType.COMMITTEE,
-        role: CommitteeRole.CHAIRMAN,
-        deadline,
-        status: ScoringStatus.PENDING,
-        max_score: 10,
-      });
-    }
-
-    // Add secretary
-    if (committee.secretary) {
-      scoresToCreate.push({
-        project_id: sessionProject.project_id,
-        student_id: sessionProject.project.student_id,
-        teacher_id: committee.secretary.id,
-        scoring_type: ScoringType.COMMITTEE,
-        role: CommitteeRole.SECRETARY,
-        deadline,
-        status: ScoringStatus.PENDING,
-        max_score: 10,
-      });
-    }
-
-    // Add internal reviewers
-    if (committee.internal_1) {
-      scoresToCreate.push({
-        project_id: sessionProject.project_id,
-        student_id: sessionProject.project.student_id,
-        teacher_id: committee.internal_1.id,
-        scoring_type: ScoringType.COMMITTEE,
-        role: CommitteeRole.INTERNAL_REVIEWER,
-        deadline,
-        status: ScoringStatus.PENDING,
-        max_score: 10,
-      });
-    }
-
-    if (committee.internal_2) {
-      scoresToCreate.push({
-        project_id: sessionProject.project_id,
-        student_id: sessionProject.project.student_id,
-        teacher_id: committee.internal_2.id,
-        scoring_type: ScoringType.COMMITTEE,
-        role: CommitteeRole.INTERNAL_REVIEWER,
+        role: member.role,
         deadline,
         status: ScoringStatus.PENDING,
         max_score: 10,
@@ -578,10 +530,10 @@ export class ScoringService {
     }
 
     // Add external reviewers
-    for (const reviewer of committee.external_reviewers) {
+    for (const reviewer of committee.committee_external_reviewers) {
       scoresToCreate.push({
-        project_id: sessionProject.project_id,
-        student_id: sessionProject.project.student_id,
+        project_id: sessionProject.projects.id,
+        student_id: sessionProject.projects.student_id,
         teacher_id: reviewer.teacher_id,
         scoring_type: ScoringType.COMMITTEE,
         role: CommitteeRole.EXTERNAL_REVIEWER,
@@ -592,7 +544,7 @@ export class ScoringService {
     }
 
     // Create all scores
-    return this.prisma.independentScore.createMany({
+    return this.prisma.independent_scores.createMany({
       data: scoresToCreate,
       skipDuplicates: true,
     });
@@ -601,7 +553,7 @@ export class ScoringService {
   // ============ DELETE ============
 
   async deleteScore(id: number) {
-    const score = await this.prisma.independentScore.findUnique({
+    const score = await this.prisma.independent_scores.findUnique({
       where: { id },
     });
 
@@ -613,7 +565,7 @@ export class ScoringService {
       throw new BadRequestException('Cannot delete a submitted score');
     }
 
-    return this.prisma.independentScore.delete({
+    return this.prisma.independent_scores.delete({
       where: { id },
     });
   }

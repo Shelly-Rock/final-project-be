@@ -8,6 +8,7 @@ import {
   Delete,
   Query,
   ParseIntPipe,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { RegistrationPeriodService } from './registration-period.service';
@@ -17,8 +18,10 @@ import {
   UpdateRegistrationPeriodDto,
 } from './dto';
 import { RegistrationPeriodStatus } from '@prisma/client';
+import { JwtAuthGuard } from '@/core/auth/guards/jwtAuth.guard';
 
 @ApiTags('Registration Periods')
+@UseGuards(JwtAuthGuard)
 @Controller('registration-periods')
 export class RegistrationPeriodController {
   constructor(private readonly periodService: RegistrationPeriodService) {}

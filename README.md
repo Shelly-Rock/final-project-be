@@ -351,3 +351,5 @@ Rate limit (ThrottlerModule)
 Versioning API
 
 -> session chat đang làm: https://chat.deepseek.com/a/chat/s/9389ced3-4c57-4605-a18f-2c1684d6a485
+
+fix lỗi này giúp tôi khi đăng nhập vào thì bị dính status 401
