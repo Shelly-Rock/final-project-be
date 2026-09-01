@@ -19,11 +19,14 @@ import {
   ApiBadRequestResponse,
   ApiNotFoundResponse,
   ApiOperation,
+  ApiBearerAuth,
 } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { Public } from '@/core/auth/decorators/public.decorator';
 import { CurrentUser } from '@/core/auth/decorators/currentUser.decorator';
+import { Roles } from '@/core/auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '@/core/auth/guards/jwtAuth.guard';
+import { RolesGuard } from '@/core/auth/guards/roles.guard';
 import {
   LoginReqDTO,
   LoginRespDTO,
@@ -59,13 +62,16 @@ export class AuthController {
     return this.authService.login(dto);
   }
 
-  @Public()
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN', 'SECRETARY')
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Register a new student account' })
+  @ApiOperation({ summary: 'Register a new student account (Admin/Secretary only)' })
   @ApiBody({ type: RegisterReqDTO })
   @ApiOkResponse({ type: RegisterRespDTO, description: 'Account created, verification email sent' })
   @ApiBadRequestResponse({ description: 'Validation error or user already exists' })
+  @ApiForbiddenResponse({ description: 'Requires ADMIN or SECRETARY role' })
   async register(@Body() dto: RegisterReqDTO): Promise<RegisterRespDTO> {
     return this.authService.register(dto);
   }
@@ -103,18 +109,18 @@ export class AuthController {
     return this.authService.resetPassword(dto);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @Public()
   @Post('change-password')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Change password for logged in user' })
+  @ApiOperation({ summary: 'Change password after email verification (no login required)' })
   @ApiBody({ type: ChangePasswordReqDTO })
   @ApiOkResponse({ type: ChangePasswordRespDTO, description: 'Password changed successfully' })
-  @ApiUnauthorizedResponse({ description: 'Current password is incorrect' })
+  @ApiForbiddenResponse({ description: 'Email must be verified first' })
+  @ApiNotFoundResponse({ description: 'User not found' })
   async changePassword(
     @Body() dto: ChangePasswordReqDTO,
-    @CurrentUser() user: any,
   ): Promise<ChangePasswordRespDTO> {
-    return this.authService.changePassword(dto, user.sub);
+    return this.authService.changePassword(dto);
   }
 
   @Public()

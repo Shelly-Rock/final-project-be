@@ -176,8 +176,21 @@ async function main() {
   });
   console.log(`✅ Đã tạo Role: ${committeeRole.name}`);
 
+  const secretaryRole = await prisma.role.upsert({
+    where: { name: 'SECRETARY' },
+    update: {},
+    create: {
+      name: 'SECRETARY',
+      display_name: 'Thư ký',
+      description: 'Quyền truy cập dành cho Thư ký',
+      is_system: true,
+      priority: 3,
+    },
+  });
+  console.log(`✅ Đã tạo Role: ${secretaryRole.name}`);
+
   // 4. Gán permissions cho roles
-  for (const role of [adminRole, teacherRole, studentRole, committeeRole]) {
+  for (const role of [adminRole, teacherRole, studentRole, committeeRole, secretaryRole]) {
     for (const permission of permissions) {
       await prisma.rolePermission.upsert({
         where: {
@@ -249,6 +262,13 @@ async function main() {
       role: committeeRole,
       firstName: 'Hội đồng',
       lastName: 'Demo',
+    },
+    {
+      email: 'secretary@system.com',
+      username: 'secretary_demo',
+      role: secretaryRole,
+      firstName: 'Thư ký',
+      lastName: 'Hệ thống',
     },
   ];
 
