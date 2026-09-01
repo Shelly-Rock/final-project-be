@@ -47,19 +47,19 @@ export class VerifyEmailRespDTO {
   message: string;
 }
 
-// ========== Change Password (Logged In) ==========
+// ========== Change Password (No login required, after email verification) ==========
 export class ChangePasswordReqDTO {
   @ApiProperty({
-    example: 'currentPassword123',
-    description: 'Current password (required when logged in)',
+    example: 'admin@system.com',
+    description: 'Username or email of the account',
   })
   @IsNotEmpty()
   @IsString()
-  currentPassword: string;
+  username: string;
 
   @ApiProperty({
     example: 'newPassword123',
-    description: 'New password',
+    description: 'New password (email must be verified first)',
   })
   @IsNotEmpty()
   @IsString()

@@ -128,10 +128,11 @@ export class AuthService {
 
   async changePassword(
     dto: ChangePasswordReqDTO,
-    userId: number,
   ): Promise<ChangePasswordRespDTO> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
+    const user = await this.prisma.user.findFirst({
+      where: {
+        OR: [{ username: dto.username }, { email: dto.username }],
+      },
       include: { student: true },
     });
 
@@ -139,12 +140,10 @@ export class AuthService {
       throw new NotFoundException('User not found');
     }
 
-    const isCurrentPasswordValid = await bcrypt.compare(
-      dto.currentPassword,
-      user.password_hash,
-    );
-    if (!isCurrentPasswordValid) {
-      throw new UnauthorizedException('Current password is incorrect');
+    if (!user.email_verified_at) {
+      throw new ForbiddenException(
+        'Email must be verified before changing password. Please verify your email first.',
+      );
     }
 
     const hashedPassword = await bcrypt.hash(
