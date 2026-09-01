@@ -3,7 +3,7 @@ FROM node:20 AS development
 WORKDIR /app
 RUN npm install -g pnpm
 COPY package*.json pnpm-lock.yaml ./
-RUN pnpm install
+RUN pnpm install --unsafe-perm
 COPY . .
 ENV DATABASE_URL="postgresql://dummy:dummy@dummy:5432/dummy"
 RUN npx prisma generate
@@ -15,7 +15,7 @@ FROM node:20 AS builder
 WORKDIR /app
 RUN npm install -g pnpm
 COPY package*.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --unsafe-perm
 COPY . .
 ENV DATABASE_URL="postgresql://dummy:dummy@dummy:5432/dummy"
 RUN npx prisma generate
@@ -30,7 +30,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 RUN npm install -g pnpm
 COPY package*.json pnpm-lock.yaml ./
-RUN pnpm install --prod --frozen-lockfile
+RUN pnpm install --prod --frozen-lockfile --unsafe-perm
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
 ENV DATABASE_URL="postgresql://dummy:dummy@dummy:5432/dummy"
