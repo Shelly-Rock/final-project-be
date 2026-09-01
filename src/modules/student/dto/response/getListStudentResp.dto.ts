@@ -1,4 +1,17 @@
 import { PaginationRespDTO } from '@/shared';
+
+interface TeacherInfo {
+  id: number;
+  teacher_id: string;
+  name: string;
+  email: string;
+}
+
+interface TopicInfo {
+  id: number;
+  name: string;
+}
+
 export class GetListStudentRespDTO {
   id: number;
   studentId: string;
@@ -15,6 +28,8 @@ export class GetListStudentRespDTO {
   extraData?: unknown;
   createdAt: string;
   updatedAt: string;
+  teacher?: TeacherInfo | null;
+  topic?: TopicInfo | null;
 }
 
 export class GetListStudentsRespDTO extends PaginationRespDTO {

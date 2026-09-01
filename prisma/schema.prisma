@@ -4,6 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+   url      = env("DATABASE_URL")
 }
 
 // ENUMs defined at top for reference
@@ -40,9 +41,23 @@ enum TopicStatus {
   PENDING
   APPROVED
   REJECTED
+  DRAFT 
+  WAITING_FOR_SECRETARY
 }
 
 enum ExceptionRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum RegistrationStatus {
+  OPEN
+  FULL
+  LOCKED
+}
+
+enum StudentRegistrationStatus {
   PENDING
   APPROVED
   REJECTED
@@ -191,10 +206,15 @@ model User {
 
   role_id Int
   role    Role @relation(fields: [role_id], references: [id])
+  approvedRegistrations RegisteredStudent[] @relation("ApprovedRegistrations")
+  rejectedRegistrations RegisteredStudent[] @relation("RejectedRegistrations")
 
   student   Student?
   teacher   Teacher?
   secretary Secretary?
+
+  // Email verification tokens
+  email_verification_tokens EmailVerificationToken[]
 
   created_at DateTime  @default(now())
   updated_at DateTime  @updatedAt
@@ -204,13 +224,29 @@ model User {
   @@map("users")
 }
 
+// Email Verification Token
+model EmailVerificationToken {
+  id        Int       @id @default(autoincrement())
+  user_id   Int
+  token     String    @unique
+  expires_at DateTime
+  used_at   DateTime?
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([token])
+  @@map("email_verification_tokens")
+}
+
 model Student {
   id Int @id @default(autoincrement())
 
-  user_id Int? @unique
+  user_id Int? @unique  // Nullable - sinh viên có thể chưa có tài khoản
 
   student_id String @unique
-  email      String @unique
+  // Bỏ email - dùng user.email làm Single Source of Truth
 
   first_name  String
   middle_name String
@@ -227,14 +263,16 @@ model Student {
 
   project Project?
 
-  teacher_id Int?
   extra_data Json?
   user       User?    @relation(fields: [user_id], references: [id])
-  teacher    Teacher? @relation(fields: [teacher_id], references: [id])
+  // Note: GVHD được quản lý thông qua Project.topic.teacher hoặc Project.teacher
 
   // Stage 4 relations
   finalSubmission   FinalSubmission?
   independentScores IndependentScore[]
+  scoringResults    ScoringResult[]
+  registrations         RegisteredStudent[]
+  preAssignments        PreAssignedStudent[]
 
   created_at DateTime  @default(now())
   updated_at DateTime  @updatedAt
@@ -301,15 +339,13 @@ model Teacher {
   // Committee relations
   project  Project[]
   user     User      @relation(fields: [user_id], references: [id])
-  students Student[]
+  // Note: Students được quản lý qua Project.teacher (GVHD)
 
-  chairedCommittees   DefenseCommittee[]          @relation("CommitteeChairman")
-  secretaryCommittees DefenseCommittee[]          @relation("CommitteeSecretary")
-  internal1Committees DefenseCommittee[]          @relation("CommitteeInternal1")
-  internal2Committees DefenseCommittee[]          @relation("CommitteeInternal2")
-  externalReviews     CommitteeExternalReviewer[]
-  defenseScores       DefenseScore[]
-  independentScores   IndependentScore[]
+  // Dùng bảng CommitteeMember thay vì hardcode 4 cột
+  committeeMembers CommitteeMember[]
+  externalReviews CommitteeExternalReviewer[]
+  defenseScores  DefenseScore[]
+  independentScores IndependentScore[]
 
   created_at DateTime  @default(now())
   updated_at DateTime  @updatedAt
@@ -339,13 +375,16 @@ model Project {
   id           Int    @id @default(autoincrement())
   project_id   String @unique
   project_name String
-  description  String
+  description  String @db.Text
 
   student_id Int @unique
   teacher_id Int
 
+  topic_id Int? @unique // Liên kết với Topic đã đăng ký ở Stage 2
+
   student Student @relation(fields: [student_id], references: [id])
   teacher Teacher @relation(fields: [teacher_id], references: [id])
+  topic   Topic?  @relation(fields: [topic_id], references: [id])
 
   // Stage 3 relations
   finalSubmission FinalSubmission?
@@ -384,6 +423,7 @@ model RegistrationPeriod {
 
   teacher_quotas            TeacherQuota[]
   topics                    Topic[]
+  progressReports           ProgressReport[]
 
   @@map("registration_periods")
 }
@@ -409,7 +449,12 @@ model Topic {
   period_id           Int
   teacher_id          Int
   name                String            @db.VarChar(255)
+  english_name        String?            @db.VarChar(255)
   description         String            @db.Text
+  objectives          String?            @db.Text
+  technologies        String?            @db.Text
+  is_exception        Boolean            @default(false)
+  department          String?            @db.VarChar(100)
   max_students        Int
   registered_students Int               @default(0)
   status              TopicStatus       @default(PENDING)
@@ -417,10 +462,14 @@ model Topic {
   rejection_reason    String?           @db.Text
   created_at          DateTime          @default(now())
   updated_at          DateTime          @updatedAt
-
+  registration_status RegistrationStatus @default(OPEN)
   period              RegistrationPeriod @relation(fields: [period_id], references: [id], onDelete: Cascade)
   teacher             Teacher            @relation(fields: [teacher_id], references: [id])
   exception_requests  ExceptionRequest[]
+  registrations       RegisteredStudent[]
+  pre_assignments     PreAssignedStudent[]
+
+  project Project?
 
   @@map("topics")
 }
@@ -440,6 +489,48 @@ model ExceptionRequest {
   teacher           Teacher                @relation(fields: [teacher_id], references: [id])
 
   @@map("exception_requests")
+}
+
+model RegisteredStudent {
+  id               Int                       @id @default(autoincrement())
+  topic_id         Int
+  student_id       Int
+  status           StudentRegistrationStatus @default(PENDING)
+  registered_at    DateTime                  @default(now())
+  
+  approved_at      DateTime?                 
+  approved_by_id   Int?                      
+  rejected_at      DateTime?                 
+  rejected_by_id   Int?                      
+  rejection_reason String?                   @db.Text
+
+  assigned_role    String?                   @db.VarChar(100)
+  assigned_task    String?                   @db.Text
+
+  topic            Topic   @relation(fields: [topic_id], references: [id], onDelete: Cascade)
+  student          Student @relation(fields: [student_id], references: [id])
+
+  approved_by      User?   @relation("ApprovedRegistrations", fields: [approved_by_id], references: [id])
+  rejected_by      User?   @relation("RejectedRegistrations", fields: [rejected_by_id], references: [id])
+
+  @@unique([topic_id, student_id])
+  @@map("registered_students")
+}
+
+model PreAssignedStudent {
+  id               Int     @id @default(autoincrement())
+  topic_id         Int
+  student_id       Int
+  student_name     String? @db.VarChar(255)
+  student_code     String? @db.VarChar(50)
+  assignment_order Int?    
+
+  // --- Relations ---
+  topic            Topic   @relation(fields: [topic_id], references: [id], onDelete: Cascade)
+  student          Student @relation(fields: [student_id], references: [id])
+
+  @@unique([topic_id, student_id])
+  @@map("pre_assigned_students")
 }
 
 // Progress Tracking Models
@@ -471,6 +562,7 @@ model ProgressReport {
 
   month Int
   year  Int
+  period_id Int? // Gắn với học kỳ cụ thể
 
   status   ReportStatus @default(PENDING)
   feedback String?      @db.Text
@@ -482,12 +574,16 @@ model ProgressReport {
   reviewed_by Int?
   reviewed_at DateTime?
 
+  // Relations
+  period RegistrationPeriod? @relation(fields: [period_id], references: [id])
+
   created_at DateTime  @default(now())
   updated_at DateTime  @updatedAt
   deleted_at DateTime?
 
   @@index([student_id])
   @@index([teacher_id])
+  @@index([period_id])
   @@map("progress_reports")
 }
 
@@ -573,23 +669,14 @@ model FinalSubmission {
 
 // Defense Committee Model
 model DefenseCommittee {
-  id   Int    @id @default(autoincrement())
-  name String // vd: "Hội đồng 1", "Hội đồng chấm luận văn KHDL 2026"
+  id        Int     @id @default(autoincrement())
+  name      String  // vd: "Hội đồng 1", "Hội đồng chấm luận văn KHDL 2026"
+  period_id Int?    // Gắn với đợt bảo vệ/RegistrationPeriod
 
-  // Committee composition (4 members)
-  chairman_id   Int? // Chủ tịch (Teacher)
-  secretary_id  Int? // Thư ký (Teacher)
-  internal_1_id Int? // Phản biện trong 1 (Teacher)
-  internal_2_id Int? // Phản biện trong 2 (Teacher)
-
-  // External reviewers (can be in multiple committees)
+  // Linh hoạt: dùng bảng CommitteeMember thay vì hardcode 4 cột
+  members CommitteeMember[]
+  // Giữ lại external_reviewers vì nó cũng là loại member
   external_reviewers CommitteeExternalReviewer[]
-
-  // Relations
-  chairman   Teacher? @relation("CommitteeChairman", fields: [chairman_id], references: [id])
-  secretary  Teacher? @relation("CommitteeSecretary", fields: [secretary_id], references: [id])
-  internal_1 Teacher? @relation("CommitteeInternal1", fields: [internal_1_id], references: [id])
-  internal_2 Teacher? @relation("CommitteeInternal2", fields: [internal_2_id], references: [id])
 
   // Defense sessions
   sessions DefenseSession[]
@@ -601,11 +688,29 @@ model DefenseCommittee {
   @@map("defense_committees")
 }
 
-// External Reviewer Assignment (many-to-many)
+// Committee Member (bảng trung gian linh hoạt)
+model CommitteeMember {
+  id           Int           @id @default(autoincrement())
+  committee_id Int
+  teacher_id   Int
+  role         CommitteeRole // CHAIRMAN, SECRETARY, INTERNAL_REVIEWER, EXTERNAL_REVIEWER
+
+  committee DefenseCommittee @relation(fields: [committee_id], references: [id], onDelete: Cascade)
+  teacher   Teacher          @relation(fields: [teacher_id], references: [id])
+
+  created_at DateTime @default(now())
+
+  @@unique([committee_id, teacher_id])
+  @@index([committee_id])
+  @@index([teacher_id])
+  @@map("committee_members")
+}
+
+// External Reviewer Assignment (many-to-many) - Giữ lại vì tương thích ngược
 model CommitteeExternalReviewer {
   id           Int @id @default(autoincrement())
   committee_id Int
-  teacher_id   Int // External reviewer (Teacher)
+  teacher_id   Int
 
   committee DefenseCommittee @relation(fields: [committee_id], references: [id])
   teacher   Teacher          @relation(fields: [teacher_id], references: [id])
@@ -739,34 +844,32 @@ model IndependentScore {
   @@map("independent_scores")
 }
 
-// Scoring Result Summary (Tổng hợp kết quả)
+// Scoring Result Summary (Tổng hợp kết quả cuối cùng)
 model ScoringResult {
   id Int @id @default(autoincrement())
 
   project_id Int @unique
   student_id Int
 
-  // GVHD score
-  gvhd_score  Float?
-  gvhd_passed Boolean @default(false) // true if >= 4
+  // Điểm tổng hợp cuối cùng (từ GVHD + Hội đồng)
+  gvhd_score   Float? // Điểm GVHD
+  review_score Float? // Điểm phản biện trung bình
+  defense_score Float? // Điểm hội đồng trung bình
+  final_score   Float? // Điểm tổng kết (hệ 10)
 
-  // Committee scores (array)
-  committee_scores Json? // [{role, teacherId, score, passed}]
+  // Trạng thái đạt/không đạt
+  is_gvhd_passed   Boolean @default(false) // GVHD >= 4
+  is_final_passed  Boolean @default(false)  // Tổng kết >= 4
 
-  // Overall result
-  total_committee_scores Int @default(0) // Count of committee scores
-  failed_count           Int @default(0) // Count of scores < 4
-
-  // Final decision
-  is_eliminated  Boolean @default(false) // true if any score < 4
-  is_gvhd_failed Boolean @default(false) // true if GVHD < 4
-  final_status   String? // APPROVED, ELIMINATED_GVHD, ELIMINATED_COMMITTEE
+  // Quyết định cuối cùng
+  final_status String? // PASSED, REJECTED_GVHD, REJECTED_DEFENSE
 
   // File export
   score_sheet_url String? // URL to generated PDF
 
   // Relations
   project Project @relation(fields: [project_id], references: [id])
+  student Student @relation(fields: [student_id], references: [id])
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt

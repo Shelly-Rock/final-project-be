@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '@/core/database/prisma/prisma.service';
 import { CreateCommitteeDto, UpdateCommitteeDto, CommitteeQueryDto, CommitteeRoleLabel } from './committee.dto';
+import { CommitteeRole } from '@prisma/client';
 
 @Injectable()
 export class CommitteeService {
@@ -13,19 +14,13 @@ export class CommitteeService {
 
   // Validation: Teacher cannot be in committee that reviews their own projects
   private async validateTeacherNotOwnProject(teacherId: number, committeeId?: number) {
-    // Get teacher's supervised projects
     const teacherProjects = await this.prisma.project.findMany({
       where: { teacher_id: teacherId },
       select: { id: true, project_id: true },
     });
 
-    if (teacherProjects.length === 0) return; // Teacher has no projects, no conflict
-
-    const projectIds = teacherProjects.map((p) => p.id);
-
-    // Check if any of these projects are in committees being set up
-    // This would need more complex logic with defense sessions
-    // For now, we just check at committee creation/update time
+    if (teacherProjects.length === 0) return;
+    // More complex logic would check defense sessions
   }
 
   // Check if a teacher is already a member of another committee
@@ -35,19 +30,28 @@ export class CommitteeService {
   ): Promise<string[]> {
     const conflicts: string[] = [];
 
+    const whereClause = excludeCommitteeId
+      ? { id: { not: excludeCommitteeId }, deleted_at: null }
+      : { deleted_at: null };
+
     const committees = await this.prisma.defenseCommittee.findMany({
-      where: excludeCommitteeId ? { id: { not: excludeCommitteeId }, deleted_at: null } : { deleted_at: null },
+      where: whereClause,
+      include: {
+        members: {
+          include: {
+            teacher: {
+              select: { name: true },
+            },
+          },
+        },
+      },
     });
 
     for (const committee of committees) {
-      const isMember =
-        committee.chairman_id === teacherId ||
-        committee.secretary_id === teacherId ||
-        committee.internal_1_id === teacherId ||
-        committee.internal_2_id === teacherId;
-
+      const isMember = committee.members.some((m) => m.teacher_id === teacherId);
       if (isMember) {
-        conflicts.push(`Đã là thành viên của "${committee.name}" (vai trò cố định)`);
+        const member = committee.members.find((m) => m.teacher_id === teacherId);
+        conflicts.push(`Đã là thành viên của "${committee.name}" (${member?.teacher.name})`);
       }
     }
 
@@ -116,12 +120,50 @@ export class CommitteeService {
     const committee = await this.prisma.defenseCommittee.create({
       data: {
         name: dto.name,
-        chairman_id: dto.chairman_id,
-        secretary_id: dto.secretary_id,
-        internal_1_id: dto.internal_1_id,
-        internal_2_id: dto.internal_2_id,
+        period_id: dto.period_id,
       },
     });
+
+    // Add internal members (Chairman, Secretary, Internal Reviewers)
+    const membersToAdd = [];
+
+    if (dto.chairman_id) {
+      membersToAdd.push({
+        committee_id: committee.id,
+        teacher_id: dto.chairman_id,
+        role: CommitteeRole.CHAIRMAN,
+      });
+    }
+
+    if (dto.secretary_id) {
+      membersToAdd.push({
+        committee_id: committee.id,
+        teacher_id: dto.secretary_id,
+        role: CommitteeRole.SECRETARY,
+      });
+    }
+
+    if (dto.internal_1_id) {
+      membersToAdd.push({
+        committee_id: committee.id,
+        teacher_id: dto.internal_1_id,
+        role: CommitteeRole.INTERNAL_REVIEWER,
+      });
+    }
+
+    if (dto.internal_2_id) {
+      membersToAdd.push({
+        committee_id: committee.id,
+        teacher_id: dto.internal_2_id,
+        role: CommitteeRole.INTERNAL_REVIEWER,
+      });
+    }
+
+    if (membersToAdd.length > 0) {
+      await this.prisma.committeeMember.createMany({
+        data: membersToAdd,
+      });
+    }
 
     // Add external reviewers
     if (dto.external_reviewer_ids && dto.external_reviewer_ids.length > 0) {
@@ -157,7 +199,7 @@ export class CommitteeService {
     ]);
 
     const enrichedData = await Promise.all(
-      data.map((c) => this.enrichCommittee(c)),
+      data.map((c) => this.enrichCommittee(c.id)),
     );
 
     return {
@@ -178,81 +220,70 @@ export class CommitteeService {
       throw new NotFoundException('Hội đồng không tồn tại');
     }
 
-    return this.enrichCommittee(committee);
+    return this.enrichCommittee(committee.id);
   }
 
-  private async enrichCommittee(committee: any) {
-    const [
-      chairman,
-      secretary,
-      internal_1,
-      internal_2,
-      externalReviewers,
-    ] = await Promise.all([
-      committee.chairman_id
-        ? this.prisma.teacher.findUnique({
-            where: { id: committee.chairman_id },
-            select: { name: true, teacher_id: true },
-          })
-        : null,
-      committee.secretary_id
-        ? this.prisma.teacher.findUnique({
-            where: { id: committee.secretary_id },
-            select: { name: true, teacher_id: true },
-          })
-        : null,
-      committee.internal_1_id
-        ? this.prisma.teacher.findUnique({
-            where: { id: committee.internal_1_id },
-            select: { name: true, teacher_id: true },
-          })
-        : null,
-      committee.internal_2_id
-        ? this.prisma.teacher.findUnique({
-            where: { id: committee.internal_2_id },
-            select: { name: true, teacher_id: true },
-          })
-        : null,
-      this.prisma.committeeExternalReviewer.findMany({
-        where: { committee_id: committee.id },
-        include: {
-          teacher: {
-            select: { id: true, teacher_id: true, name: true, email: true },
+  private async enrichCommittee(committeeId: number) {
+    const committee = await this.prisma.defenseCommittee.findUnique({
+      where: { id: committeeId },
+      include: {
+        members: {
+          include: {
+            teacher: {
+              select: { id: true, teacher_id: true, name: true, email: true },
+            },
           },
         },
-      }),
-    ]);
+        external_reviewers: {
+          include: {
+            teacher: {
+              select: { id: true, teacher_id: true, name: true, email: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (!committee) return null;
+
+    // Extract members by role
+    const chairman = committee.members.find((m) => m.role === CommitteeRole.CHAIRMAN);
+    const secretary = committee.members.find((m) => m.role === CommitteeRole.SECRETARY);
+    const internalReviewers = committee.members.filter((m) => m.role === CommitteeRole.INTERNAL_REVIEWER);
 
     return {
       id: committee.id,
       name: committee.name,
-      chairman_id: committee.chairman_id,
-      chairman_name: chairman?.name || null,
-      secretary_id: committee.secretary_id,
-      secretary_name: secretary?.name || null,
-      internal_1_id: committee.internal_1_id,
-      internal_1_name: internal_1?.name || null,
-      internal_2_id: committee.internal_2_id,
-      internal_2_name: internal_2?.name || null,
-      external_reviewers: externalReviewers.map((er) => ({
+      period_id: committee.period_id,
+      chairman_id: chairman?.teacher_id || null,
+      chairman_name: chairman?.teacher.name || null,
+      secretary_id: secretary?.teacher_id || null,
+      secretary_name: secretary?.teacher.name || null,
+      internal_1_id: internalReviewers[0]?.teacher_id || null,
+      internal_1_name: internalReviewers[0]?.teacher.name || null,
+      internal_2_id: internalReviewers[1]?.teacher_id || null,
+      internal_2_name: internalReviewers[1]?.teacher.name || null,
+      members: committee.members.map((m) => ({
+        id: m.teacher.id,
+        teacher_id: m.teacher.teacher_id,
+        name: m.teacher.name,
+        email: m.teacher.email,
+        role: m.role,
+      })),
+      external_reviewers: committee.external_reviewers.map((er) => ({
         id: er.teacher.id,
         teacher_id: er.teacher.teacher_id,
         name: er.teacher.name,
         email: er.teacher.email,
       })),
-      member_count: this.countMembers(committee, externalReviewers.length),
+      member_count: committee.members.length + committee.external_reviewers.length,
       created_at: committee.created_at,
       updated_at: committee.updated_at,
     };
   }
 
-  private countMembers(committee: any, externalCount: number): number {
-    let count = 0;
-    if (committee.chairman_id) count++;
-    if (committee.secretary_id) count++;
-    if (committee.internal_1_id) count++;
-    if (committee.internal_2_id) count++;
-    return count + externalCount;
+  private countMembers(membersCount: number, externalCount: number): number {
+    return membersCount + externalCount;
   }
 
   async updateCommittee(id: number, dto: UpdateCommitteeDto) {
@@ -264,27 +295,88 @@ export class CommitteeService {
       throw new NotFoundException('Hội đồng không tồn tại');
     }
 
+    // Get current members
+    const currentMembers = await this.prisma.committeeMember.findMany({
+      where: { committee_id: id },
+    });
+
     // Validate conflicts for new members
-    if (dto.chairman_id && dto.chairman_id !== committee.chairman_id) {
-      const conflicts = await this.checkTeacherConflicts(dto.chairman_id, id);
-      if (conflicts.length > 0) {
-        throw new ConflictException(
-          `GV ${dto.chairman_id} đã là thành viên của hội đồng khác: ${conflicts.join(', ')}`,
-        );
+    if (dto.chairman_id) {
+      const existingChairman = currentMembers.find((m) => m.role === CommitteeRole.CHAIRMAN);
+      if (existingChairman && existingChairman.teacher_id !== dto.chairman_id) {
+        const conflicts = await this.checkTeacherConflicts(dto.chairman_id, id);
+        if (conflicts.length > 0) {
+          throw new ConflictException(
+            `GV ${dto.chairman_id} đã là thành viên của hội đồng khác: ${conflicts.join(', ')}`,
+          );
+        }
       }
     }
 
     // Update committee
-    const updated = await this.prisma.defenseCommittee.update({
+    const updateData: any = {};
+    if (dto.name !== undefined) updateData.name = dto.name;
+    if (dto.period_id !== undefined) updateData.period_id = dto.period_id;
+
+    await this.prisma.defenseCommittee.update({
       where: { id },
-      data: {
-        name: dto.name,
-        chairman_id: dto.chairman_id,
-        secretary_id: dto.secretary_id,
-        internal_1_id: dto.internal_1_id,
-        internal_2_id: dto.internal_2_id,
-      },
+      data: updateData,
     });
+
+    // Update members if provided
+    if (dto.chairman_id !== undefined || dto.secretary_id !== undefined || 
+        dto.internal_1_id !== undefined || dto.internal_2_id !== undefined) {
+      
+      // Delete existing internal members
+      await this.prisma.committeeMember.deleteMany({
+        where: {
+          committee_id: id,
+          role: { in: [CommitteeRole.CHAIRMAN, CommitteeRole.SECRETARY, CommitteeRole.INTERNAL_REVIEWER] },
+        },
+      });
+
+      // Add new internal members
+      const membersToAdd = [];
+
+      if (dto.chairman_id) {
+        membersToAdd.push({
+          committee_id: id,
+          teacher_id: dto.chairman_id,
+          role: CommitteeRole.CHAIRMAN,
+        });
+      }
+
+      if (dto.secretary_id) {
+        membersToAdd.push({
+          committee_id: id,
+          teacher_id: dto.secretary_id,
+          role: CommitteeRole.SECRETARY,
+        });
+      }
+
+      if (dto.internal_1_id) {
+        membersToAdd.push({
+          committee_id: id,
+          teacher_id: dto.internal_1_id,
+          role: CommitteeRole.INTERNAL_REVIEWER,
+        });
+      }
+
+      if (dto.internal_2_id) {
+        membersToAdd.push({
+          committee_id: id,
+          teacher_id: dto.internal_2_id,
+          role: CommitteeRole.INTERNAL_REVIEWER,
+        });
+      }
+
+      if (membersToAdd.length > 0) {
+        await this.prisma.committeeMember.createMany({
+          data: membersToAdd,
+          skipDuplicates: true,
+        });
+      }
+    }
 
     // Update external reviewers if provided
     if (dto.external_reviewer_ids !== undefined) {
@@ -327,7 +419,7 @@ export class CommitteeService {
       );
     }
 
-    // Soft delete
+    // Soft delete (cascade will delete members)
     return this.prisma.defenseCommittee.update({
       where: { id },
       data: { deleted_at: new Date() },
@@ -338,6 +430,7 @@ export class CommitteeService {
     const committees = await this.prisma.defenseCommittee.findMany({
       where: { deleted_at: null },
       include: {
+        members: true,
         external_reviewers: true,
       },
     });
@@ -346,7 +439,7 @@ export class CommitteeService {
     let missingMembers = 0;
 
     for (const c of committees) {
-      const memberCount = this.countMembers(c, c.external_reviewers.length);
+      const memberCount = this.countMembers(c.members.length, c.external_reviewers.length);
       if (memberCount >= 4) {
         fullMembers++;
       } else {
@@ -354,7 +447,6 @@ export class CommitteeService {
       }
     }
 
-    // Count unique external reviewers
     const externalReviewers = await this.prisma.committeeExternalReviewer.findMany({
       distinct: ['teacher_id'],
     });
@@ -371,19 +463,27 @@ export class CommitteeService {
   async getExcludedTeachers(committeeId?: number) {
     const excludedIds: number[] = [];
 
+    const whereClause = committeeId
+      ? { id: { not: committeeId }, deleted_at: null }
+      : { deleted_at: null };
+
     const committees = await this.prisma.defenseCommittee.findMany({
-      where: committeeId ? { id: { not: committeeId }, deleted_at: null } : { deleted_at: null },
+      where: whereClause,
       include: {
+        members: {
+          where: {
+            role: { in: [CommitteeRole.CHAIRMAN, CommitteeRole.SECRETARY, CommitteeRole.INTERNAL_REVIEWER] },
+          },
+        },
         external_reviewers: true,
       },
     });
 
     for (const c of committees) {
       // Only exclude internal members (not external reviewers)
-      if (c.chairman_id) excludedIds.push(c.chairman_id);
-      if (c.secretary_id) excludedIds.push(c.secretary_id);
-      if (c.internal_1_id) excludedIds.push(c.internal_1_id);
-      if (c.internal_2_id) excludedIds.push(c.internal_2_id);
+      for (const member of c.members) {
+        excludedIds.push(member.teacher_id);
+      }
       // External reviewers CAN be in multiple committees, so don't exclude
     }
 
