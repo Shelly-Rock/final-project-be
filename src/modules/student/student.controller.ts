@@ -12,6 +12,7 @@ import {
   UseInterceptors,
   UploadedFile,
   ParseIntPipe,
+  UseGuards,
 } from '@nestjs/common';
 
 import {
@@ -36,8 +37,10 @@ import {
   UpdateStudentReqDTO,
   GetListStudentRespDTO,
 } from './dto';
+import { JwtAuthGuard } from '@/core/auth/guards/jwtAuth.guard';
 
 @ApiTags('Students')
+@UseGuards(JwtAuthGuard)
 @Controller('students')
 export class StudentController {
   constructor(private readonly studentService: StudentService) {}

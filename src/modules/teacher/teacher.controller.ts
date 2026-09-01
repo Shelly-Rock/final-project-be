@@ -9,6 +9,7 @@ import {
   Query,
   UseInterceptors,
   ClassSerializerInterceptor,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -24,8 +25,10 @@ import {
   ToggleTeacherStatusDto,
   TeacherResponseDto,
 } from './dto';
+import { JwtAuthGuard } from '@/core/auth/guards/jwtAuth.guard';
 
 @ApiTags('Teachers')
+@UseGuards(JwtAuthGuard)
 @UseInterceptors(ClassSerializerInterceptor)
 @Controller('teachers')
 export class TeacherController {

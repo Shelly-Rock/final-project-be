@@ -47,23 +47,15 @@ export class VerifyEmailRespDTO {
   message: string;
 }
 
-// ========== Change Password ==========
+// ========== Change Password (Logged In) ==========
 export class ChangePasswordReqDTO {
   @ApiProperty({
-    example: 'abc123xyz456',
-    description: 'Token for password reset (required if not logged in)',
-  })
-  @IsOptional()
-  @IsString()
-  token?: string;
-
-  @ApiProperty({
     example: 'currentPassword123',
-    description: 'Current password (required if logged in)',
+    description: 'Current password (required when logged in)',
   })
-  @IsOptional()
+  @IsNotEmpty()
   @IsString()
-  currentPassword?: string;
+  currentPassword: string;
 
   @ApiProperty({
     example: 'newPassword123',
@@ -73,6 +65,71 @@ export class ChangePasswordReqDTO {
   @IsString()
   @MinLength(6)
   newPassword: string;
+}
+
+// ========== Forgot Password ==========
+export class ForgotPasswordReqDTO {
+  @ApiProperty({
+    example: 'sv001@gmail.com',
+    description: 'Email to send password reset link',
+  })
+  @IsEmail()
+  email: string;
+}
+
+export class ForgotPasswordRespDTO {
+  @ApiProperty({ example: true })
+  success: boolean;
+
+  @ApiProperty({ example: 'Password reset email sent successfully' })
+  message: string;
+}
+
+// ========== Reset Password ==========
+export class ResetPasswordReqDTO {
+  @ApiProperty({
+    example: 'abc123xyz456',
+    description: 'Password reset token from email',
+  })
+  @IsNotEmpty()
+  @IsString()
+  token: string;
+
+  @ApiProperty({
+    example: 'newPassword123',
+    description: 'New password',
+  })
+  @IsNotEmpty()
+  @IsString()
+  @MinLength(6)
+  newPassword: string;
+}
+
+export class ResetPasswordRespDTO {
+  @ApiProperty({ example: true })
+  success: boolean;
+
+  @ApiProperty({ example: 'Password reset successfully' })
+  message: string;
+}
+
+// ========== Refresh Token ==========
+export class RefreshTokenReqDTO {
+  @ApiProperty({
+    example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+    description: 'Refresh token',
+  })
+  @IsNotEmpty()
+  @IsString()
+  refreshToken: string;
+}
+
+export class RefreshTokenRespDTO {
+  @ApiProperty({ example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' })
+  accessToken: string;
+
+  @ApiProperty({ example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' })
+  refreshToken: string;
 }
 
 export class ChangePasswordRespDTO {

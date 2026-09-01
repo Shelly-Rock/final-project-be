@@ -20,6 +20,12 @@ import {
   ChangePasswordRespDTO,
   ResendVerificationReqDTO,
   ResendVerificationRespDTO,
+  ForgotPasswordReqDTO,
+  ForgotPasswordRespDTO,
+  ResetPasswordReqDTO,
+  ResetPasswordRespDTO,
+  RefreshTokenReqDTO,
+  RefreshTokenRespDTO,
   UserRespDTO,
   RoleRespDTO,
 } from './dto/auth.dto';
@@ -122,57 +128,23 @@ export class AuthService {
 
   async changePassword(
     dto: ChangePasswordReqDTO,
-    userId?: number,
+    userId: number,
   ): Promise<ChangePasswordRespDTO> {
-    let user = userId
-      ? await this.prisma.user.findUnique({
-          where: { id: userId },
-          include: { student: true },
-        })
-      : null;
-
-    let verificationToken: { id: number; user_id: number } | null = null;
-
-    if (dto.token) {
-      const token = await this.prisma.email_verification_tokens.findUnique({
-        where: { token: dto.token },
-        select: {
-          id: true,
-          user_id: true,
-          used_at: true,
-          expires_at: true,
-          users: { include: { student: true } },
-        },
-      });
-
-      if (!token || token.used_at || token.expires_at < new Date()) {
-        throw new BadRequestException('Invalid or expired token');
-      }
-
-      if (userId && token.user_id !== userId) {
-        throw new BadRequestException('Token does not belong to this user');
-      }
-
-      verificationToken = token;
-      user = token.users;
-    }
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { student: true },
+    });
 
     if (!user) {
-      throw new BadRequestException('User not found or token required');
+      throw new NotFoundException('User not found');
     }
 
-    if (userId && !dto.token) {
-      if (!dto.currentPassword) {
-        throw new BadRequestException('Current password is required');
-      }
-
-      const isCurrentPasswordValid = await bcrypt.compare(
-        dto.currentPassword,
-        user.password_hash,
-      );
-      if (!isCurrentPasswordValid) {
-        throw new UnauthorizedException('Current password is incorrect');
-      }
+    const isCurrentPasswordValid = await bcrypt.compare(
+      dto.currentPassword,
+      user.password_hash,
+    );
+    if (!isCurrentPasswordValid) {
+      throw new UnauthorizedException('Current password is incorrect');
     }
 
     const hashedPassword = await bcrypt.hash(
@@ -180,30 +152,18 @@ export class AuthService {
       BCRYPT_SALT_ROUNDS,
     );
 
-    await this.prisma.$transaction(async (tx) => {
-      await tx.user.update({
-        where: { id: user!.id },
-        data: {
-          password_hash: hashedPassword,
-          must_change_password: false,
-          ...(dto.token
-            ? { email_verified_at: user!.email_verified_at ?? new Date() }
-            : {}),
-        },
-      });
-
-      if (verificationToken) {
-        await tx.email_verification_tokens.update({
-          where: { id: verificationToken.id },
-          data: { used_at: new Date() },
-        });
-      }
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password_hash: hashedPassword,
+        must_change_password: false,
+      },
     });
 
     try {
       await this.emailService.sendPasswordChangedNotification(
         user.email,
-        user.student?.first_name || 'Sinh viên',
+        user.student?.first_name || 'Người dùng',
       );
     } catch (error) {
       console.error('Password changed, but notification email failed:', error);
@@ -213,6 +173,159 @@ export class AuthService {
       success: true,
       message: 'Password changed successfully',
     };
+  }
+
+  async forgotPassword(
+    dto: ForgotPasswordReqDTO,
+  ): Promise<ForgotPasswordRespDTO> {
+    const user = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+      include: { student: true },
+    });
+
+    if (!user) {
+      // Don't reveal if email exists for security
+      return {
+        success: true,
+        message: 'If an account with this email exists, a password reset link has been sent.',
+      };
+    }
+
+    // Delete any existing reset tokens for this user
+    await this.prisma.email_verification_tokens.deleteMany({
+      where: { user_id: user.id },
+    });
+
+    // Create new reset token
+    const token = uuidv4();
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 1); // 1 hour expiry
+
+    await this.prisma.email_verification_tokens.create({
+      data: {
+        user_id: user.id,
+        token,
+        expires_at: expiresAt,
+      },
+    });
+
+    try {
+      await this.emailService.sendPasswordResetEmail(
+        user.email,
+        token,
+        user.student?.first_name || 'Người dùng',
+      );
+    } catch (error) {
+      console.error('Failed to send password reset email:', error);
+      return {
+        success: true,
+        message: 'If an account with this email exists, a password reset link has been sent.',
+      };
+    }
+
+    return {
+      success: true,
+      message: 'If an account with this email exists, a password reset link has been sent.',
+    };
+  }
+
+  async resetPassword(
+    dto: ResetPasswordReqDTO,
+  ): Promise<ResetPasswordRespDTO> {
+    const token = await this.prisma.email_verification_tokens.findUnique({
+      where: { token: dto.token },
+      include: { users: { include: { student: true } } },
+    });
+
+    if (!token) {
+      throw new BadRequestException('Invalid reset token');
+    }
+
+    if (token.used_at) {
+      throw new BadRequestException('This reset link has already been used');
+    }
+
+    if (token.expires_at < new Date()) {
+      throw new BadRequestException('This reset link has expired');
+    }
+
+    const hashedPassword = await bcrypt.hash(
+      dto.newPassword,
+      BCRYPT_SALT_ROUNDS,
+    );
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: token.user_id },
+        data: {
+          password_hash: hashedPassword,
+          must_change_password: false,
+        },
+      });
+
+      await tx.email_verification_tokens.update({
+        where: { id: token.id },
+        data: { used_at: new Date() },
+      });
+    });
+
+    try {
+      await this.emailService.sendPasswordChangedNotification(
+        token.users.email,
+        token.users.student?.first_name || 'Người dùng',
+      );
+    } catch (error) {
+      console.error('Password reset, but notification email failed:', error);
+    }
+
+    return {
+      success: true,
+      message: 'Password reset successfully',
+    };
+  }
+
+  async refreshToken(
+    dto: RefreshTokenReqDTO,
+  ): Promise<RefreshTokenRespDTO> {
+    try {
+      const payload = this.jwtService.verify(dto.refreshToken, {
+        secret: this.configService.get<string>('jwt.refresh.secret'),
+      });
+
+      const user = await this.prisma.user.findUnique({
+        where: { id: payload.sub },
+        include: { user_roles: { include: { role: true } } },
+      });
+
+      if (!user) {
+        throw new UnauthorizedException('User not found');
+      }
+
+      if (!user.is_active) {
+        throw new UnauthorizedException('Account is deactivated');
+      }
+
+      const roles = this.mapRoles(user);
+      const primaryRole = this.pickPrimaryRole(roles);
+
+      if (!primaryRole) {
+        throw new UnauthorizedException('User has no role assigned');
+      }
+
+      const tokens = await this.generateTokens(
+        user.id,
+        user.email,
+        primaryRole.name,
+        roles.map((r) => r.name),
+      );
+
+      return {
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+      };
+    } catch (error) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
   }
 
   async resendVerification(

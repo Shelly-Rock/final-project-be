@@ -27,4 +27,4 @@ import type { StringValue } from 'ms';
 
   exports: [PassportModule, JwtModule],
 })
-export class AuthModule {}
+export class CoreAuthModule {}

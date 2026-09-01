@@ -325,4 +325,73 @@ export class EmailService {
       html,
     });
   }
+
+  async sendPasswordResetEmail(
+    to: string,
+    token: string,
+    studentName: string,
+  ): Promise<void> {
+    const appUrl =
+      this.configService.get<string>('APP_URL') ||
+      this.configService.get<string>('FRONTEND_URL') ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '') ||
+      'http://localhost:3000';
+    const resetUrl = `${appUrl}/reset-password?token=${encodeURIComponent(token)}`;
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background-color: #E74C3C; color: white; padding: 20px; text-align: center; }
+    .content { padding: 30px 20px; background-color: #f9f9f9; }
+    .button { display: inline-block; background-color: #E74C3C; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; }
+    .footer { padding: 20px; text-align: center; font-size: 12px; color: #666; }
+    .warning-box { background-color: #fff; border-left: 4px solid #E74C3C; padding: 15px; margin: 20px 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Đặt lại mật khẩu</h1>
+    </div>
+    <div class="content">
+      <p>Xin chào <strong>${studentName}</strong>,</p>
+      <p>Chúng tôi đã nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn.</p>
+      
+      <div class="warning-box">
+        <p><strong>Lưu ý quan trọng:</strong></p>
+        <ul>
+          <li>Link đặt lại mật khẩu có hiệu lực trong <strong>1 giờ</strong></li>
+          <li>Link chỉ có thể sử dụng <strong>một lần</strong></li>
+          <li>Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này</li>
+        </ul>
+      </div>
+      
+      <p>Vui lòng click vào nút bên dưới để đặt lại mật khẩu của bạn:</p>
+      
+      <p style="text-align: center;">
+        <a href="${resetUrl}" class="button">Đặt lại mật khẩu</a>
+      </p>
+      
+      <p>Hoặc copy link sau vào trình duyệt:</p>
+      <p style="word-break: break-all; font-size: 12px; color: #666;">${resetUrl}</p>
+    </div>
+    <div class="footer">
+      <p>Email này được gửi tự động từ hệ thống. Vui lòng không reply email này.</p>
+    </div>
+  </div>
+</body>
+</html>
+    `;
+
+    await this.sendEmail({
+      to,
+      subject: 'Đặt lại mật khẩu - Hệ thống Quản lý Khóa luận',
+      html,
+    });
+  }
 }

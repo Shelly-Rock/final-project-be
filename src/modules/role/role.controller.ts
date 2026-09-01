@@ -11,6 +11,7 @@ import {
   ParseIntPipe,
   HttpCode,
   HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -27,8 +28,10 @@ import {
   RoleResponseDto,
   AssignUserRolesDto,
 } from './dto';
+import { JwtAuthGuard } from '@/core/auth/guards/jwtAuth.guard';
 
 @ApiTags('Roles')
+@UseGuards(JwtAuthGuard)
 @Controller('roles')
 export class RoleController {
   constructor(private readonly roleService: RoleService) {}

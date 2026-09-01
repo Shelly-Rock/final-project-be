@@ -7,6 +7,8 @@ import {
   Controller,
   UseGuards,
   Get,
+  UseInterceptors,
+  ClassSerializerInterceptor,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -31,6 +33,12 @@ import {
   ChangePasswordRespDTO,
   ResendVerificationReqDTO,
   ResendVerificationRespDTO,
+  ForgotPasswordReqDTO,
+  ForgotPasswordRespDTO,
+  ResetPasswordReqDTO,
+  ResetPasswordRespDTO,
+  RefreshTokenReqDTO,
+  RefreshTokenRespDTO,
 } from './dto/auth.dto';
 import { RegisterReqDTO, RegisterRespDTO } from './dto/register.dto';
 
@@ -74,29 +82,50 @@ export class AuthController {
   }
 
   @Public()
-  @Post('change-password')
+  @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Change password (with token from email or current password)' })
-  @ApiBody({ type: ChangePasswordReqDTO })
-  @ApiOkResponse({ type: ChangePasswordRespDTO, description: 'Password changed successfully' })
-  @ApiBadRequestResponse({ description: 'Invalid token or validation error' })
-  @ApiUnauthorizedResponse({ description: 'Current password is incorrect' })
-  async changePassword(@Body() dto: ChangePasswordReqDTO): Promise<ChangePasswordRespDTO> {
-    return this.authService.changePassword(dto);
+  @ApiOperation({ summary: 'Request password reset link via email' })
+  @ApiBody({ type: ForgotPasswordReqDTO })
+  @ApiOkResponse({ type: ForgotPasswordRespDTO, description: 'Password reset email sent' })
+  @ApiBadRequestResponse({ description: 'Invalid email' })
+  async forgotPassword(@Body() dto: ForgotPasswordReqDTO): Promise<ForgotPasswordRespDTO> {
+    return this.authService.forgotPassword(dto);
+  }
+
+  @Public()
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Reset password with token from email' })
+  @ApiBody({ type: ResetPasswordReqDTO })
+  @ApiOkResponse({ type: ResetPasswordRespDTO, description: 'Password reset successfully' })
+  @ApiBadRequestResponse({ description: 'Invalid or expired token' })
+  async resetPassword(@Body() dto: ResetPasswordReqDTO): Promise<ResetPasswordRespDTO> {
+    return this.authService.resetPassword(dto);
   }
 
   @UseGuards(JwtAuthGuard)
-  @Post('change-password/me')
+  @Post('change-password')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Change password for logged in user' })
   @ApiBody({ type: ChangePasswordReqDTO })
   @ApiOkResponse({ type: ChangePasswordRespDTO, description: 'Password changed successfully' })
   @ApiUnauthorizedResponse({ description: 'Current password is incorrect' })
-  async changePasswordMe(
+  async changePassword(
     @Body() dto: ChangePasswordReqDTO,
     @CurrentUser() user: any,
   ): Promise<ChangePasswordRespDTO> {
     return this.authService.changePassword(dto, user.sub);
+  }
+
+  @Public()
+  @Post('refresh-token')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Refresh access token using refresh token' })
+  @ApiBody({ type: RefreshTokenReqDTO })
+  @ApiOkResponse({ type: RefreshTokenRespDTO, description: 'Token refreshed successfully' })
+  @ApiUnauthorizedResponse({ description: 'Invalid refresh token' })
+  async refreshToken(@Body() dto: RefreshTokenReqDTO): Promise<RefreshTokenRespDTO> {
+    return this.authService.refreshToken(dto);
   }
 
   @Public()

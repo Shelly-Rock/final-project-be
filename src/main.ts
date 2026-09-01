@@ -13,6 +13,7 @@ import { ConfigService } from '@nestjs/config';
 import { HttpAdapterHost } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from '@core/exceptions/http-exception.filter';
+import { RateLimitMiddleware } from '@core/middleware/rateLimit.middleware';
 import { env } from 'process';
 
 async function bootstrap() {
@@ -56,6 +57,21 @@ async function bootstrap() {
   app.enableCors({
     origin: true,
     credentials: true,
+  });
+
+  // Apply rate limiting middleware for sensitive endpoints
+  const rateLimitMiddleware = new RateLimitMiddleware(60000, 5); // 5 requests per minute for general endpoints
+  const strictRateLimitMiddleware = new RateLimitMiddleware(60000, 3); // 3 requests per minute for sensitive auth endpoints
+  
+  app.use((req, res, next) => {
+    // Apply stricter rate limiting to sensitive auth endpoints
+    if (req.path.includes('/auth/login') || 
+        req.path.includes('/auth/register') || 
+        req.path.includes('/auth/forgot-password') ||
+        req.path.includes('/auth/resend-verification')) {
+      return strictRateLimitMiddleware.use(req, res, next);
+    }
+    return rateLimitMiddleware.use(req, res, next);
   });
 
   const swaggerConfig = new DocumentBuilder()
