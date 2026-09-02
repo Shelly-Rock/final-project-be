@@ -12,7 +12,7 @@ export class RateLimitMiddleware implements NestMiddleware {
   private readonly windowMs: number;
   private readonly maxRequests: number;
 
-  constructor(windowMs: number = 60000, maxRequests: number = 10) {
+  constructor(windowMs: number = 60000, maxRequests: number = 100) {
     this.windowMs = windowMs;
     this.maxRequests = maxRequests;
     // Clean up expired entries every minute

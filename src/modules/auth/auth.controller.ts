@@ -34,6 +34,7 @@ import {
   VerifyEmailRespDTO,
   ChangePasswordReqDTO,
   ChangePasswordRespDTO,
+  ChangePasswordMeReqDTO,
   ResendVerificationReqDTO,
   ResendVerificationRespDTO,
   ForgotPasswordReqDTO,
@@ -121,6 +122,22 @@ export class AuthController {
     @Body() dto: ChangePasswordReqDTO,
   ): Promise<ChangePasswordRespDTO> {
     return this.authService.changePassword(dto);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Post('change-password/me')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Change password for logged in user' })
+  @ApiBody({ type: ChangePasswordMeReqDTO })
+  @ApiOkResponse({ type: ChangePasswordRespDTO, description: 'Password changed successfully' })
+  @ApiUnauthorizedResponse({ description: 'Current password is incorrect' })
+  @ApiNotFoundResponse({ description: 'User not found' })
+  async changePasswordMe(
+    @CurrentUser() user: any,
+    @Body() dto: ChangePasswordMeReqDTO,
+  ): Promise<ChangePasswordRespDTO> {
+    return this.authService.changePasswordMe(user.id, dto);
   }
 
   @Public()

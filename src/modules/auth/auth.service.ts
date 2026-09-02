@@ -18,6 +18,7 @@ import {
   VerifyEmailRespDTO,
   ChangePasswordReqDTO,
   ChangePasswordRespDTO,
+  ChangePasswordMeReqDTO,
   ResendVerificationReqDTO,
   ResendVerificationRespDTO,
   ForgotPasswordReqDTO,
@@ -144,6 +145,56 @@ export class AuthService {
       throw new ForbiddenException(
         'Email must be verified before changing password. Please verify your email first.',
       );
+    }
+
+    const hashedPassword = await bcrypt.hash(
+      dto.newPassword,
+      BCRYPT_SALT_ROUNDS,
+    );
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password_hash: hashedPassword,
+        must_change_password: false,
+      },
+    });
+
+    try {
+      await this.emailService.sendPasswordChangedNotification(
+        user.email,
+        user.student?.first_name || 'Người dùng',
+      );
+    } catch (error) {
+      console.error('Password changed, but notification email failed:', error);
+    }
+
+    return {
+      success: true,
+      message: 'Password changed successfully',
+    };
+  }
+
+  async changePasswordMe(
+    userId: number,
+    dto: ChangePasswordMeReqDTO,
+  ): Promise<ChangePasswordRespDTO> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { student: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const isPasswordValid = await bcrypt.compare(
+      dto.currentPassword,
+      user.password_hash,
+    );
+
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Current password is incorrect');
     }
 
     const hashedPassword = await bcrypt.hash(
