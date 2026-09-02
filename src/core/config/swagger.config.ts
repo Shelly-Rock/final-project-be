@@ -6,6 +6,17 @@ export default function setupSwagger(app: INestApplication) {
     .setTitle('Final Project API')
     .setDescription('API Documentation')
     .setVersion('1.0.0')
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        name: 'JWT',
+        description: 'Enter JWT token',
+        in: 'header',
+      },
+      'JWT-auth', // This is the name of the security scheme
+    )
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

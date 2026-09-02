@@ -190,7 +190,13 @@ async function main() {
   console.log(`✅ Đã tạo Role: ${secretaryRole.name}`);
 
   // 4. Gán permissions cho roles
-  for (const role of [adminRole, teacherRole, studentRole, committeeRole, secretaryRole]) {
+  for (const role of [
+    adminRole,
+    teacherRole,
+    studentRole,
+    committeeRole,
+    secretaryRole,
+  ]) {
     for (const permission of permissions) {
       await prisma.rolePermission.upsert({
         where: {
@@ -366,3 +372,11 @@ main().catch((e) => {
   console.error('❌ Lỗi khi seed database:', e);
   process.exit(1);
 });
+
+// {
+//   "username": "admin_sys",
+//   "password": "123456@Aa"
+// }
+
+
+// tuyennguyennguyenminhniie@gmail.com
