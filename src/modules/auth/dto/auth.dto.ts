@@ -67,6 +67,26 @@ export class ChangePasswordReqDTO {
   newPassword: string;
 }
 
+// ========== Change Password (Logged in user) ==========
+export class ChangePasswordMeReqDTO {
+  @ApiProperty({
+    example: 'currentPassword123',
+    description: 'Current password',
+  })
+  @IsNotEmpty()
+  @IsString()
+  currentPassword: string;
+
+  @ApiProperty({
+    example: 'newPassword123',
+    description: 'New password',
+  })
+  @IsNotEmpty()
+  @IsString()
+  @MinLength(6)
+  newPassword: string;
+}
+
 // ========== Forgot Password ==========
 export class ForgotPasswordReqDTO {
   @ApiProperty({
