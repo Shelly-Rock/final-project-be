@@ -71,8 +71,8 @@ async function bootstrap() {
   });
 
   // Apply rate limiting middleware for sensitive endpoints
-  const rateLimitMiddleware = new RateLimitMiddleware(60000, 5); // 5 requests per minute for general endpoints
-  const strictRateLimitMiddleware = new RateLimitMiddleware(60000, 3); // 3 requests per minute for sensitive auth endpoints
+  const rateLimitMiddleware = new RateLimitMiddleware(60000, 100); // 100 requests per minute for general endpoints
+  const strictRateLimitMiddleware = new RateLimitMiddleware(60000, 20); // 20 requests per minute for sensitive auth endpoints
   
   app.use((req, res, next) => {
     // Apply stricter rate limiting to sensitive auth endpoints
