@@ -57,6 +57,17 @@ async function bootstrap() {
   app.enableCors({
     origin: true,
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Origin',
+      'X-Requested-With',
+      'Content-Type',
+      'Accept',
+      'Authorization',
+      'X-API-Key',
+    ],
+    exposedHeaders: ['Authorization'],
+    maxAge: 86400,
   });
 
   // Apply rate limiting middleware for sensitive endpoints
@@ -95,6 +106,17 @@ RESTful API built with NestJS for the QTQ project backend.
     `,
     )
     .setVersion('1.0.0')
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        name: 'JWT',
+        description: 'Enter JWT token',
+        in: 'header',
+      },
+      'JWT-auth',
+    )
     .addApiKey(
       {
         type: 'apiKey',
