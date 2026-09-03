@@ -16,12 +16,43 @@ export class ImportStudentService {
     const wsh = this.excelService.getWorksheet(wb);
     const headers = this.excelService.getHeaders(wsh);
     this.excelService.validateHeaders(headers, STUDENT_HEADER, true);
-    const students = this.excelService.parseRows<CreateStudentReqDTO>(
+    const parsedStudents = this.excelService.parseRows<CreateStudentReqDTO>(
       wsh,
       headers,
     );
+    const students = parsedStudents.map((student) => ({
+      ...student,
+      extraData: this.parseExtraData(student.extraData),
+    }));
     await this.validateStudents(students);
     return students;
+  }
+
+  private parseExtraData(
+    extraData: unknown,
+  ): Record<string, unknown> | undefined {
+    if (extraData === null || extraData === undefined || extraData === '') {
+      return undefined;
+    }
+    if (typeof extraData !== 'string') {
+      return extraData as Record<string, unknown>;
+    }
+
+    try {
+      const parsed: unknown = JSON.parse(extraData);
+      if (
+        typeof parsed !== 'object' ||
+        parsed === null ||
+        Array.isArray(parsed)
+      ) {
+        throw new Error('extra_data must be a JSON object');
+      }
+      return parsed as Record<string, unknown>;
+    } catch {
+      throw new BadRequestException(
+        'Cột extraData phải là JSON object hợp lệ, ví dụ: {}',
+      );
+    }
   }
   private checkDuplicateFile(students: CreateStudentReqDTO[]): void {
     const studentCodes = new Set<string>();
@@ -73,7 +104,9 @@ export class ImportStudentService {
       },
     });
 
-    const duplicateStudentIds: string[] = existingStudents.map((s) => s.student_id);
+    const duplicateStudentIds: string[] = existingStudents.map(
+      (s) => s.student_id,
+    );
     const duplicateEmails: string[] = existingEmails.map((u) => u.email);
 
     if (!duplicateStudentIds.length && !duplicateEmails.length) {
