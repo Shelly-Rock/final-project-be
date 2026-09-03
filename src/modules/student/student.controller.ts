@@ -11,6 +11,7 @@ import {
   Query,
   UseInterceptors,
   UploadedFile,
+  Res,
   ParseIntPipe,
   UseGuards,
 } from '@nestjs/common';
@@ -30,6 +31,7 @@ import { StudentService } from './student.service';
 import { FileInterceptor } from '@nestjs/platform-express';
 
 import type { MulterFile } from '../../shared/types/multer-file.type';
+import type { Response } from 'express';
 
 import { PaginationReqDTO } from '@/shared';
 import {
@@ -70,6 +72,24 @@ export class StudentController {
   @UseInterceptors(FileInterceptor('file'))
   async importStudents(@UploadedFile() file: MulterFile) {
     return this.studentService.importStudents(file);
+  }
+
+  @Get('export')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Xuất danh sách sinh viên ra file Excel',
+  })
+  @ApiOkResponse({
+    description: 'Xuất danh sách sinh viên thành công',
+  })
+  async exportStudents(@Res() response: Response) {
+    const file = await this.studentService.exportStudents();
+    response.set({
+      'Content-Type':
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': 'attachment; filename="danh_sach_sinh_vien.xlsx"',
+    });
+    response.send(file);
   }
 
   @Get()

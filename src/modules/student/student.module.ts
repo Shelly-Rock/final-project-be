@@ -6,6 +6,7 @@ import { ExcelModule } from '@/shared/utils';
 import { AuthModule } from '@/modules/auth/auth.module';
 import {
   ImportStudentService,
+  ExportStudentService,
   CreateStudentService,
   GetStudentListService,
   GetStudentByIdService,
@@ -20,6 +21,7 @@ import {
     StudentService,
     CreateStudentService,
     ImportStudentService,
+    ExportStudentService,
     GetStudentListService,
     GetStudentByIdService,
     UpdateStudentService,
@@ -29,6 +31,7 @@ import {
     StudentService,
     CreateStudentService,
     ImportStudentService,
+    ExportStudentService,
     GetStudentListService,
     GetStudentByIdService,
     UpdateStudentService,

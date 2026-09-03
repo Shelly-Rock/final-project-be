@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import {
   CreateStudentService,
   ImportStudentService,
+  ExportStudentService,
   GetStudentListService,
   GetStudentByIdService,
   UpdateStudentService,
@@ -20,6 +21,7 @@ export class StudentService {
   constructor(
     private readonly createSV: CreateStudentService,
     private readonly importSV: ImportStudentService,
+    private readonly exportSV: ExportStudentService,
     private readonly getListSV: GetStudentListService,
     private readonly getOneSV: GetStudentByIdService,
     private readonly updateSV: UpdateStudentService,
@@ -40,11 +42,17 @@ export class StudentService {
     return this.getListSV.getStudentList(query);
   }
 
+  async exportStudents(): Promise<Buffer> {
+    return this.exportSV.exportStudents();
+  }
+
   async getStudentById(id: number): Promise<GetListStudentRespDTO> {
     return this.getOneSV.getStudentById(id);
   }
 
-  async getStudentByStudentId(studentId: string): Promise<GetListStudentRespDTO> {
+  async getStudentByStudentId(
+    studentId: string,
+  ): Promise<GetListStudentRespDTO> {
     return this.getOneSV.getStudentByStudentId(studentId);
   }
 
