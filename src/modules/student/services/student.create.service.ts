@@ -22,11 +22,16 @@ export class CreateStudentService {
     });
 
     if (!studentRole) {
-      throw new Error('STUDENT role not found. Please seed the database first.');
+      throw new Error(
+        'STUDENT role not found. Please seed the database first.',
+      );
     }
 
     // Bước 2: Hash password mặc định
-    const hashedPassword = await bcrypt.hash(DEFAULT_PASSWORD, BCRYPT_SALT_ROUNDS);
+    const hashedPassword = await bcrypt.hash(
+      DEFAULT_PASSWORD,
+      BCRYPT_SALT_ROUNDS,
+    );
 
     // Bước 3: Tạo Users với email verification pending
     const userData = students.map((student) => ({
@@ -54,6 +59,7 @@ export class CreateStudentService {
     const studentData = students.map((student, index) => ({
       user_id: createdUsers[index].id,
       student_id: student.studentId,
+      email: student.email,
       first_name: student.firstName,
       middle_name: student.middleName,
       last_name: student.lastName,
@@ -73,13 +79,19 @@ export class CreateStudentService {
     // Bước 5: Gửi email verification cho từng sinh viên
     for (let i = 0; i < createdUsers.length; i++) {
       const student = students[i];
-      const fullName = `${student.lastName} ${student.middleName} ${student.firstName}`.trim();
-      
+      const fullName =
+        `${student.lastName} ${student.middleName} ${student.firstName}`.trim();
+
       try {
         await this.authService.sendVerificationEmailToUser(createdUsers[i].id);
-        console.log(`Verification email sent to ${student.email} (${fullName})`);
+        console.log(
+          `Verification email sent to ${student.email} (${fullName})`,
+        );
       } catch (error) {
-        console.error(`Failed to send verification email to ${student.email}:`, error.message);
+        console.error(
+          `Failed to send verification email to ${student.email}:`,
+          error.message,
+        );
       }
     }
   }

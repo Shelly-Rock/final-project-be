@@ -237,7 +237,8 @@ export class AuthService {
       // Don't reveal if email exists for security
       return {
         success: true,
-        message: 'If an account with this email exists, a password reset link has been sent.',
+        message:
+          'If an account with this email exists, a password reset link has been sent.',
       };
     }
 
@@ -269,19 +270,19 @@ export class AuthService {
       console.error('Failed to send password reset email:', error);
       return {
         success: true,
-        message: 'If an account with this email exists, a password reset link has been sent.',
+        message:
+          'If an account with this email exists, a password reset link has been sent.',
       };
     }
 
     return {
       success: true,
-      message: 'If an account with this email exists, a password reset link has been sent.',
+      message:
+        'If an account with this email exists, a password reset link has been sent.',
     };
   }
 
-  async resetPassword(
-    dto: ResetPasswordReqDTO,
-  ): Promise<ResetPasswordRespDTO> {
+  async resetPassword(dto: ResetPasswordReqDTO): Promise<ResetPasswordRespDTO> {
     const token = await this.prisma.email_verification_tokens.findUnique({
       where: { token: dto.token },
       include: { users: { include: { student: true } } },
@@ -334,9 +335,7 @@ export class AuthService {
     };
   }
 
-  async refreshToken(
-    dto: RefreshTokenReqDTO,
-  ): Promise<RefreshTokenRespDTO> {
+  async refreshToken(dto: RefreshTokenReqDTO): Promise<RefreshTokenRespDTO> {
     try {
       const payload = this.jwtService.verify(dto.refreshToken, {
         secret: this.configService.get<string>('jwt.refresh.secret'),
@@ -474,6 +473,7 @@ export class AuthService {
         await tx.student.create({
           data: {
             student_id: dto.studentId,
+            email: dto.email,
             first_name: dto.firstName,
             last_name: dto.lastName,
             middle_name: dto.middleName || '',
@@ -634,7 +634,14 @@ export class AuthService {
   }
 
   private mapRoles(user: {
-    user_roles?: { role: { id: number; name: string; display_name: string; priority: number } }[];
+    user_roles?: {
+      role: {
+        id: number;
+        name: string;
+        display_name: string;
+        priority: number;
+      };
+    }[];
   }): RoleRespDTO[] {
     return (user.user_roles ?? [])
       .map(({ role }) => ({

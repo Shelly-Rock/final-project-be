@@ -83,6 +83,7 @@ model Student {
   id                 Int                  @id @default(autoincrement())
   user_id            Int?                 @unique
   student_id         String               @unique
+  email              String               @unique
   first_name         String
   last_name          String
   date_of_birth      DateTime
