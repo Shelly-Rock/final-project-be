@@ -255,14 +255,6 @@ async function main() {
       teacherId: 'GV001',
     },
     {
-      email: 'student@system.com',
-      username: 'student_demo',
-      role: studentRole,
-      firstName: 'Sinh viên',
-      lastName: 'Demo',
-      studentId: '20210001',
-    },
-    {
       email: 'committee@system.com',
       username: 'committee_demo',
       role: committeeRole,
@@ -334,26 +326,6 @@ async function main() {
           faculty: { connect: { id: faculty.id } },
         },
       });
-    } else if (userData.role.name === 'STUDENT' && userData.studentId) {
-      await prisma.student.upsert({
-        where: { student_id: userData.studentId },
-        update: {
-          user: { connect: { id: user.id } },
-        },
-        create: {
-          student_id: userData.studentId,
-          user: { connect: { id: user.id } },
-          first_name: userData.firstName,
-          middle_name: '',
-          last_name: userData.lastName,
-          date_of_birth: new Date('2000-01-01'),
-          gender: 'MALE',
-          class_name: 'K62-CK',
-          major: 'Kỹ thuật phần mềm',
-          course_year: 2021,
-          academic_year: '2021-2025',
-        },
-      });
     }
 
     console.log(
@@ -377,6 +349,5 @@ main().catch((e) => {
 //   "username": "admin_sys",
 //   "password": "123456@Aa"
 // }
-
 
 // tuyennguyennguyenminhniie@gmail.com
