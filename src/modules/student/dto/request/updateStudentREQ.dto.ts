@@ -28,6 +28,11 @@ export class UpdateStudentReqDTO {
   lastName?: string;
 
   @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  email?: string;
+
+  @IsOptional()
   @IsDateString()
   dateOfBirth?: string;
 

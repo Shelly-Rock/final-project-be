@@ -40,11 +40,8 @@ export class UpdateStudentService {
   async updateStudent(
     id: number,
     dto: UpdateStudentReqDTO,
-  ): Promise<{ id: number; studentId: string }> {
-    await this.getStudentById(id);
-
-    // Note: email không còn trong Student - dùng User.email thay thế
-    // Nếu cần update email, phải update qua User model
+  ): Promise<{ id: number; studentId: string; email: string }> {
+    const student = await this.getStudentById(id);
 
     const updateData: Prisma.StudentUpdateInput = {};
 
@@ -62,14 +59,36 @@ export class UpdateStudentService {
     if (dto.extraData !== undefined)
       updateData.extra_data = dto.extraData as Prisma.InputJsonValue;
 
-    const updated = await this.prismaService.student.update({
-      where: { id },
-      data: updateData,
-    });
+    if (dto.email && dto.email !== student.email) {
+      const existingUser = await this.prismaService.user.findUnique({
+        where: { email: dto.email },
+      });
+      if (existingUser && existingUser.id !== student.user_id) {
+        throw new ConflictException('Email đã được sử dụng');
+      }
+      updateData.email = dto.email;
+    }
+
+    const updated = await this.prismaService.$transaction(
+      async (transaction) => {
+        const updatedStudent = await transaction.student.update({
+          where: { id },
+          data: updateData,
+        });
+        if (dto.email && student.user_id && dto.email !== student.email) {
+          await transaction.user.update({
+            where: { id: student.user_id },
+            data: { email: dto.email },
+          });
+        }
+        return updatedStudent;
+      },
+    );
 
     return {
       id: updated.id,
       studentId: updated.student_id,
+      email: dto.email || student.email,
     };
   }
 }
