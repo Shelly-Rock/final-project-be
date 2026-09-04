@@ -182,7 +182,10 @@ export class StudentController {
     @Param('id', ParseIntPipe) id: number,
     @Query('hardDelete') hardDelete?: string,
   ) {
-    const isHardDelete = hardDelete === 'true' || hardDelete === '1';
+    const isHardDelete =
+      hardDelete === undefined
+        ? true
+        : hardDelete === 'true' || hardDelete === '1';
     return this.studentService.removeStudent(id, isHardDelete);
   }
 }

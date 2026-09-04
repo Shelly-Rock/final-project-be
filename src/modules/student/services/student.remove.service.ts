@@ -43,7 +43,7 @@ export class RemoveStudentService {
     return student;
   }
 
-  async removeStudent(id: number, hardDelete = false) {
+  async removeStudent(id: number, hardDelete = true) {
     const student = await this.getStudentById(id);
 
     const hasActiveProject = student.project && !student.project.deleted_at;
@@ -91,7 +91,7 @@ export class RemoveStudentService {
     };
   }
 
-  async removeStudents(ids: number[], hardDelete = false) {
+  async removeStudents(ids: number[], hardDelete = true) {
     const uniqueIds = [...new Set(ids)];
 
     return this.prismaService.$transaction(async (transaction) => {
