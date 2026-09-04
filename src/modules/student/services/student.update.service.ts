@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '@/core/database/prisma/prisma.service';
 import { UpdateStudentReqDTO } from '@/modules/student/dto';
@@ -40,7 +41,20 @@ export class UpdateStudentService {
   async updateStudent(
     id: number,
     dto: UpdateStudentReqDTO,
-  ): Promise<{ id: number; studentId: string; email: string }> {
+  ): Promise<{
+    id: number;
+    studentId: string;
+    email: string;
+    firstName: string;
+    middleName: string;
+    lastName: string;
+    dateOfBirth: Date;
+    gender: string;
+    className: string;
+    major: string;
+    courseYear: number;
+    academicYear: string;
+  }> {
     const student = await this.getStudentById(id);
 
     const updateData: Prisma.StudentUpdateInput = {};
@@ -69,6 +83,10 @@ export class UpdateStudentService {
       updateData.email = dto.email;
     }
 
+    if (Object.keys(updateData).length === 0) {
+      throw new BadRequestException('Không có thông tin nào để cập nhật');
+    }
+
     const updated = await this.prismaService.$transaction(
       async (transaction) => {
         const updatedStudent = await transaction.student.update({
@@ -88,7 +106,16 @@ export class UpdateStudentService {
     return {
       id: updated.id,
       studentId: updated.student_id,
-      email: dto.email || student.email,
+      email: updated.email,
+      firstName: updated.first_name,
+      middleName: updated.middle_name,
+      lastName: updated.last_name,
+      dateOfBirth: updated.date_of_birth,
+      gender: updated.gender,
+      className: updated.class_name,
+      major: updated.major,
+      courseYear: updated.course_year,
+      academicYear: updated.academic_year,
     };
   }
 }
