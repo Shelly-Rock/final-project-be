@@ -4,6 +4,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import type { StringValue } from 'ms';
+import { PermissionsGuard } from './guards/permissions.guard';
 
 @Global()
 @Module({
@@ -23,8 +24,8 @@ import type { StringValue } from 'ms';
     }),
   ],
 
-  providers: [JwtStrategy],
+  providers: [JwtStrategy, PermissionsGuard],
 
-  exports: [PassportModule, JwtModule],
+  exports: [PassportModule, JwtModule, PermissionsGuard],
 })
 export class CoreAuthModule {}

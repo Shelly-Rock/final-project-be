@@ -13,6 +13,8 @@ import { CommitteeModule } from './modules/committee/committee.module';
 import { DefenseModule } from './modules/defense/defense.module';
 import { ScoringModule } from './modules/scoring/scoring.module';
 import { JwtAuthGuard } from './core/auth/guards/jwtAuth.guard';
+import { PermissionsGuard } from './core/auth/guards/permissions.guard';
+import { RolesGuard } from './core/auth/guards/roles.guard';
 
 import { StudentModule } from '@/modules';
 import { RoleModule } from '@/modules/role';
@@ -38,6 +40,14 @@ import { RoleModule } from '@/modules/role';
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: PermissionsGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RolesGuard,
     },
   ],
 })

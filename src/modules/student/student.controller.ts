@@ -41,6 +41,7 @@ import {
 } from './dto';
 import { RemoveStudentReqDTO } from './dto/request/removeStudentREQ.dto';
 import { JwtAuthGuard } from '@/core/auth/guards/jwtAuth.guard';
+import { Permissions } from '@/core/auth/decorators/permissions.decorator';
 
 @ApiTags('Students')
 @UseGuards(JwtAuthGuard)
@@ -94,6 +95,7 @@ export class StudentController {
   }
 
   @Get()
+  @Permissions('student:read')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Lấy danh sách sinh viên',
@@ -106,6 +108,7 @@ export class StudentController {
   }
 
   @Get(':id')
+  @Permissions('student:read')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Lấy chi tiết sinh viên theo ID',
@@ -120,6 +123,7 @@ export class StudentController {
   }
 
   @Get('code/:studentId')
+  @Permissions('student:read')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Lấy chi tiết sinh viên theo mã sinh viên',
@@ -134,6 +138,7 @@ export class StudentController {
   }
 
   @Post()
+  @Permissions('student:create')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Tạo mới một sinh viên',
@@ -146,6 +151,7 @@ export class StudentController {
   }
 
   @Put(':id')
+  @Permissions('student:update')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Cập nhật thông tin sinh viên',
@@ -162,6 +168,7 @@ export class StudentController {
   }
 
   @Delete()
+  @Permissions('student:delete')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Xóa nhiều sinh viên' })
   @ApiOkResponse({ description: 'Xóa các sinh viên thành công' })
@@ -170,6 +177,7 @@ export class StudentController {
   }
 
   @Delete(':id')
+  @Permissions('student:delete')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Xóa vĩnh viễn sinh viên' })
   @ApiParam({ name: 'id', description: 'ID của sinh viên', type: Number })

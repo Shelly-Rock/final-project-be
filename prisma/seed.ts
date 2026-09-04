@@ -190,6 +190,23 @@ async function main() {
   console.log(`✅ Đã tạo Role: ${secretaryRole.name}`);
 
   // 4. Gán permissions cho roles
+  const rolePermissions: Record<string, string[]> = {
+    ADMIN: permissionData.map((permission) => permission.name),
+    SECRETARY: [
+      'user:read',
+      'user:create',
+      'user:update',
+      'student:read',
+      'student:create',
+      'student:update',
+      'student:delete',
+      'teacher:read',
+    ],
+    TEACHER: ['student:read'],
+    STUDENT: ['student:read'],
+    COMMITTEE: ['student:read'],
+  };
+
   for (const role of [
     adminRole,
     teacherRole,
@@ -197,7 +214,9 @@ async function main() {
     committeeRole,
     secretaryRole,
   ]) {
+    await prisma.rolePermission.deleteMany({ where: { role_id: role.id } });
     for (const permission of permissions) {
+      if (!rolePermissions[role.name]?.includes(permission.name)) continue;
       await prisma.rolePermission.upsert({
         where: {
           role_id_permission_id: {

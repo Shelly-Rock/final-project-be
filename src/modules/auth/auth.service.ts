@@ -48,7 +48,12 @@ export class AuthService {
   async login(dto: LoginReqDTO): Promise<LoginRespDTO> {
     const user = await this.prisma.user.findFirst({
       where: {
-        OR: [{ username: dto.username }, { email: dto.username }],
+        OR: [
+          { username: dto.username },
+          { email: dto.username },
+          { student: { student_id: dto.username } },
+          { teacher: { teacher_id: dto.username } },
+        ],
       },
       include: {
         user_roles: { include: { role: true } },
@@ -65,6 +70,12 @@ export class AuthService {
 
     if (!user.email_verified_at) {
       throw new ForbiddenException('Please verify your email first');
+    }
+
+    if (user.must_change_password) {
+      throw new ForbiddenException(
+        'You must change your password before logging in',
+      );
     }
 
     const isPasswordValid = await bcrypt.compare(
