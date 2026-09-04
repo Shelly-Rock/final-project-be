@@ -304,7 +304,6 @@ async function main() {
       },
     });
 
-    // Tạo corresponding record dựa trên role
     if (userData.role.name === 'TEACHER' && userData.teacherId) {
       await prisma.teacher.upsert({
         where: { teacher_id: userData.teacherId },
@@ -349,5 +348,4 @@ main().catch((e) => {
 //   "username": "admin_sys",
 //   "password": "123456@Aa"
 // }
-
 // tuyennguyennguyenminhniie@gmail.com
