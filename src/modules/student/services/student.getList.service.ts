@@ -11,6 +11,7 @@ export class GetStudentListService {
     const { page = 1, limit = 10 } = query;
     const [students, total] = await Promise.all([
       this.prismaService.student.findMany({
+        where: { deleted_at: null },
         skip: (page - 1) * limit,
         take: limit,
         include: {
@@ -21,7 +22,7 @@ export class GetStudentListService {
           },
         },
       }),
-      this.prismaService.student.count(),
+      this.prismaService.student.count({ where: { deleted_at: null } }),
     ]);
 
     const studentsDTO = students.map((student) => ({
