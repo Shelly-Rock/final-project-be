@@ -74,11 +74,11 @@ export class StudentService {
     };
   }
 
-  async removeStudent(id: number, hardDelete = true) {
-    return this.removeSV.removeStudent(id, hardDelete);
+  async removeStudent(id: number) {
+    return this.removeSV.removeStudent(id);
   }
 
-  async removeStudents(ids: number[], hardDelete = true) {
-    return this.removeSV.removeStudents(ids, hardDelete);
+  async removeStudents(ids: number[]) {
+    return this.removeSV.removeStudents(ids);
   }
 }

@@ -166,26 +166,17 @@ export class StudentController {
   @ApiOperation({ summary: 'Xóa nhiều sinh viên' })
   @ApiOkResponse({ description: 'Xóa các sinh viên thành công' })
   async removeStudents(@Body() dto: RemoveStudentReqDTO) {
-    return this.studentService.removeStudents(dto.ids, dto.hardDelete);
+    return this.studentService.removeStudents(dto.ids);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Xóa sinh viên (soft delete hoặc hard delete)',
-  })
+  @ApiOperation({ summary: 'Xóa vĩnh viễn sinh viên' })
   @ApiParam({ name: 'id', description: 'ID của sinh viên', type: Number })
   @ApiOkResponse({
     description: 'Xóa sinh viên thành công',
   })
-  async removeStudent(
-    @Param('id', ParseIntPipe) id: number,
-    @Query('hardDelete') hardDelete?: string,
-  ) {
-    const isHardDelete =
-      hardDelete === undefined
-        ? true
-        : hardDelete === 'true' || hardDelete === '1';
-    return this.studentService.removeStudent(id, isHardDelete);
+  async removeStudent(@Param('id', ParseIntPipe) id: number) {
+    return this.studentService.removeStudent(id);
   }
 }

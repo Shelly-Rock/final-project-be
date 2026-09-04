@@ -18,7 +18,7 @@ export class RemoveStudentService {
       },
     });
 
-    if (!student || student.deleted_at) {
+    if (!student) {
       throw new NotFoundException(`Không tìm thấy sinh viên với ID: ${id}`);
     }
 
@@ -43,60 +43,40 @@ export class RemoveStudentService {
     return student;
   }
 
-  async removeStudent(id: number, hardDelete = true) {
+  async removeStudent(id: number) {
     const student = await this.getStudentById(id);
 
     const hasActiveProject = student.project && !student.project.deleted_at;
     const hasFinalSubmission = !!student.final_submissions;
 
-    if (hardDelete) {
-      if (hasActiveProject) {
-        throw new BadRequestException(
-          'Không thể xóa vĩnh viễn: sinh viên đang có đề tài hoạt động',
-        );
-      }
-
-      if (hasFinalSubmission) {
-        throw new BadRequestException(
-          'Không thể xóa vĩnh viễn: sinh viên đã có bài nộp cuối kỳ',
-        );
-      }
-
-      await this.prismaService.student.delete({
-        where: { id },
-      });
-
-      return {
-        id,
-        studentId: student.student_id,
-        deleted: true,
-        hardDelete: true,
-        message: 'Xóa sinh viên vĩnh viễn thành công',
-      };
+    if (hasActiveProject) {
+      throw new BadRequestException(
+        'Không thể xóa: sinh viên đang có đề tài hoạt động',
+      );
     }
 
-    await this.prismaService.student.update({
-      where: { id },
-      data: {
-        deleted_at: new Date(),
-      },
-    });
+    if (hasFinalSubmission) {
+      throw new BadRequestException(
+        'Không thể xóa: sinh viên đã có bài nộp cuối kỳ',
+      );
+    }
+
+    await this.prismaService.student.delete({ where: { id } });
 
     return {
       id,
       studentId: student.student_id,
       deleted: true,
-      hardDelete: false,
-      message: 'Xóa sinh viên thành công (soft delete)',
+      message: 'Xóa sinh viên vĩnh viễn thành công',
     };
   }
 
-  async removeStudents(ids: number[], hardDelete = true) {
+  async removeStudents(ids: number[]) {
     const uniqueIds = [...new Set(ids)];
 
     return this.prismaService.$transaction(async (transaction) => {
       const students = await transaction.student.findMany({
-        where: { id: { in: uniqueIds }, deleted_at: null },
+        where: { id: { in: uniqueIds } },
         include: { project: true, final_submissions: true },
       });
 
@@ -108,35 +88,26 @@ export class RemoveStudentService {
         );
       }
 
-      if (hardDelete) {
-        const blockedStudent = students.find(
-          (student) =>
-            (student.project && !student.project.deleted_at) ||
-            student.final_submissions,
+      const blockedStudent = students.find(
+        (student) =>
+          (student.project && !student.project.deleted_at) ||
+          student.final_submissions,
+      );
+      if (blockedStudent) {
+        throw new BadRequestException(
+          `Không thể xóa sinh viên ${blockedStudent.student_id}: sinh viên đang có dữ liệu liên quan`,
         );
-        if (blockedStudent) {
-          throw new BadRequestException(
-            `Không thể xóa vĩnh viễn sinh viên ${blockedStudent.student_id}: sinh viên đang có dữ liệu liên quan`,
-          );
-        }
-        await transaction.student.deleteMany({
-          where: { id: { in: uniqueIds } },
-        });
-      } else {
-        await transaction.student.updateMany({
-          where: { id: { in: uniqueIds } },
-          data: { deleted_at: new Date() },
-        });
       }
+
+      await transaction.student.deleteMany({
+        where: { id: { in: uniqueIds } },
+      });
 
       return {
         ids: uniqueIds,
         count: uniqueIds.length,
         deleted: true,
-        hardDelete,
-        message: hardDelete
-          ? 'Xóa vĩnh viễn sinh viên thành công'
-          : 'Xóa sinh viên thành công (soft delete)',
+        message: 'Xóa sinh viên vĩnh viễn thành công',
       };
     });
   }
