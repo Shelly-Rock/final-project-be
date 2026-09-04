@@ -63,11 +63,16 @@ export class RemoveStudentService {
 
     await this.prismaService.student.delete({ where: { id } });
 
+    if (student.user_id) {
+      await this.prismaService.user.delete({ where: { id: student.user_id } });
+    }
+
     return {
       id,
       studentId: student.student_id,
+      userId: student.user_id,
       deleted: true,
-      message: 'Xóa sinh viên vĩnh viễn thành công',
+      message: 'Xóa sinh viên và tài khoản liên kết thành công',
     };
   }
 
@@ -103,11 +108,19 @@ export class RemoveStudentService {
         where: { id: { in: uniqueIds } },
       });
 
+      const userIds = students
+        .map((student) => student.user_id)
+        .filter((userId): userId is number => userId !== null);
+      if (userIds.length > 0) {
+        await transaction.user.deleteMany({ where: { id: { in: userIds } } });
+      }
+
       return {
         ids: uniqueIds,
+        userIds,
         count: uniqueIds.length,
         deleted: true,
-        message: 'Xóa sinh viên vĩnh viễn thành công',
+        message: 'Xóa sinh viên và tài khoản liên kết thành công',
       };
     });
   }
