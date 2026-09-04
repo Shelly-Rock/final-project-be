@@ -54,6 +54,7 @@ export class UpdateStudentService {
     major: string;
     courseYear: number;
     academicYear: string;
+    extraData?: unknown;
   }> {
     const student = await this.getStudentById(id);
 
@@ -72,6 +73,18 @@ export class UpdateStudentService {
       updateData.academic_year = dto.academicYear;
     if (dto.extraData !== undefined)
       updateData.extra_data = dto.extraData as Prisma.InputJsonValue;
+
+    if (dto.phone !== undefined || dto.address !== undefined) {
+      const currentExtraData =
+        student.extra_data && typeof student.extra_data === 'object'
+          ? student.extra_data
+          : {};
+      updateData.extra_data = {
+        ...currentExtraData,
+        ...(dto.phone !== undefined ? { phone: dto.phone } : {}),
+        ...(dto.address !== undefined ? { address: dto.address } : {}),
+      } as Prisma.InputJsonValue;
+    }
 
     if (dto.email && dto.email !== student.email) {
       const existingUser = await this.prismaService.user.findUnique({
@@ -116,6 +129,7 @@ export class UpdateStudentService {
       major: updated.major,
       courseYear: updated.course_year,
       academicYear: updated.academic_year,
+      extraData: updated.extra_data,
     };
   }
 }
