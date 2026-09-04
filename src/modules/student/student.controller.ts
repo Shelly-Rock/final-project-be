@@ -39,6 +39,7 @@ import {
   UpdateStudentReqDTO,
   GetListStudentRespDTO,
 } from './dto';
+import { RemoveStudentReqDTO } from './dto/request/removeStudentREQ.dto';
 import { JwtAuthGuard } from '@/core/auth/guards/jwtAuth.guard';
 
 @ApiTags('Students')
@@ -158,6 +159,14 @@ export class StudentController {
     @Body() dto: UpdateStudentReqDTO,
   ) {
     return this.studentService.updateStudent(id, dto);
+  }
+
+  @Delete()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Xóa nhiều sinh viên' })
+  @ApiOkResponse({ description: 'Xóa các sinh viên thành công' })
+  async removeStudents(@Body() dto: RemoveStudentReqDTO) {
+    return this.studentService.removeStudents(dto.ids, dto.hardDelete);
   }
 
   @Delete(':id')

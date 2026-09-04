@@ -77,4 +77,8 @@ export class StudentService {
   async removeStudent(id: number, hardDelete = false) {
     return this.removeSV.removeStudent(id, hardDelete);
   }
+
+  async removeStudents(ids: number[], hardDelete = false) {
+    return this.removeSV.removeStudents(ids, hardDelete);
+  }
 }

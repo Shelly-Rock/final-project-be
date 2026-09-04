@@ -1,9 +1,21 @@
-import { IsInt, IsOptional } from 'class-validator';
+import {
+  ArrayMinSize,
+  IsArray,
+  IsBoolean,
+  IsInt,
+  IsOptional,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class RemoveStudentReqDTO {
-  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
   @Type(() => Number)
-  @IsInt()
-  hardDelete?: number;
+  @IsInt({ each: true })
+  ids!: number[];
+
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  hardDelete?: boolean;
 }
