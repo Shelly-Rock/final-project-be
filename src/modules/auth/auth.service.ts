@@ -130,21 +130,24 @@ export class AuthService {
   async changePassword(
     dto: ChangePasswordReqDTO,
   ): Promise<ChangePasswordRespDTO> {
-    const user = await this.prisma.user.findFirst({
-      where: {
-        OR: [{ username: dto.username }, { email: dto.username }],
-      },
-      include: { student: true },
-    });
+    const verificationToken =
+      await this.prisma.email_verification_tokens.findUnique({
+        where: { token: dto.token },
+        include: { users: { include: { student: true } } },
+      });
 
-    if (!user) {
-      throw new NotFoundException('User not found');
+    if (!verificationToken) {
+      throw new BadRequestException('Invalid verification token');
     }
 
-    if (!user.email_verified_at) {
-      throw new ForbiddenException(
-        'Email must be verified before changing password. Please verify your email first.',
+    if (verificationToken.used_at) {
+      throw new BadRequestException(
+        'This verification link has already been used',
       );
+    }
+
+    if (verificationToken.expires_at < new Date()) {
+      throw new BadRequestException('This verification link has expired');
     }
 
     const hashedPassword = await bcrypt.hash(
@@ -152,18 +155,27 @@ export class AuthService {
       BCRYPT_SALT_ROUNDS,
     );
 
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: {
-        password_hash: hashedPassword,
-        must_change_password: false,
-      },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: verificationToken.user_id },
+        data: {
+          password_hash: hashedPassword,
+          email_verified_at:
+            verificationToken.users.email_verified_at ?? new Date(),
+          must_change_password: false,
+        },
+      });
+
+      await tx.email_verification_tokens.update({
+        where: { id: verificationToken.id },
+        data: { used_at: new Date() },
+      });
     });
 
     try {
       await this.emailService.sendPasswordChangedNotification(
-        user.email,
-        user.student?.first_name || 'Người dùng',
+        verificationToken.users.email,
+        verificationToken.users.student?.first_name || 'Người dùng',
       );
     } catch (error) {
       console.error('Password changed, but notification email failed:', error);
