@@ -1,7 +1,15 @@
 import { registerAs } from '@nestjs/config';
 
 export default registerAs('mail', () => ({
-  provider: process.env.EMAIL_PROVIDER?.trim().toLowerCase() || 'smtp',
+  provider:
+    process.env.EMAIL_PROVIDER?.trim().toLowerCase() ||
+    (process.env.RESEND_API_KEY
+      ? 'resend'
+      : process.env.BREVO_API_KEY
+        ? 'brevo'
+        : process.env.GMAIL_REFRESH_TOKEN
+          ? 'gmail-api'
+          : 'smtp'),
   resendApiKey: process.env.RESEND_API_KEY,
   brevoApiKey: process.env.BREVO_API_KEY,
   gmailClientId: process.env.GMAIL_CLIENT_ID,
