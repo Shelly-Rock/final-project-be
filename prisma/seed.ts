@@ -6,7 +6,7 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Đang bắt đầu nạp dữ liệu (Seeding)...');
 
-  const defaultPassword = '123456@Aa';
+  const defaultPassword = '1111';
   const hashedPassword = await bcrypt.hash(defaultPassword, 10);
   const now = new Date();
 
@@ -163,19 +163,6 @@ async function main() {
   });
   console.log(`✅ Đã tạo Role: ${studentRole.name}`);
 
-  const committeeRole = await prisma.role.upsert({
-    where: { name: 'COMMITTEE' },
-    update: {},
-    create: {
-      name: 'COMMITTEE',
-      display_name: 'Hội đồng',
-      description: 'Quyền truy cập dành cho Hội đồng bảo vệ',
-      is_system: true,
-      priority: 3,
-    },
-  });
-  console.log(`✅ Đã tạo Role: ${committeeRole.name}`);
-
   const secretaryRole = await prisma.role.upsert({
     where: { name: 'SECRETARY' },
     update: {},
@@ -204,16 +191,9 @@ async function main() {
     ],
     TEACHER: ['student:read'],
     STUDENT: ['student:read'],
-    COMMITTEE: ['student:read'],
   };
 
-  for (const role of [
-    adminRole,
-    teacherRole,
-    studentRole,
-    committeeRole,
-    secretaryRole,
-  ]) {
+  for (const role of [adminRole, teacherRole, studentRole, secretaryRole]) {
     await prisma.rolePermission.deleteMany({ where: { role_id: role.id } });
     for (const permission of permissions) {
       if (!rolePermissions[role.name]?.includes(permission.name)) continue;
@@ -274,13 +254,6 @@ async function main() {
       teacherId: 'GV001',
     },
     {
-      email: 'committee@system.com',
-      username: 'committee_demo',
-      role: committeeRole,
-      firstName: 'Hội đồng',
-      lastName: 'Demo',
-    },
-    {
       email: 'secretary@system.com',
       username: 'secretary_demo',
       role: secretaryRole,
@@ -294,6 +267,7 @@ async function main() {
     const user = await prisma.user.upsert({
       where: { email: userData.email },
       update: {
+        password_hash: hashedPassword,
         is_active: true,
         email_verified_at: now,
         must_change_password: false,
@@ -352,7 +326,7 @@ async function main() {
   }
 
   console.log('🎉 Seed dữ liệu mẫu hoàn tất!');
-  console.log('🔑 Mật khẩu mặc định cho tất cả tài khoản là: 123456@Aa');
+  console.log('🔑 Mật khẩu mặc định cho tất cả tài khoản là: 1111');
   console.log('📧 Tất cả tài khoản đã được xác thực email (email_verified_at)');
 
   await prisma.$disconnect();
@@ -362,9 +336,3 @@ main().catch((e) => {
   console.error('❌ Lỗi khi seed database:', e);
   process.exit(1);
 });
-
-// {
-//   "username": "admin_sys",
-//   "password": "123456@Aa"
-// }
-// tuyennguyennguyenminhniie@gmail.com
