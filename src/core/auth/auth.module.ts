@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import type { StringValue } from 'ms';
 import { PermissionsGuard } from './guards/permissions.guard';
+import { RbacSyncService } from './rbac-sync.service';
 
 @Global()
 @Module({
@@ -24,7 +25,7 @@ import { PermissionsGuard } from './guards/permissions.guard';
     }),
   ],
 
-  providers: [JwtStrategy, PermissionsGuard],
+  providers: [JwtStrategy, PermissionsGuard, RbacSyncService],
 
   exports: [PassportModule, JwtModule, PermissionsGuard],
 })
