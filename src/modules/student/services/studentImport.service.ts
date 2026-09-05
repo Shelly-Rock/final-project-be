@@ -2,7 +2,7 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { ExcelService } from '@/shared/utils';
 import { PrismaService } from '@/core/database/prisma/prisma.service';
 import { CreateStudentReqDTO } from '@/modules/student/dto';
-import { STUDENT_HEADER } from '../constrants';
+import { STUDENT_HEADER, STUDENT_HEADER_ALIASES } from '../constrants';
 import { MulterFile } from '@/shared/types/multer-file.type';
 
 @Injectable()
@@ -14,8 +14,10 @@ export class ImportStudentService {
   async importStudents(file: MulterFile): Promise<CreateStudentReqDTO[]> {
     const wb = await this.excelService.readWorkbook(file.buffer);
     const wsh = this.excelService.getWorksheet(wb);
-    const headers = this.excelService.getHeaders(wsh);
-    this.excelService.validateHeaders(headers, STUDENT_HEADER, true);
+    const headers = this.excelService
+      .getHeaders(wsh)
+      .map((header) => this.normalizeHeader(header));
+    this.excelService.validateHeaders(headers, STUDENT_HEADER);
     const parsedStudents = this.excelService.parseRows<CreateStudentReqDTO>(
       wsh,
       headers,
@@ -26,6 +28,13 @@ export class ImportStudentService {
     }));
     await this.validateStudents(students);
     return students;
+  }
+
+  private normalizeHeader(header: string): string {
+    const normalizedHeader = header.trim();
+    return (
+      STUDENT_HEADER_ALIASES[normalizedHeader.toLowerCase()] ?? normalizedHeader
+    );
   }
 
   private parseExtraData(
