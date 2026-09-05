@@ -24,14 +24,15 @@ export class PermissionsGuard implements CanActivate {
     if (!requiredPermissions?.length) return true;
 
     const user = context.switchToHttp().getRequest().user;
-    if (!user?.id) throw new ForbiddenException('User not authenticated');
+    const userId = user?.id ?? user?.sub;
+    if (!userId) throw new ForbiddenException('User not authenticated');
 
     const permissions = await this.prisma.permission.findMany({
       where: {
         name: { in: requiredPermissions },
         roles: {
           some: {
-            role: { user_roles: { some: { user_id: user.id } } },
+            role: { user_roles: { some: { user_id: userId } } },
           },
         },
       },
