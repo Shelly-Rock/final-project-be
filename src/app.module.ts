@@ -18,6 +18,7 @@ import { RolesGuard } from './core/auth/guards/roles.guard';
 
 import { StudentModule } from '@/modules';
 import { RoleModule } from '@/modules/role';
+import { PermissionModule } from '@/modules/permission/permission.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { RoleModule } from '@/modules/role';
     TeacherModule,
     StudentModule,
     RoleModule,
+    PermissionModule,
     RegistrationPeriodModule,
     ProgressTrackingModule,
     SubmissionModule,

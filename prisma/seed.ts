@@ -193,26 +193,32 @@ async function main() {
     STUDENT: ['student:read'],
   };
 
-  for (const role of [adminRole, teacherRole, studentRole, secretaryRole]) {
-    await prisma.rolePermission.deleteMany({ where: { role_id: role.id } });
-    for (const permission of permissions) {
-      if (!rolePermissions[role.name]?.includes(permission.name)) continue;
-      await prisma.rolePermission.upsert({
-        where: {
-          role_id_permission_id: {
+  // Only grant default permissions on first seed. Subsequent runs must NOT
+  // wipe rolePermission rows that an admin has edited via the permission matrix.
+  const existingGrantCount = await prisma.rolePermission.count();
+  if (existingGrantCount === 0) {
+    for (const role of [adminRole, teacherRole, studentRole, secretaryRole]) {
+      for (const permission of permissions) {
+        if (!rolePermissions[role.name]?.includes(permission.name)) continue;
+        await prisma.rolePermission.upsert({
+          where: {
+            role_id_permission_id: {
+              role_id: role.id,
+              permission_id: permission.id,
+            },
+          },
+          update: {},
+          create: {
             role_id: role.id,
             permission_id: permission.id,
           },
-        },
-        update: {},
-        create: {
-          role_id: role.id,
-          permission_id: permission.id,
-        },
-      });
+        });
+      }
     }
+    console.log('✅ Đã gán permissions cho tất cả roles');
+  } else {
+    console.log('ℹ️  Bỏ qua gán permissions (đã có dữ liệu phân quyền, giữ nguyên chỉnh sửa của admin)');
   }
-  console.log('✅ Đã gán permissions cho tất cả roles');
 
   // 5. Tạo Faculty và Department
   const faculty = await prisma.faculty.upsert({

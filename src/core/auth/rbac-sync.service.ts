@@ -20,23 +20,6 @@ const permissionData = [
   ['teacher:delete', 'Xóa giảng viên', 'teacher', 'delete'],
 ] as const;
 
-const rolePermissions: Record<string, string[]> = {
-  ADMIN: permissionData.map(([name]) => name),
-  SECRETARY: [
-    'user:read',
-    'user:create',
-    'user:update',
-    'student:read',
-    'student:create',
-    'student:update',
-    'student:delete',
-    'teacher:read',
-  ],
-  TEACHER: ['student:read'],
-  STUDENT: ['student:read'],
-  COMMITTEE: ['student:read'],
-};
-
 @Injectable()
 export class RbacSyncService implements OnModuleInit {
   private readonly logger = new Logger(RbacSyncService.name);
@@ -44,40 +27,18 @@ export class RbacSyncService implements OnModuleInit {
   constructor(private readonly prisma: PrismaService) {}
 
   async onModuleInit(): Promise<void> {
-    const permissions = new Map<string, number>();
-
+    // Only sync the permission catalog. Default role <-> permission grants
+    // are managed by the seed script / admin UI and must NOT be overwritten
+    // here, otherwise admin edits made via the permission matrix would be
+    // silently reverted on every server restart.
     for (const [name, description, module, action] of permissionData) {
-      const permission = await this.prisma.permission.upsert({
+      await this.prisma.permission.upsert({
         where: { name },
         update: { description, module, action },
         create: { name, description, module, action },
       });
-      permissions.set(permission.name, permission.id);
     }
 
-    for (const [roleName, names] of Object.entries(rolePermissions)) {
-      const role = await this.prisma.role.findUnique({
-        where: { name: roleName },
-        select: { id: true },
-      });
-      if (!role) continue;
-
-      for (const name of names) {
-        const permissionId = permissions.get(name);
-        if (!permissionId) continue;
-        await this.prisma.rolePermission.upsert({
-          where: {
-            role_id_permission_id: {
-              role_id: role.id,
-              permission_id: permissionId,
-            },
-          },
-          update: {},
-          create: { role_id: role.id, permission_id: permissionId },
-        });
-      }
-    }
-
-    this.logger.log('RBAC permissions synchronized');
+    this.logger.log('RBAC permission catalog synchronized');
   }
 }

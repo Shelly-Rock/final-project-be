@@ -697,6 +697,30 @@ export class AuthService {
     return { accessToken, refreshToken };
   }
 
+  /**
+   * Effective permissions of the given user for a specific active role.
+   * Used by the frontend to build the dynamic ability/menu after login
+   * or after switching roles.
+   */
+  async getEffectivePermissions(userId: number, activeRoleName: string): Promise<string[]> {
+    const permissions = await this.prisma.permission.findMany({
+      where: {
+        deleted_at: null,
+        roles: {
+          some: {
+            role: {
+              name: activeRoleName,
+              deleted_at: null,
+              user_roles: { some: { user_id: userId } },
+            },
+          },
+        },
+      },
+      select: { name: true },
+    });
+    return permissions.map((p) => p.name);
+  }
+
   private mapRoles(user: {
     user_roles?: {
       role: {

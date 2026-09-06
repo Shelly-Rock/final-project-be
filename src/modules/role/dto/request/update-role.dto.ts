@@ -19,6 +19,7 @@ export class UpdateRoleDto {
 
   @ApiPropertyOptional({ example: [1, 2, 3], description: 'Mảng ID permissions' })
   @IsArray()
+  @IsInt({ each: true })
   @IsOptional()
   permission_ids?: number[];
 }

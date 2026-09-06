@@ -27,16 +27,20 @@ import {
   UpdateRoleDto,
   RoleResponseDto,
   AssignUserRolesDto,
+  UpdateRolePermissionsDto,
 } from './dto';
 import { JwtAuthGuard } from '@/core/auth/guards/jwtAuth.guard';
+import { RolesGuard } from '@/core/auth/guards/roles.guard';
+import { Roles } from '@/core/auth/decorators/roles.decorator';
 
 @ApiTags('Roles')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('roles')
 export class RoleController {
   constructor(private readonly roleService: RoleService) {}
 
   @Post()
+  @Roles('ADMIN')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Tạo mới một role' })
   @ApiCreatedResponse({ type: RoleResponseDto, description: 'Role đã được tạo thành công' })
@@ -75,6 +79,29 @@ export class RoleController {
     };
   }
 
+  @Get('users')
+  @Roles('ADMIN')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Lấy danh sách user kèm roles (trang quản lý phân quyền)' })
+  @ApiQuery({ name: 'page', required: false, description: 'Trang (mặc định 1)' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Số phần tử/trang (mặc định 20, tối đa 100)' })
+  @ApiQuery({ name: 'search', required: false, description: 'Tìm theo email hoặc username' })
+  async listUsersWithRoles(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+  ) {
+    const result = await this.roleService.listUsersWithRoles({
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      search,
+    });
+    return {
+      success: true,
+      ...result,
+    };
+  }
+
   @Get('users/:userId')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Lấy danh sách roles của user' })
@@ -89,6 +116,7 @@ export class RoleController {
   }
 
   @Put('users/:userId')
+  @Roles('ADMIN')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Gán nhiều roles cho user (thay thế toàn bộ)' })
   @ApiParam({ name: 'userId', description: 'ID của user', type: Number })
@@ -144,6 +172,7 @@ export class RoleController {
   }
 
   @Put(':id')
+  @Roles('ADMIN')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Cập nhật thông tin role' })
   @ApiParam({ name: 'id', description: 'ID của role', type: Number })
@@ -161,15 +190,16 @@ export class RoleController {
   }
 
   @Patch(':id/permissions')
+  @Roles('ADMIN')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Gán permissions cho role' })
   @ApiParam({ name: 'id', description: 'ID của role', type: Number })
   @ApiOkResponse({ type: RoleResponseDto, description: 'Permissions đã được gán' })
   async assignPermissions(
     @Param('id', ParseIntPipe) id: number,
-    @Body('permission_ids', ParseIntPipe) permissionIds: number[],
+    @Body() dto: UpdateRolePermissionsDto,
   ) {
-    const role = await this.roleService.assignPermissions(id, permissionIds);
+    const role = await this.roleService.assignPermissions(id, dto.permission_ids);
     return {
       success: true,
       message: 'Gán permissions thành công',
@@ -178,6 +208,7 @@ export class RoleController {
   }
 
   @Delete(':id')
+  @Roles('ADMIN')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Xóa role (soft delete)' })
   @ApiParam({ name: 'id', description: 'ID của role', type: Number })

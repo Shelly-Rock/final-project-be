@@ -27,19 +27,31 @@ export class PermissionsGuard implements CanActivate {
     const userId = user?.id ?? user?.sub;
     if (!userId) throw new ForbiddenException('User not authenticated');
 
+    const activeRole = user?.role;
+    if (!activeRole) throw new ForbiddenException('No active role');
+
+    // Only check permissions of the ACTIVE role (not union of all roles)
     const permissions = await this.prisma.permission.findMany({
       where: {
         name: { in: requiredPermissions },
+        deleted_at: null,
         roles: {
           some: {
-            role: { user_roles: { some: { user_id: userId } } },
+            role: {
+              name: activeRole,
+              deleted_at: null,
+              user_roles: { some: { user_id: userId } },
+            },
           },
         },
       },
       select: { name: true },
     });
 
-    if (permissions.length !== requiredPermissions.length) {
+    const foundNames = new Set(permissions.map((p) => p.name));
+    const allFound = requiredPermissions.every((name) => foundNames.has(name));
+
+    if (!allFound) {
       throw new ForbiddenException('Insufficient permissions');
     }
 

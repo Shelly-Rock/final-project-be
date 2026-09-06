@@ -192,31 +192,37 @@ export class RoleService {
       where: { id: roleId },
     });
 
-    if (!role) {
+    if (!role || role.deleted_at) {
       throw new NotFoundException(`Role với ID ${roleId} không tìm thấy`);
     }
 
+    // Dedupe + only accept existing, non-deleted permissions
+    const uniquePermissionIds = [...new Set(permissionIds)];
+
     const permissions = await this.prisma.permission.findMany({
-      where: { id: { in: permissionIds } },
+      where: { id: { in: uniquePermissionIds }, deleted_at: null },
     });
 
-    if (permissions.length !== permissionIds.length) {
+    if (permissions.length !== uniquePermissionIds.length) {
       throw new BadRequestException('Một số permission ID không hợp lệ');
     }
 
-    const updatedRole = await this.prisma.role.update({
+    await this.prisma.$transaction(async (tx) => {
+      await tx.rolePermission.deleteMany({ where: { role_id: roleId } });
+      await tx.rolePermission.createMany({
+        data: uniquePermissionIds.map((permission_id) => ({
+          role_id: roleId,
+          permission_id,
+        })),
+      });
+    });
+
+    const updatedRole = await this.prisma.role.findUnique({
       where: { id: roleId },
-      data: {
-        permissions: {
-          set: permissionIds.map((permission_id) => ({
-            role_id_permission_id: { role_id: roleId, permission_id },
-          })),
-        },
-      },
       include: { permissions: { include: { permission: true } } },
     });
 
-    return this.toResponse(updatedRole);
+    return this.toResponse(updatedRole as RoleWithPermissions);
   }
 
   async getPermissions(roleId: number) {
@@ -279,6 +285,52 @@ export class RoleService {
     });
 
     return this.getUserRoles(userId);
+  }
+
+  async listUsersWithRoles(params: {
+    page?: number;
+    limit?: number;
+    search?: string;
+  }) {
+    const page = Math.max(1, params.page ?? 1);
+    const limit = Math.min(100, Math.max(1, params.limit ?? 20));
+    const skip = (page - 1) * limit;
+    const where: Prisma.UserWhereInput = {
+      deleted_at: null,
+      ...(params.search
+        ? {
+            OR: [
+              { email: { contains: params.search, mode: 'insensitive' } },
+              { username: { contains: params.search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+    const [total, users] = await Promise.all([
+      this.prisma.user.count({ where }),
+      this.prisma.user.findMany({
+        where,
+        include: { user_roles: { include: { role: true } } },
+        orderBy: { id: 'asc' },
+        skip,
+        take: limit,
+      }),
+    ]);
+    return {
+      data: users.map((u) => ({
+        id: u.id,
+        email: u.email,
+        username: u.username,
+        is_active: u.is_active,
+        roles: u.user_roles
+          .map(({ role }) => role)
+          .sort((a, b) => b.priority - a.priority),
+      })),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   private toResponse(role: RoleWithPermissions): RoleResponseDto {

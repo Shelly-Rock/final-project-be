@@ -177,6 +177,30 @@ export class AuthController {
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
+  @Get('me/permissions')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Lấy danh sách permissions hiệu lực của role đang active (dùng để dựng ability/menu phía FE)',
+  })
+  @ApiOkResponse({ description: 'Danh sách permission names của active role' })
+  async getMyPermissions(@CurrentUser() user: any) {
+    const userId = user.sub ?? user.id;
+    const activeRole = user.role;
+    const permissions = activeRole
+      ? await this.authService.getEffectivePermissions(userId, activeRole)
+      : [];
+    return {
+      success: true,
+      data: {
+        role: activeRole,
+        permissions,
+      },
+    };
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   @Post('switch-role')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Switch active role for multi-role accounts' })
