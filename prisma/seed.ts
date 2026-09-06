@@ -282,20 +282,26 @@ async function main() {
       },
     });
 
-    // Gán Role cho User
-    await prisma.userRole.upsert({
-      where: {
-        user_id_role_id: {
-          user_id: user.id,
-          role_id: userData.role.id,
+    // Gán Role cho User (Admin có tất cả 4 roles)
+    const rolesToAssign = userData.role.name === 'ADMIN'
+      ? [adminRole, secretaryRole, teacherRole, studentRole]
+      : [userData.role];
+
+    for (const role of rolesToAssign) {
+      await prisma.userRole.upsert({
+        where: {
+          user_id_role_id: {
+            user_id: user.id,
+            role_id: role.id,
+          },
         },
-      },
-      update: {},
-      create: {
-        user_id: user.id,
-        role_id: userData.role.id,
-      },
-    });
+        update: {},
+        create: {
+          user_id: user.id,
+          role_id: role.id,
+        },
+      });
+    }
 
     if (userData.role.name === 'TEACHER' && userData.teacherId) {
       await prisma.teacher.upsert({

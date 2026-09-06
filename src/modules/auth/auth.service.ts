@@ -378,7 +378,9 @@ export class AuthService {
       }
 
       const roles = this.mapRoles(user);
-      const primaryRole = this.pickPrimaryRole(roles);
+      // Preserve current role from refresh token if user still has it
+      const currentRole = roles.find((r) => r.name === payload.role);
+      const primaryRole = currentRole ?? this.pickPrimaryRole(roles);
 
       if (!primaryRole) {
         throw new UnauthorizedException('User has no role assigned');
@@ -398,6 +400,45 @@ export class AuthService {
     } catch (error) {
       throw new UnauthorizedException('Invalid refresh token');
     }
+  }
+
+  async switchRole(
+    userId: number,
+    roleName: string,
+  ): Promise<RefreshTokenRespDTO> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { user_roles: { include: { role: true } } },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (!user.is_active) {
+      throw new UnauthorizedException('Account is deactivated');
+    }
+
+    const roles = this.mapRoles(user);
+    const targetRole = roles.find((r) => r.name === roleName);
+
+    if (!targetRole) {
+      throw new BadRequestException(
+        `You do not have access to role: ${roleName}`,
+      );
+    }
+
+    const tokens = await this.generateTokens(
+      user.id,
+      user.email,
+      targetRole.name,
+      roles.map((r) => r.name),
+    );
+
+    return {
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+    };
   }
 
   async resendVerification(

@@ -194,3 +194,25 @@ export class LoginRespDTO {
   refreshToken: string;
   user: UserRespDTO;
 }
+
+// ========== Switch Role ==========
+export class SwitchRoleReqDTO {
+  @ApiProperty({
+    example: 'TEACHER',
+    description: 'Role name to switch to',
+  })
+  @IsNotEmpty()
+  @IsString()
+  roleName: string;
+}
+
+export class SwitchRoleRespDTO {
+  @ApiProperty({ example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' })
+  accessToken: string;
+
+  @ApiProperty({ example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' })
+  refreshToken: string;
+
+  @ApiProperty({ example: 'TEACHER' })
+  currentRole: string;
+}

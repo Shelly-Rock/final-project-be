@@ -43,6 +43,8 @@ import {
   ResetPasswordRespDTO,
   RefreshTokenReqDTO,
   RefreshTokenRespDTO,
+  SwitchRoleReqDTO,
+  SwitchRoleRespDTO,
 } from './dto/auth.dto';
 import { RegisterReqDTO, RegisterRespDTO } from './dto/register.dto';
 
@@ -171,5 +173,30 @@ export class AuthController {
   @ApiOperation({ summary: 'Get current user info' })
   async getMe(@CurrentUser() user: any) {
     return user;
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Post('switch-role')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Switch active role for multi-role accounts' })
+  @ApiBody({ type: SwitchRoleReqDTO })
+  @ApiOkResponse({
+    type: SwitchRoleRespDTO,
+    description: 'Role switched, new tokens issued',
+  })
+  @ApiBadRequestResponse({ description: 'User does not have the requested role' })
+  async switchRole(
+    @CurrentUser() user: any,
+    @Body() dto: SwitchRoleReqDTO,
+  ): Promise<SwitchRoleRespDTO> {
+    const tokens = await this.authService.switchRole(
+      user.sub ?? user.id,
+      dto.roleName,
+    );
+    return {
+      ...tokens,
+      currentRole: dto.roleName,
+    };
   }
 }
