@@ -227,6 +227,7 @@ export class RoleController {
   }
 
   @Post(':id/restore')
+  @Roles('ADMIN')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Khôi phục role đã xóa' })
   @ApiParam({ name: 'id', description: 'ID của role', type: Number })

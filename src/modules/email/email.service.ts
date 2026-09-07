@@ -1,4 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import { Resend } from 'resend';
@@ -11,8 +15,24 @@ export interface SendEmailOptions {
   html: string;
 }
 
+export interface DeadlineAlertPayload {
+  to: string;
+  recipientName: string;
+  /** Nhãn tiếng Việt của giai đoạn, vd "Nộp báo cáo tiến độ định kỳ". */
+  stageLabel: string;
+  /** Ngày giờ hết hạn (Date hoặc ISO string). */
+  deadlineAt: Date | string;
+  /** Hành động còn thiếu, vd "nộp file đồ án cuối kỳ". */
+  pendingAction: string;
+  /** Đường dẫn FE để đặt nút CTA (không bắt buộc). */
+  ctaUrl?: string;
+  /** 'DUE_IN_3_DAYS' | 'DUE_IN_1_DAY' | 'EXPIRED' — hiển thị trên chủ đề. */
+  event?: 'DUE_IN_3_DAYS' | 'DUE_IN_1_DAY' | 'EXPIRED';
+}
+
 @Injectable()
 export class EmailService {
+  private readonly logger = new Logger(EmailService.name);
   private transporter?: nodemailer.Transporter;
   private resend?: Resend;
   private readonly provider: string;
@@ -62,9 +82,101 @@ export class EmailService {
         await this.transporter?.sendMail(mailOptions);
       }
     } catch (error) {
-      console.error('Failed to send email:', error);
+      this.logger.error(
+        `Failed to send email to ${options.to}`,
+        error instanceof Error ? error.stack : undefined,
+      );
       throw error;
     }
+  }
+
+  /**
+   * Template cảnh báo deadline dùng cùng shell HTML với email hiện có.
+   * Mọi dữ liệu động được escape để tránh HTML injection từ tên/nhãn cấu hình.
+   */
+  async sendDeadlineAlert(payload: DeadlineAlertPayload): Promise<void> {
+    const deadlineAt =
+      payload.deadlineAt instanceof Date
+        ? payload.deadlineAt
+        : new Date(payload.deadlineAt);
+    if (Number.isNaN(deadlineAt.getTime())) {
+      throw new BadRequestException('Ngày hết hạn gửi email không hợp lệ.');
+    }
+
+    const eventLabel =
+      payload.event === 'DUE_IN_3_DAYS'
+        ? 'còn 3 ngày'
+        : payload.event === 'DUE_IN_1_DAY'
+          ? 'còn 1 ngày'
+          : payload.event === 'EXPIRED'
+            ? 'đã hết hạn'
+            : deadlineAt.getTime() <= Date.now()
+              ? 'đã hết hạn'
+              : 'sắp đến hạn';
+    const eventMessage =
+      payload.event === 'EXPIRED'
+        ? 'Mốc thời gian này đã hết hạn. Vui lòng liên hệ Thư ký nếu cần được hỗ trợ.'
+        : `Mốc thời gian này ${eventLabel}. Vui lòng hoàn thành đúng hạn.`;
+
+    const appUrl =
+      this.configService.get<string>('APP_URL') ||
+      this.configService.get<string>('FRONTEND_URL') ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '') ||
+      'http://localhost:3000';
+    const ctaUrl = payload.ctaUrl
+      ? payload.ctaUrl.startsWith('http://') ||
+        payload.ctaUrl.startsWith('https://')
+        ? payload.ctaUrl
+        : `${appUrl.replace(/\/$/, '')}/${payload.ctaUrl.replace(/^\//, '')}`
+      : appUrl;
+
+    const recipientName = this.escapeHtml(payload.recipientName);
+    const stageLabel = this.escapeHtml(payload.stageLabel);
+    const pendingAction = this.escapeHtml(payload.pendingAction);
+    const safeCtaUrl = this.escapeHtml(ctaUrl);
+    const formattedDeadline = this.escapeHtml(
+      this.formatViDateTime(deadlineAt),
+    );
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background-color: #E67E22; color: white; padding: 20px; text-align: center; }
+    .content { padding: 30px 20px; background-color: #f9f9f9; }
+    .footer { padding: 20px; text-align: center; font-size: 12px; color: #666; }
+    .info-box { background-color: #fff; border-left: 4px solid #E67E22; padding: 15px; margin: 20px 0; }
+    .button { display: inline-block; background-color: #E67E22; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header"><h1>Cảnh báo hạn chót</h1></div>
+    <div class="content">
+      <p>Xin chào <strong>${recipientName}</strong>,</p>
+      <p>Hệ thống ghi nhận bạn chưa hoàn thành hành động: <strong>${pendingAction}</strong>.</p>
+      <div class="info-box">
+        <p><strong>Giai đoạn:</strong> ${stageLabel}</p>
+        <p><strong>Hạn chót:</strong> ${formattedDeadline}</p>
+        <p><strong>Trạng thái:</strong> ${this.escapeHtml(eventLabel)}</p>
+      </div>
+      <p>${this.escapeHtml(eventMessage)}</p>
+      <p style="text-align: center;"><a href="${safeCtaUrl}" class="button">Truy cập hệ thống</a></p>
+    </div>
+    <div class="footer"><p>Email này được gửi tự động từ hệ thống. Vui lòng không reply email này.</p></div>
+  </div>
+</body>
+</html>`;
+
+    await this.sendEmail({
+      to: payload.to,
+      subject: `[${eventLabel.toUpperCase()}] ${payload.stageLabel} - Hệ thống Quản lý Khóa luận`,
+      html,
+    });
   }
 
   private async sendWithResend(
@@ -210,6 +322,26 @@ export class EmailService {
     }
 
     return { email: from.trim() };
+  }
+
+  private escapeHtml(value: string): string {
+    return value.replace(/[&<>'"]/g, (character) => {
+      const entities: Record<string, string> = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        "'": '&#39;',
+        '"': '&quot;',
+      };
+      return entities[character];
+    });
+  }
+
+  private formatViDateTime(date: Date): string {
+    const pad = (value: number) => String(value).padStart(2, '0');
+    return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${pad(
+      date.getHours(),
+    )}:${pad(date.getMinutes())}`;
   }
 
   async sendVerificationEmail(

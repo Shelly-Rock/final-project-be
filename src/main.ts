@@ -66,7 +66,7 @@ async function bootstrap() {
       'Authorization',
       'X-API-Key',
     ],
-    exposedHeaders: ['Authorization'],
+    exposedHeaders: ['Authorization', 'Content-Disposition'],
     maxAge: 86400,
   });
 

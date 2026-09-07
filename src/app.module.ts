@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ConfigModule } from './core/config/config.module';
 import { PrismaModule } from '@core/database/prisma/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -19,9 +20,13 @@ import { RolesGuard } from './core/auth/guards/roles.guard';
 import { StudentModule } from '@/modules';
 import { RoleModule } from '@/modules/role';
 import { PermissionModule } from '@/modules/permission/permission.module';
+import { GovernanceModule } from '@/modules/governance/governance.module';
+import { AdminConfigModule } from '@/modules/admin-config/admin-config.module';
+import { TopicModule } from '@/modules/topic/topic.module';
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     ConfigModule,
     PrismaModule,
     CoreAuthModule,
@@ -31,6 +36,9 @@ import { PermissionModule } from '@/modules/permission/permission.module';
     StudentModule,
     RoleModule,
     PermissionModule,
+    GovernanceModule,
+    AdminConfigModule,
+    TopicModule,
     RegistrationPeriodModule,
     ProgressTrackingModule,
     SubmissionModule,

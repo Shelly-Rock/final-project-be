@@ -2,8 +2,11 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '@/core/database/prisma/prisma.service';
+import { DeadlinePolicyService } from '@/modules/governance/deadline-policy.service';
+import type { JwtUser } from '@/core/auth/interfaces/currentUser.interface';
 import {
   ReportStatus,
   ProgressStatus,
@@ -22,7 +25,107 @@ import {
 
 @Injectable()
 export class ProgressTrackingService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly deadlinePolicy: DeadlinePolicyService,
+  ) {}
+
+  // ========== Actor resolution (JWT sub -> profile id) ==========
+
+  private async resolveTeacherByUserId(userId: number) {
+    const teacher = await this.prisma.teacher.findFirst({
+      where: { user_id: userId, deleted_at: null },
+      select: { id: true, user_id: true, teacher_id: true, name: true },
+    });
+    if (!teacher) {
+      throw new ForbiddenException('Tài khoản của bạn chưa được gắn với hồ sơ giảng viên.');
+    }
+    return teacher;
+  }
+
+  private async resolveStudentByUserId(userId: number) {
+    const student = await this.prisma.student.findFirst({
+      where: { user_id: userId, deleted_at: null },
+      select: { id: true, user_id: true, student_id: true },
+    });
+    if (!student) {
+      throw new ForbiddenException('Tài khoản của bạn chưa được gắn với hồ sơ sinh viên.');
+    }
+    return student;
+  }
+
+  async createTemplateForActor(user: JwtUser, dto: CreateTemplateDto) {
+    const teacher = await this.resolveTeacherByUserId(user.sub);
+    return this.createTemplate(teacher.id, dto);
+  }
+
+  async createReportForActor(user: JwtUser, dto: CreateReportDto) {
+    const student = await this.resolveStudentByUserId(user.sub);
+    return this.createReport(student.id, dto);
+  }
+
+  async reviewReportForActor(user: JwtUser, reportId: number, dto: ReviewReportDto) {
+    const teacher = await this.resolveTeacherByUserId(user.sub);
+    return this.reviewReport(reportId, teacher.id, dto);
+  }
+
+  // Derive notification recipient profile id from JWT (role-aware).
+  // progress_notifications.recipient_id is a profile id (teacher/student), not users.id.
+  async getNotificationsForActor(user: JwtUser, query: NotificationQueryDto) {
+    const role = (user.role || '').toUpperCase();
+    if (role === 'STUDENT') {
+      const student = await this.resolveStudentByUserId(user.sub);
+      return this.getNotifications(student.id, query);
+    }
+    if (role === 'TEACHER') {
+      const teacher = await this.resolveTeacherByUserId(user.sub);
+      return this.getNotifications(teacher.id, query);
+    }
+    // ADMIN / SECRETARY: fall back to teacher profile if linked, else use users.id
+    // so the notification stream is still scoped to the actor and not forged via query.
+    try {
+      const teacher = await this.resolveTeacherByUserId(user.sub);
+      return this.getNotifications(teacher.id, query);
+    } catch {
+      return this.getNotifications(user.sub, query);
+    }
+  }
+
+  async markAllNotificationsAsReadForActor(user: JwtUser) {
+    const role = (user.role || '').toUpperCase();
+    if (role === 'STUDENT') {
+      const student = await this.resolveStudentByUserId(user.sub);
+      return this.markAllNotificationsAsRead(student.id);
+    }
+    if (role === 'TEACHER') {
+      const teacher = await this.resolveTeacherByUserId(user.sub);
+      return this.markAllNotificationsAsRead(teacher.id);
+    }
+    try {
+      const teacher = await this.resolveTeacherByUserId(user.sub);
+      return this.markAllNotificationsAsRead(teacher.id);
+    } catch {
+      return this.markAllNotificationsAsRead(user.sub);
+    }
+  }
+
+  async getUnreadNotificationCountForActor(user: JwtUser) {
+    const role = (user.role || '').toUpperCase();
+    if (role === 'STUDENT') {
+      const student = await this.resolveStudentByUserId(user.sub);
+      return this.getUnreadNotificationCount(student.id);
+    }
+    if (role === 'TEACHER') {
+      const teacher = await this.resolveTeacherByUserId(user.sub);
+      return this.getUnreadNotificationCount(teacher.id);
+    }
+    try {
+      const teacher = await this.resolveTeacherByUserId(user.sub);
+      return this.getUnreadNotificationCount(teacher.id);
+    } catch {
+      return this.getUnreadNotificationCount(user.sub);
+    }
+  }
 
   // ========== Template Methods ==========
 
@@ -97,13 +200,24 @@ export class ProgressTrackingService {
       throw new BadRequestException('Report for this month already submitted');
     }
 
-    // Get project info for teacher_id
+    // Get project info for teacher_id + period (for deadline gate)
     const project = await this.prisma.project.findUnique({
       where: { student_id: studentId },
-    });
+      include: { topics: { select: { period_id: true } } },
+    }) as any;
 
     if (!project) {
       throw new BadRequestException('Student has no project');
+    }
+
+    // Enforce PERIODIC_REPORT deadline when the project is linked to a period
+    let reportDeadlineId: number | null = null;
+    let reportPeriodId: number | null = null;
+    const periodId: number | null = project.topics?.period_id ?? null;
+    if (periodId) {
+      const openDeadline = await this.deadlinePolicy.assertReportOpen(periodId);
+      reportDeadlineId = openDeadline?.id ?? null;
+      reportPeriodId = periodId;
     }
 
     const report = await this.prisma.progress_reports.create({
@@ -111,8 +225,10 @@ export class ProgressTrackingService {
         ...dto,
         student_id: studentId,
         teacher_id: project.teacher_id,
+        period_id: reportPeriodId,
+        deadline_id: reportDeadlineId,
         updated_at: new Date(),
-      },
+      } as any,
     });
 
     // Update student progress
