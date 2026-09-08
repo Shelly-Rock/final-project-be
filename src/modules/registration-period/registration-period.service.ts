@@ -5,6 +5,9 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../core/database/prisma/prisma.service';
 import {
+  AlertEvent,
+  AlertRecipientRole,
+  DeadlineType,
   RegistrationPeriodStatus,
   TeacherQuotaStatus,
   TopicStatus,
@@ -15,10 +18,16 @@ import {
   UpdateTeacherQuotaDto,
   UpdateRegistrationPeriodDto,
 } from './dto';
+import { DeadlinePolicyService } from '@modules/governance/deadline-policy.service';
+import { AlertDispatchService } from '@modules/admin-config/alert-dispatch.service';
 
 @Injectable()
 export class RegistrationPeriodService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly deadlinePolicy: DeadlinePolicyService,
+    private readonly alertDispatchService: AlertDispatchService,
+  ) {}
 
   async create(dto: CreateRegistrationPeriodDto) {
     return this.prisma.registration_periods.create({
@@ -146,59 +155,98 @@ export class RegistrationPeriodService {
     teacherId: number,
     dto: UpdateTeacherQuotaDto,
   ) {
-    const quota = await this.prisma.teacher_quotas.findFirst({
-      where: { period_id: periodId, teacher_id: teacherId },
-    });
+    const [config, teacher] = await Promise.all([
+      this.deadlinePolicy.ensureGovernanceConfig(periodId),
+      this.prisma.teacher.findFirst({
+        where: { id: teacherId, deleted_at: null },
+        select: { id: true },
+      }),
+    ]);
 
-    if (!quota)
+    if (!teacher) {
       throw new NotFoundException(
-        'Không tìm thấy chỉ tiêu của giảng viên này trong đợt',
+        'Không tìm thấy giảng viên cần cập nhật chỉ tiêu.',
       );
-    const newStatus =
-      quota.submitted_topics >= dto.assignedQuota
+    }
+    if (dto.assignedQuota > config.max_topic_limit) {
+      throw new BadRequestException(
+        `Vượt quá trần chỉ tiêu cho phép của đợt (${config.max_topic_limit}).`,
+      );
+    }
+
+    const submittedTopics = await this.prisma.topics.count({
+      where: {
+        period_id: periodId,
+        teacher_id: teacherId,
+        status: { not: TopicStatus.REJECTED },
+      },
+    });
+    const status =
+      submittedTopics >= dto.assignedQuota
         ? TeacherQuotaStatus.SUFFICIENT
         : TeacherQuotaStatus.INSUFFICIENT;
 
-    const period = await this.findOne(periodId);
-    let deptMaxStudents = 3;
-
-    if (
-      period.department_student_limits &&
-      Array.isArray(period.department_student_limits)
-    ) {
-      deptMaxStudents = 3;
-    }
-
-    return this.prisma.teacher_quotas.update({
-      where: { id: quota.id },
-      data: {
+    return this.prisma.teacher_quotas.upsert({
+      where: {
+        period_id_teacher_id: {
+          period_id: periodId,
+          teacher_id: teacherId,
+        },
+      },
+      update: {
         assigned_quota: dto.assignedQuota,
-        max_students: dto.assignedQuota * deptMaxStudents,
-        status: newStatus,
+        submitted_topics: submittedTopics,
+        max_students:
+          dto.assignedQuota * config.max_students_per_topic,
+        status,
+        is_override: true,
+      },
+      create: {
+        period_id: periodId,
+        teacher_id: teacherId,
+        assigned_quota: dto.assignedQuota,
+        submitted_topics: submittedTopics,
+        max_students:
+          dto.assignedQuota * config.max_students_per_topic,
+        status,
+        is_override: true,
       },
     });
   }
 
   async notifyInsufficientTeachers(periodId: number) {
-    const insufficientQuotas = await this.prisma.teacher_quotas.findMany({
-      where: {
-        period_id: periodId,
-        status: TeacherQuotaStatus.INSUFFICIENT,
-      },
-    });
+    const deadline = await this.deadlinePolicy.getDeadline(
+      periodId,
+      DeadlineType.TOPIC_CREATION,
+    );
+    if (!deadline) {
+      throw new NotFoundException(
+        'Đợt chưa được cấu hình deadline tạo đề tài.',
+      );
+    }
 
-    await this.prisma.teacher_quotas.updateMany({
-      where: {
-        period_id: periodId,
-        status: TeacherQuotaStatus.INSUFFICIENT,
-      },
-      data: { last_notified_at: new Date() },
-    });
+    const recipients = await this.alertDispatchService.resolveRecipients(
+      deadline,
+      AlertRecipientRole.TEACHER,
+    );
+    const result = await this.alertDispatchService.sendBatch(
+      deadline,
+      AlertEvent.DUE_IN_1_DAY,
+      recipients,
+    );
 
-    return {
-      message: `Đã gửi nhắc nhở cho ${insufficientQuotas.length} giảng viên chưa đủ chỉ tiêu.`,
-      notifiedCount: insufficientQuotas.length,
-    };
+    if (result.sent > 0) {
+      const notifiedTeacherIds = recipients.map((recipient) => recipient.id);
+      await this.prisma.teacher_quotas.updateMany({
+        where: {
+          period_id: periodId,
+          teacher_id: { in: notifiedTeacherIds },
+        },
+        data: { last_notified_at: new Date() },
+      });
+    }
+
+    return result;
   }
 
   // Lấy thống kê tổng quan của đợt

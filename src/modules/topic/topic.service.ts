@@ -124,7 +124,9 @@ export class TopicService {
     const page = query.page || 1;
     const limit = query.limit || 20;
 
-    const [topics, total, statusCounts] = await Promise.all([
+    // Facets khoa / bộ môn / GVHD phải ổn định theo TOÀN ĐỢT, không suy ra từ
+    // vài dòng của trang hiện tại — nếu không, đang lọc trang 2 sẽ mất lựa chọn.
+    const [topics, total, statusCounts, periodTeachers] = await Promise.all([
       this.prisma.topics.findMany({
         where,
         include: MANAGE_INCLUDE,
@@ -138,9 +140,44 @@ export class TopicService {
         where: { period_id: periodId },
         _count: { _all: true },
       }),
+      this.prisma.teacher.findMany({
+        where: {
+          deleted_at: null,
+          topics: { some: { period_id: periodId } },
+        },
+        select: {
+          id: true,
+          teacher_id: true,
+          name: true,
+          faculty_id: true,
+          department_id: true,
+          faculty: { select: { name: true } },
+          department: { select: { name: true } },
+        },
+        orderBy: { name: 'asc' },
+      }),
     ]);
 
     const rows = topics.map((topic) => this.mapManagedRow(topic));
+
+    const faculties = new Map<string, string>();
+    const departments = new Map<string, { id: string; name: string; facultyId: string | null }>();
+    for (const teacher of periodTeachers) {
+      if (teacher.faculty_id) {
+        faculties.set(teacher.faculty_id, teacher.faculty?.name ?? teacher.faculty_id);
+      }
+      // Bộ môn chỉ liệt kê trong phạm vi khoa đang lọc (cascade).
+      if (
+        teacher.department_id &&
+        (!query.facultyId || teacher.faculty_id === query.facultyId)
+      ) {
+        departments.set(teacher.department_id, {
+          id: teacher.department_id,
+          name: teacher.department?.name ?? teacher.department_id,
+          facultyId: teacher.faculty_id,
+        });
+      }
+    }
 
     return {
       ...paginate(rows, total, page, limit),
@@ -155,6 +192,19 @@ export class TopicService {
                 ._all ?? 0,
           }),
         ),
+        faculties: [...faculties.entries()].map(([id, name]) => ({ id, name })),
+        departments: [...departments.values()],
+        teachers: periodTeachers
+          .filter(
+            (teacher) =>
+              (!query.facultyId || teacher.faculty_id === query.facultyId) &&
+              (!query.departmentId || teacher.department_id === query.departmentId),
+          )
+          .map((teacher) => ({
+            id: teacher.id,
+            teacherId: teacher.teacher_id,
+            name: teacher.name,
+          })),
       },
     };
   }
@@ -601,12 +651,17 @@ export class TopicService {
           );
         }
 
-        // Chỉ tiêu của GV mới phải còn trống, và không vượt trần của đợt.
-        await this.deadlinePolicy.assertTopicWritable(
+        // Force-edit được phép sau hạn tạo đề tài. Khi đổi GVHD chỉ kiểm
+        // chỉ tiêu của giảng viên mới, không kiểm lại TOPIC_CREATION.
+        const quota = await this.deadlinePolicy.getEffectiveQuota(
           topic.period_id,
           dto.teacherId,
-          { checkQuota: true },
         );
+        if (quota.remainingTopics <= 0) {
+          throw new ForbiddenException(
+            `Giảng viên ${teacher.name} đã sử dụng hết chỉ tiêu ${quota.assignedQuota} đề tài trong đợt này.`,
+          );
+        }
         data.teachers = { connect: { id: dto.teacherId } };
       }
 
@@ -629,9 +684,15 @@ export class TopicService {
       const updated = await tx.topics.update({
         where: { id: topicId },
         data,
-        include: {
-          registration_periods: { select: { id: true, name: true } },
-          teachers: { select: { id: true, name: true } },
+        select: {
+          name: true,
+          description: true,
+          max_students: true,
+          teacher_id: true,
+          status: true,
+          locked_at: true,
+          moderator_note: true,
+          rejection_reason: true,
         },
       });
 
@@ -641,14 +702,8 @@ export class TopicService {
       );
 
       const after = {
-        name: updated.name,
-        description: updated.description,
-        max_students: updated.max_students,
-        teacher_id: updated.teacher_id,
-        status: updated.status,
+        ...updated,
         locked_at: updated.locked_at?.toISOString() ?? null,
-        moderator_note: updated.moderator_note,
-        rejection_reason: updated.rejection_reason,
         registered_students: registeredStudents,
       };
 
@@ -663,16 +718,23 @@ export class TopicService {
         },
       });
 
-      await this.syncTeacherQuotaCounter(
-        tx,
-        topic.period_id,
-        updated.teacher_id,
-      );
+      // Đổi GVHD ảnh hưởng chỉ tiêu của cả hai giảng viên.
+      await this.syncTeacherQuotaCounter(tx, topic.period_id, updated.teacher_id);
+      if (topic.teacher_id !== updated.teacher_id) {
+        await this.syncTeacherQuotaCounter(tx, topic.period_id, topic.teacher_id);
+      }
 
-      return this.mapManagedRow({
-        ...updated,
-        projects: [],
-      } as unknown as ManagedTopic);
+      // Tải lại đúng bộ quan hệ mà mapManagedRow() cần — counter đã recompute
+      // xong, nên response phản ánh sĩ số và danh sách SV sau force-edit.
+      const managedTopic = await tx.topics.findUnique({
+        where: { id: topicId },
+        include: MANAGE_INCLUDE,
+      });
+      if (!managedTopic) {
+        throw new NotFoundException(`Không tìm thấy đề tài có id ${topicId}`);
+      }
+
+      return this.mapManagedRow(managedTopic);
     });
   }
 
