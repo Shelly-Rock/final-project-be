@@ -66,6 +66,7 @@ model User {
   user_roles                 UserRole[]
   // Quan hệ ngược cho mảng quản trị đề tài (actor luôn lấy từ JWT, không nhận từ body).
   topic_audits               topic_audits[]
+  audit_logs                 audit_logs[]
   assigned_projects          Project[]                   @relation("ProjectAssignedBy")
   decided_projects           Project[]                   @relation("ProjectDecidedBy")
   updated_governance_configs period_governance_configs[] @relation("GovernanceConfigUpdatedBy")
@@ -632,6 +633,24 @@ model topic_audits {
   @@map("topic_audits")
 }
 
+model audit_logs {
+  id            Int             @id @default(autoincrement())
+  actor_user_id Int
+  action        AuditAction
+  entity_type   AuditEntityType
+  entity_id     Int
+  before_data   Json?
+  after_data    Json?
+  reason        String?
+  created_at    DateTime        @default(now())
+  actor         User            @relation(fields: [actor_user_id], references: [id], onDelete: Restrict)
+
+  @@index([entity_type, entity_id, created_at])
+  @@index([actor_user_id])
+  @@index([created_at])
+  @@map("audit_logs")
+}
+
 model topic_code_sequences {
   period_id Int
   dept_code String               @db.VarChar(30)
@@ -756,6 +775,22 @@ enum TopicAuditAction {
   REGISTRATION_APPROVE
   REGISTRATION_REJECT
   DELETE
+}
+
+enum AuditEntityType {
+  ROLE
+  USER
+  PROJECT
+  REPORT
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  ASSIGN
+  APPROVE
+  REJECT
 }
 
 enum ScoringStatus {

@@ -101,7 +101,12 @@ export class CreateTopicDto {
   maxStudents: number;
 }
 
-export class UpdateTopicDto extends PartialType(CreateTopicDto) {}
+export class UpdateTopicDto extends PartialType(CreateTopicDto) {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  locked?: boolean;
+}
 
 export class ManualAssignDto {
   @ApiProperty()

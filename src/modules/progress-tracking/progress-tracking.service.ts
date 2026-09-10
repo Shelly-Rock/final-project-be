@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '@/core/database/prisma/prisma.service';
 import { DeadlinePolicyService } from '@/modules/governance/deadline-policy.service';
+import { AuditService } from '@/modules/audit/audit.service';
+import { AuditAction, AuditEntityType } from '@prisma/client';
 import type { JwtUser } from '@/core/auth/interfaces/currentUser.interface';
 import {
   ReportStatus,
@@ -28,6 +30,7 @@ export class ProgressTrackingService {
   constructor(
     private prisma: PrismaService,
     private readonly deadlinePolicy: DeadlinePolicyService,
+    private readonly audit: AuditService,
   ) {}
 
   // ========== Actor resolution (JWT sub -> profile id) ==========
@@ -66,7 +69,7 @@ export class ProgressTrackingService {
 
   async reviewReportForActor(user: JwtUser, reportId: number, dto: ReviewReportDto) {
     const teacher = await this.resolveTeacherByUserId(user.sub);
-    return this.reviewReport(reportId, teacher.id, dto);
+    return this.reviewReport(reportId, teacher.id, dto, user.sub);
   }
 
   // Derive notification recipient profile id from JWT (role-aware).
@@ -319,12 +322,20 @@ export class ProgressTrackingService {
     };
   }
 
-  async reviewReport(reportId: number, reviewerId: number, dto: ReviewReportDto) {
+  async reviewReport(reportId: number, reviewerId: number, dto: ReviewReportDto, actorUserId: number) {
     const report = await this.prisma.progress_reports.findFirst({
       where: { id: reportId },
     });
 
     if (!report) throw new NotFoundException('Report not found');
+
+    const beforeData = {
+      status: report.status,
+      feedback: report.feedback,
+      score: report.score,
+      reviewed_by: report.reviewed_by,
+      reviewed_at: report.reviewed_at?.toISOString() ?? null,
+    };
 
     const updatedReport = await this.prisma.progress_reports.update({
       where: { id: reportId },
@@ -335,6 +346,24 @@ export class ProgressTrackingService {
         reviewed_by: reviewerId,
         reviewed_at: new Date(),
       },
+    });
+
+    const afterData = {
+      status: updatedReport.status,
+      feedback: updatedReport.feedback,
+      score: updatedReport.score,
+      reviewed_by: updatedReport.reviewed_by,
+      reviewed_at: updatedReport.reviewed_at?.toISOString() ?? null,
+    };
+
+    await this.audit.writeAudit(this.prisma, {
+      actor_user_id: actorUserId,
+      action: AuditAction.UPDATE,
+      entity_type: AuditEntityType.REPORT,
+      entity_id: reportId,
+      before_data: beforeData,
+      after_data: afterData,
+      reason: dto.feedback ? `Review: ${dto.feedback.substring(0, 100)}` : 'Report reviewed',
     });
 
     // Send notification to student

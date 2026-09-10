@@ -1,64 +1,25 @@
-import {
-  IsString,
-  IsNotEmpty,
-  ArrayMinSize,
-  ValidateNested,
-  IsInt,
-  IsDateString,
-  IsEnum,
-  IsArray,
-  IsOptional,
-  IsObject,
-} from 'class-validator';
-import { Type } from 'class-transformer';
-import { Gender } from '@prisma/client';
+import { IsString, IsNotEmpty, IsEmail, IsArray, IsInt, IsOptional, MinLength } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateUserReqDTO {
+  @ApiProperty({ example: 'john.doe', description: 'Username duy nhất' })
   @IsString()
   @IsNotEmpty()
-  studentId: string;
+  username: string;
 
-  @IsString()
+  @ApiProperty({ example: 'john.doe@example.com', description: 'Email duy nhất' })
+  @IsEmail()
   @IsNotEmpty()
-  firstName: string;
+  email: string;
 
+  @ApiProperty({ example: 'password123', description: 'Mật khẩu (tối thiểu 6 ký tự)', minLength: 6 })
   @IsString()
-  @IsNotEmpty()
-  middleName: string;
+  @MinLength(6)
+  password: string;
 
-  @IsString()
-  @IsNotEmpty()
-  lastName: string;
-
-  @IsDateString()
-  dateOfBirth: string;
-
-  @IsEnum(Gender)
-  gender: Gender;
-
-  @IsString()
-  @IsNotEmpty()
-  className: string;
-
-  @IsString()
-  @IsNotEmpty()
-  major: string;
-
-  @IsInt()
-  courseYear: number;
-
-  @IsString()
-  @IsNotEmpty()
-  academicYear: string;
-
+  @ApiProperty({ example: [1, 2], description: 'Mảng role IDs cần gán cho user', type: [Number], required: false })
   @IsOptional()
-  @IsObject()
-  extraData?: Record<string, unknown>;
-}
-export class CreateUsersReqDTO {
   @IsArray()
-  @ArrayMinSize(1)
-  @ValidateNested({ each: true })
-  @Type(() => CreateUserReqDTO)
-  users: CreateUserReqDTO[];
+  @IsInt({ each: true })
+  role_ids?: number[];
 }
