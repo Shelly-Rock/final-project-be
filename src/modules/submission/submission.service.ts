@@ -5,6 +5,8 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '@/core/database/prisma/prisma.service';
+import { DeadlinePolicyService } from '@/modules/governance/deadline-policy.service';
+import type { JwtUser } from '@/core/auth/interfaces/currentUser.interface';
 import {
   SubmissionStatus,
   SubmissionType,
@@ -15,7 +17,54 @@ import {
 
 @Injectable()
 export class SubmissionService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly deadlinePolicy: DeadlinePolicyService,
+  ) {}
+
+  // ========== Actor resolution (JWT sub -> profile id) ==========
+
+  private async resolveTeacherByUserId(userId: number) {
+    const teacher = await this.prisma.teacher.findFirst({
+      where: { user_id: userId, deleted_at: null },
+      select: { id: true, user_id: true, teacher_id: true, name: true },
+    });
+    if (!teacher) {
+      throw new ForbiddenException(
+        'Tài khoản của bạn chưa được gắn với hồ sơ giảng viên.',
+      );
+    }
+    return teacher;
+  }
+
+  private async resolveStudentByUserId(userId: number) {
+    const student = await this.prisma.student.findFirst({
+      where: { user_id: userId, deleted_at: null },
+      select: { id: true, user_id: true, student_id: true },
+    });
+    if (!student) {
+      throw new ForbiddenException(
+        'Tài khoản của bạn chưa được gắn với hồ sơ sinh viên.',
+      );
+    }
+    return student;
+  }
+
+  // student_id luôn suy ra từ JWT — không tin giá trị gửi lên từ body.
+  async createSubmissionForActor(user: JwtUser, dto: CreateSubmissionDto) {
+    const student = await this.resolveStudentByUserId(user.sub);
+    return this.createSubmission({ ...dto, student_id: student.id });
+  }
+
+  // final_submissions.reviewed_by là profile id của giảng viên (Teacher.id).
+  async reviewSubmissionForActor(
+    user: JwtUser,
+    submissionId: number,
+    dto: ReviewSubmissionDto,
+  ) {
+    const teacher = await this.resolveTeacherByUserId(user.sub);
+    return this.reviewSubmission(submissionId, teacher.id, dto);
+  }
 
   // Validate file name format: [ProjectCode].extension
   private validateFileName(fileName: string): { projectCode: string; extension: string } {
@@ -53,10 +102,10 @@ export class SubmissionService {
     const fileType = this.getFileType(extension);
 
     // Verify project exists
-    const project = await this.prisma.project.findUnique({
+    const project = (await this.prisma.project.findUnique({
       where: { id: dto.project_id },
-      include: { student: true },
-    });
+      include: { student: true, topics: { select: { period_id: true } } },
+    })) as any;
 
     if (!project) {
       throw new NotFoundException('Đề tài không tồn tại');
@@ -72,6 +121,12 @@ export class SubmissionService {
       throw new BadRequestException(
         `Mã đề tài trong tên file (${projectCode}) không khớp với mã đề tài thực tế (${project.project_id})`,
       );
+    }
+
+    // Enforce FINAL_SUBMISSION deadline when the project is linked to a period
+    const periodId: number | null = project.topics?.period_id ?? null;
+    if (periodId) {
+      await this.deadlinePolicy.assertFinalSubmissionOpen(periodId);
     }
 
     // Check if student has permission to submit

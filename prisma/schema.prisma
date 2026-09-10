@@ -49,21 +49,27 @@ model RolePermission {
 }
 
 model User {
-  email                     String                      @unique
-  created_at                DateTime                    @default(now())
-  deleted_at                DateTime?
-  email_verified_at         DateTime?
-  is_active                 Boolean                     @default(true)
-  password_hash             String
-  updated_at                DateTime                    @updatedAt
-  username                  String                      @unique
-  id                        Int                         @id @default(autoincrement())
-  must_change_password      Boolean                     @default(true)
-  email_verification_tokens email_verification_tokens[]
-  secretary                 Secretary?
-  student                   Student?
-  teacher                   Teacher?
-  user_roles                UserRole[]
+  email                      String                      @unique
+  created_at                 DateTime                    @default(now())
+  deleted_at                 DateTime?
+  email_verified_at          DateTime?
+  is_active                  Boolean                     @default(true)
+  password_hash              String
+  updated_at                 DateTime                    @updatedAt
+  username                   String                      @unique
+  id                         Int                         @id @default(autoincrement())
+  must_change_password       Boolean                     @default(true)
+  email_verification_tokens  email_verification_tokens[]
+  secretary                  Secretary?
+  student                    Student?
+  teacher                    Teacher?
+  user_roles                 UserRole[]
+  // Quan hệ ngược cho mảng quản trị đề tài (actor luôn lấy từ JWT, không nhận từ body).
+  topic_audits               topic_audits[]
+  audit_logs                 audit_logs[]
+  assigned_projects          Project[]                   @relation("ProjectAssignedBy")
+  decided_projects           Project[]                   @relation("ProjectDecidedBy")
+  updated_governance_configs period_governance_configs[] @relation("GovernanceConfigUpdatedBy")
 
   @@map("users")
 }
@@ -185,7 +191,16 @@ model Project {
   created_at               DateTime                   @default(now())
   updated_at               DateTime                   @updatedAt
   deleted_at               DateTime?
-  topic_id                 Int?                       @unique
+  // Một đề tài có thể phục vụ nhiều sinh viên: topic_id KHÔNG còn unique.
+  // Mỗi sinh viên vẫn chỉ có một Project (student_id @unique).
+  topic_id                 Int?
+  status                   ProjectStatus              @default(APPROVED)
+  deadline_id              Int?
+  assigned_by_user_id      Int?
+  assign_reason            String?
+  decided_by_user_id       Int?
+  teacher_decided_at       DateTime?
+  moderator_note           String?
   defense_session_projects defense_session_projects[]
   final_submissions        final_submissions?
   independent_scores       independent_scores[]
@@ -193,8 +208,16 @@ model Project {
   teacher                  Teacher                    @relation(fields: [teacher_id], references: [id])
   topics                   topics?                    @relation(fields: [topic_id], references: [id])
   scoring_results          scoring_results?
+  deadline                 period_deadlines?          @relation(fields: [deadline_id], references: [id])
+  assigned_by              User?                      @relation("ProjectAssignedBy", fields: [assigned_by_user_id], references: [id])
+  decided_by               User?                      @relation("ProjectDecidedBy", fields: [decided_by_user_id], references: [id])
 
+  // Nhiều sinh viên cùng một đề tài (topic_id không còn unique) nhưng không
+  // được đăng ký lặp lại chính đề tài đó.
+  @@unique([topic_id, student_id])
   @@index([teacher_id])
+  @@index([topic_id])
+  @@index([status])
   @@map("projects")
 }
 
@@ -391,6 +414,7 @@ model progress_reports {
   month                Int
   year                 Int
   period_id            Int?
+  deadline_id          Int?
   status               ReportStatus          @default(PENDING)
   feedback             String?
   score                Int?
@@ -398,33 +422,40 @@ model progress_reports {
   teacher_id           Int
   reviewed_by          Int?
   reviewed_at          DateTime?
+  missing_marked_at    DateTime?
   created_at           DateTime              @default(now())
   updated_at           DateTime
   deleted_at           DateTime?
   registration_periods registration_periods? @relation(fields: [period_id], references: [id])
+  deadline             period_deadlines?     @relation(fields: [deadline_id], references: [id], onDelete: SetNull)
 
+  @@unique([student_id, deadline_id])
   @@index([period_id])
   @@index([student_id])
   @@index([teacher_id])
+  @@index([deadline_id])
 }
 
 model registration_periods {
-  id                        Int                      @id @default(autoincrement())
-  name                      String                   @db.VarChar(255)
-  semester                  String                   @db.VarChar(10)
-  school_year               String                   @db.VarChar(20)
-  start_date                DateTime                 @db.Date
-  teacher_deadline          DateTime                 @db.Date
-  student_deadline          DateTime                 @db.Date
+  id                        Int                        @id @default(autoincrement())
+  name                      String                     @db.VarChar(255)
+  semester                  String                     @db.VarChar(10)
+  school_year               String                     @db.VarChar(20)
+  start_date                DateTime                   @db.Date
+  // Giữ hai cột này để tương thích API cũ; period_deadlines mới là nguồn chính.
+  teacher_deadline          DateTime
+  student_deadline          DateTime
   default_quota             Int
-  status                    RegistrationPeriodStatus @default(UPCOMING)
+  status                    RegistrationPeriodStatus   @default(UPCOMING)
   description               String?
   department_student_limits Json?
-  created_at                DateTime                 @default(now())
+  created_at                DateTime                   @default(now())
   updated_at                DateTime
   progress_reports          progress_reports[]
   teacher_quotas            teacher_quotas[]
   topics                    topics[]
+  governance_config         period_governance_configs?
+  topic_code_sequences      topic_code_sequences[]
 }
 
 model report_templates {
@@ -489,15 +520,20 @@ model teacher_quotas {
   submitted_topics     Int                  @default(0)
   max_students         Int
   status               TeacherQuotaStatus   @default(INSUFFICIENT)
+  is_override          Boolean              @default(false)
   last_notified_at     DateTime?
   registration_periods registration_periods @relation(fields: [period_id], references: [id], onDelete: Cascade)
   teachers             Teacher              @relation(fields: [teacher_id], references: [id])
+
+  @@unique([period_id, teacher_id])
+  @@index([teacher_id])
 }
 
 model topics {
   id                   Int                  @id @default(autoincrement())
   period_id            Int
   teacher_id           Int
+  code                 String?              @unique @db.VarChar(80)
   name                 String               @db.VarChar(255)
   description          String
   max_students         Int
@@ -505,12 +541,124 @@ model topics {
   status               TopicStatus          @default(PENDING)
   moderator_note       String?
   rejection_reason     String?
+  is_supplemental      Boolean              @default(false)
+  supplemental_reason  String?
+  locked_at            DateTime?
   created_at           DateTime             @default(now())
   updated_at           DateTime
   exception_requests   exception_requests[]
-  projects             Project?
+  projects             Project[]
+  audits               topic_audits[]
   registration_periods registration_periods @relation(fields: [period_id], references: [id], onDelete: Cascade)
   teachers             Teacher              @relation(fields: [teacher_id], references: [id])
+
+  @@index([period_id, status])
+  @@index([teacher_id])
+}
+
+model period_governance_configs {
+  id                     Int                  @id @default(autoincrement())
+  period_id              Int                  @unique
+  default_topic_limit    Int                  @default(3)
+  max_topic_limit        Int                  @default(10)
+  max_students_per_topic Int                  @default(3)
+  alerts_enabled         Boolean              @default(true)
+  alert_offsets_days     Json                 @default("[3,1,0]")
+  last_alert_run_at      DateTime?
+  updated_by_user_id     Int?
+  created_at             DateTime             @default(now())
+  updated_at             DateTime             @updatedAt
+  period                 registration_periods @relation(fields: [period_id], references: [id], onDelete: Cascade)
+  updated_by             User?                @relation("GovernanceConfigUpdatedBy", fields: [updated_by_user_id], references: [id], onDelete: SetNull)
+  // Deadline dùng period_id làm FK trực tiếp đến period_id unique của config.
+  deadlines              period_deadlines[]   @relation("GovernanceConfigDeadlines")
+
+  @@map("period_governance_configs")
+}
+
+model period_deadlines {
+  id               Int                       @id @default(autoincrement())
+  period_id        Int
+  type             DeadlineType
+  seq              Int                       @default(1)
+  label            String                    @db.VarChar(255)
+  deadline_at      DateTime
+  enabled          Boolean                   @default(true)
+  created_at       DateTime                  @default(now())
+  updated_at       DateTime                  @updatedAt
+  config           period_governance_configs @relation("GovernanceConfigDeadlines", fields: [period_id], references: [period_id], onDelete: Cascade)
+  alerts           deadline_alert_logs[]
+  projects         Project[]
+  progress_reports progress_reports[]
+
+  @@unique([period_id, type, seq])
+  @@index([deadline_at])
+  @@map("period_deadlines")
+}
+
+model deadline_alert_logs {
+  id              Int                @id @default(autoincrement())
+  deadline_id     Int
+  event           AlertEvent
+  recipient_role  AlertRecipientRole
+  recipient_id    Int
+  recipient_email String             @db.VarChar(255)
+  status          AlertStatus        @default(PROCESSING)
+  error           String?
+  attempt_count   Int                @default(1)
+  claimed_at      DateTime           @default(now())
+  sent_at         DateTime?
+  updated_at      DateTime           @updatedAt
+  deadline        period_deadlines   @relation(fields: [deadline_id], references: [id], onDelete: Cascade)
+
+  @@unique([deadline_id, event, recipient_role, recipient_id])
+  @@index([status])
+  @@map("deadline_alert_logs")
+}
+
+model topic_audits {
+  id            Int              @id @default(autoincrement())
+  topic_id      Int
+  action        TopicAuditAction
+  before_data   Json?
+  after_data    Json?
+  reason        String
+  actor_user_id Int
+  created_at    DateTime         @default(now())
+  topic         topics           @relation(fields: [topic_id], references: [id], onDelete: Cascade)
+  actor         User             @relation(fields: [actor_user_id], references: [id], onDelete: Restrict)
+
+  @@index([topic_id, created_at])
+  @@index([actor_user_id])
+  @@map("topic_audits")
+}
+
+model audit_logs {
+  id            Int             @id @default(autoincrement())
+  actor_user_id Int
+  action        AuditAction
+  entity_type   AuditEntityType
+  entity_id     Int
+  before_data   Json?
+  after_data    Json?
+  reason        String?
+  created_at    DateTime        @default(now())
+  actor         User            @relation(fields: [actor_user_id], references: [id], onDelete: Restrict)
+
+  @@index([entity_type, entity_id, created_at])
+  @@index([actor_user_id])
+  @@index([created_at])
+  @@map("audit_logs")
+}
+
+model topic_code_sequences {
+  period_id Int
+  dept_code String               @db.VarChar(30)
+  next_seq  Int                  @default(1)
+  period    registration_periods @relation(fields: [period_id], references: [id], onDelete: Cascade)
+
+  @@id([period_id, dept_code])
+  @@map("topic_code_sequences")
 }
 
 enum TeacherStatus {
@@ -578,6 +726,71 @@ enum ReportStatus {
   APPROVED
   REJECTED
   REVISION_REQUESTED
+  MISSING
+}
+
+enum DeadlineType {
+  TOPIC_CREATION
+  STUDENT_REGISTRATION
+  TEACHER_APPROVAL
+  PERIODIC_REPORT
+  FINAL_SUBMISSION
+}
+
+enum AlertEvent {
+  DUE_IN_3_DAYS
+  DUE_IN_1_DAY
+  EXPIRED
+}
+
+enum AlertRecipientRole {
+  TEACHER
+  STUDENT
+  SECRETARY
+}
+
+enum AlertStatus {
+  PROCESSING
+  SENT
+  FAILED
+}
+
+enum ProjectStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  WAITING_SECRETARY
+  ASSIGNED
+}
+
+enum TopicAuditAction {
+  FORCE_UPDATE
+  BULK_APPROVE
+  BULK_REJECT
+  MANUAL_ASSIGN
+  SUPPLEMENTAL_CREATE
+  CODE_GENERATE
+  CREATE
+  UPDATE
+  REGISTRATION_APPROVE
+  REGISTRATION_REJECT
+  DELETE
+}
+
+enum AuditEntityType {
+  ROLE
+  USER
+  PROJECT
+  REPORT
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  ASSIGN
+  APPROVE
+  REJECT
 }
 
 enum ScoringStatus {

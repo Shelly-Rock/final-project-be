@@ -32,6 +32,7 @@ import {
 import { JwtAuthGuard } from '@/core/auth/guards/jwtAuth.guard';
 import { RolesGuard } from '@/core/auth/guards/roles.guard';
 import { Roles } from '@/core/auth/decorators/roles.decorator';
+import { CurrentUser } from '@/core/auth/decorators/currentUser.decorator';
 
 @ApiTags('Roles')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -44,8 +45,11 @@ export class RoleController {
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Tạo mới một role' })
   @ApiCreatedResponse({ type: RoleResponseDto, description: 'Role đã được tạo thành công' })
-  async create(@Body() createRoleDto: CreateRoleDto) {
-    const role = await this.roleService.create(createRoleDto);
+  async create(
+    @Body() createRoleDto: CreateRoleDto,
+    @CurrentUser('sub') actorUserId: number,
+  ) {
+    const role = await this.roleService.create(createRoleDto, actorUserId);
     return {
       success: true,
       message: 'Tạo role thành công',
@@ -123,8 +127,13 @@ export class RoleController {
   async assignUserRoles(
     @Param('userId', ParseIntPipe) userId: number,
     @Body() dto: AssignUserRolesDto,
+    @CurrentUser('sub') actorUserId: number,
   ) {
-    const roles = await this.roleService.assignUserRoles(userId, dto.role_ids);
+    const roles = await this.roleService.assignUserRoles(
+      userId,
+      dto.role_ids,
+      actorUserId,
+    );
     return {
       success: true,
       message: 'Gán roles cho user thành công',
@@ -180,8 +189,9 @@ export class RoleController {
   async update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateRoleDto: UpdateRoleDto,
+    @CurrentUser('sub') actorUserId: number,
   ) {
-    const role = await this.roleService.update(id, updateRoleDto);
+    const role = await this.roleService.update(id, updateRoleDto, actorUserId);
     return {
       success: true,
       message: 'Cập nhật role thành công',
@@ -198,8 +208,13 @@ export class RoleController {
   async assignPermissions(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateRolePermissionsDto,
+    @CurrentUser('sub') actorUserId: number,
   ) {
-    const role = await this.roleService.assignPermissions(id, dto.permission_ids);
+    const role = await this.roleService.assignPermissions(
+      id,
+      dto.permission_ids,
+      actorUserId,
+    );
     return {
       success: true,
       message: 'Gán permissions thành công',
@@ -216,10 +231,11 @@ export class RoleController {
   @ApiOkResponse({ description: 'Role đã được xóa' })
   async remove(
     @Param('id', ParseIntPipe) id: number,
+    @CurrentUser('sub') actorUserId: number,
     @Query('hardDelete') hardDelete?: string,
   ) {
     const isHardDelete = hardDelete === 'true' || hardDelete === '1';
-    const result = await this.roleService.remove(id, isHardDelete);
+    const result = await this.roleService.remove(id, actorUserId, isHardDelete);
     return {
       success: true,
       ...result,
@@ -227,12 +243,16 @@ export class RoleController {
   }
 
   @Post(':id/restore')
+  @Roles('ADMIN')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Khôi phục role đã xóa' })
   @ApiParam({ name: 'id', description: 'ID của role', type: Number })
   @ApiOkResponse({ type: RoleResponseDto, description: 'Role đã được khôi phục' })
-  async restore(@Param('id', ParseIntPipe) id: number) {
-    const role = await this.roleService.restore(id);
+  async restore(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser('sub') actorUserId: number,
+  ) {
+    const role = await this.roleService.restore(id, actorUserId);
     return {
       success: true,
       message: 'Khôi phục role thành công',

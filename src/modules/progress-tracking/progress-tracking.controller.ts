@@ -12,6 +12,7 @@ import {
   HttpStatus,
   UseGuards,
 } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { ProgressTrackingService } from './progress-tracking.service';
 import {
   CreateTemplateDto,
@@ -25,20 +26,27 @@ import {
   NotificationQueryDto,
 } from './progress-tracking.dto';
 import { JwtAuthGuard } from '@/core/auth/guards/jwtAuth.guard';
+import { RolesGuard } from '@/core/auth/guards/roles.guard';
+import { Roles } from '@/core/auth/decorators/roles.decorator';
+import { CurrentUser } from '@/core/auth/decorators/currentUser.decorator';
+import type { JwtUser } from '@/core/auth/interfaces/currentUser.interface';
 
+@ApiTags('Progress Tracking')
 @Controller('progress-tracking')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class ProgressTrackingController {
   constructor(private readonly service: ProgressTrackingService) {}
 
   // ========== Template Endpoints ==========
 
+  // teacher_id lấy từ JWT (resolve sang hồ sơ Teacher), không nhận từ body.
   @Post('templates')
+  @Roles('TEACHER', 'ADMIN', 'SECRETARY')
   createTemplate(
-    @Body('teacher_id') teacherId: number,
+    @CurrentUser() user: JwtUser,
     @Body() dto: CreateTemplateDto,
   ) {
-    return this.service.createTemplate(teacherId, dto);
+    return this.service.createTemplateForActor(user, dto);
   }
 
   @Get('templates')
@@ -52,15 +60,21 @@ export class ProgressTrackingController {
   }
 
   @Delete('templates/:id')
+  @Roles('ADMIN', 'SECRETARY')
   deleteTemplate(@Param('id', ParseIntPipe) id: number) {
     return this.service.deleteTemplate(id);
   }
 
   // ========== Report Endpoints ==========
 
+  // student_id lấy từ JWT (resolve sang hồ sơ Student), không nhận từ body.
   @Post('reports')
-  createReport(@Body('student_id') studentId: number, @Body() dto: CreateReportDto) {
-    return this.service.createReport(studentId, dto);
+  @Roles('STUDENT')
+  createReport(
+    @CurrentUser() user: JwtUser,
+    @Body() dto: CreateReportDto,
+  ) {
+    return this.service.createReportForActor(user, dto);
   }
 
   @Get('reports')
@@ -73,13 +87,15 @@ export class ProgressTrackingController {
     return this.service.getReportById(id);
   }
 
+  // reviewer_id lấy từ JWT (resolve sang hồ sơ Teacher), không nhận từ body.
   @Put('reports/:id/review')
+  @Roles('TEACHER', 'ADMIN', 'SECRETARY')
   reviewReport(
     @Param('id', ParseIntPipe) id: number,
-    @Body('reviewer_id') reviewerId: number,
+    @CurrentUser() user: JwtUser,
     @Body() dto: ReviewReportDto,
   ) {
-    return this.service.reviewReport(id, reviewerId, dto);
+    return this.service.reviewReportForActor(user, id, dto);
   }
 
   // ========== Student Progress Endpoints ==========
@@ -95,6 +111,7 @@ export class ProgressTrackingController {
   }
 
   @Put('students/:studentId/progress')
+  @Roles('ADMIN', 'SECRETARY')
   updateStudentProgress(
     @Param('studentId', ParseIntPipe) studentId: number,
     @Body() dto: UpdateStudentProgressDto,
@@ -110,31 +127,34 @@ export class ProgressTrackingController {
   // ========== Notification Endpoints ==========
 
   @Post('notifications')
+  @Roles('TEACHER', 'ADMIN', 'SECRETARY')
   createNotification(@Body() dto: CreateNotificationDto) {
     return this.service.createNotification(dto);
   }
 
+  // 'read-all' và 'unread-count' phải khai báo TRƯỚC ':id/read',
+  // nếu không ParseIntPipe của ':id' sẽ nuốt route tĩnh.
+  @Put('notifications/read-all')
+  markAllNotificationsAsRead(@CurrentUser() user: JwtUser) {
+    return this.service.markAllNotificationsAsReadForActor(user);
+  }
+
+  @Get('notifications/unread-count')
+  getUnreadNotificationCount(@CurrentUser() user: JwtUser) {
+    return this.service.getUnreadNotificationCountForActor(user);
+  }
+
   @Get('notifications')
   getNotifications(
-    @Query('recipient_id') recipientId: number,
+    @CurrentUser() user: JwtUser,
     @Query() query: NotificationQueryDto,
   ) {
-    return this.service.getNotifications(recipientId, query);
+    return this.service.getNotificationsForActor(user, query);
   }
 
   @Put('notifications/:id/read')
   markNotificationAsRead(@Param('id', ParseIntPipe) id: number) {
     return this.service.markNotificationAsRead(id);
-  }
-
-  @Put('notifications/read-all')
-  markAllNotificationsAsRead(@Query('recipient_id') recipientId: number) {
-    return this.service.markAllNotificationsAsRead(recipientId);
-  }
-
-  @Get('notifications/unread-count')
-  getUnreadNotificationCount(@Query('recipient_id') recipientId: number) {
-    return this.service.getUnreadNotificationCount(recipientId);
   }
 
   // ========== Stats Endpoints ==========
@@ -157,6 +177,7 @@ export class ProgressTrackingController {
   // ========== Admin Actions ==========
 
   @Post('admin/check-bans')
+  @Roles('ADMIN', 'SECRETARY')
   @HttpCode(HttpStatus.OK)
   checkAndBanInactiveStudents() {
     return this.service.checkAndBanInactiveStudents();

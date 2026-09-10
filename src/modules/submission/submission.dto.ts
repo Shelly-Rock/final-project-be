@@ -15,9 +15,9 @@ export enum SubmissionType {
 }
 
 export class CreateSubmissionDto {
+  @IsOptional()
   @IsInt()
-  @IsNotEmpty()
-  student_id: number;
+  student_id?: number;
 
   @IsInt()
   @IsNotEmpty()
@@ -38,8 +38,9 @@ export class CreateSubmissionDto {
   @IsInt()
   file_size: number;
 
+  @IsOptional()
   @IsEnum(SubmissionType)
-  file_type: SubmissionType;
+  file_type?: SubmissionType;
 }
 
 export class ReviewSubmissionDto {

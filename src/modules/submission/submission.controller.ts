@@ -3,15 +3,13 @@ import {
   Get,
   Post,
   Put,
-  Delete,
   Body,
   Param,
   Query,
   ParseIntPipe,
-  HttpCode,
-  HttpStatus,
   UseGuards,
 } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { SubmissionService } from './submission.service';
 import {
   CreateSubmissionDto,
@@ -19,28 +17,46 @@ import {
   SubmissionQueryDto,
 } from './submission.dto';
 import { JwtAuthGuard } from '@/core/auth/guards/jwtAuth.guard';
+import { RolesGuard } from '@/core/auth/guards/roles.guard';
+import { Roles } from '@/core/auth/decorators/roles.decorator';
+import { CurrentUser } from '@/core/auth/decorators/currentUser.decorator';
+import type { JwtUser } from '@/core/auth/interfaces/currentUser.interface';
 
+@ApiTags('Submissions')
 @Controller('submissions')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class SubmissionController {
   constructor(private readonly service: SubmissionService) {}
 
-  // Student submits final work
+  // Student submits final work — student_id suy ra từ JWT, không nhận từ body.
   @Post()
-  createSubmission(@Body() dto: CreateSubmissionDto) {
-    return this.service.createSubmission(dto);
+  @Roles('STUDENT')
+  createSubmission(
+    @CurrentUser() user: JwtUser,
+    @Body() dto: CreateSubmissionDto,
+  ) {
+    return this.service.createSubmissionForActor(user, dto);
   }
 
   // Get all submissions (secretary/admin)
   @Get()
+  @Roles('ADMIN', 'SECRETARY', 'TEACHER')
   getSubmissions(@Query() query: SubmissionQueryDto) {
     return this.service.getSubmissions(query);
   }
 
   // Get eligible students for submission
   @Get('eligible-students')
+  @Roles('ADMIN', 'SECRETARY', 'TEACHER')
   getEligibleStudents() {
     return this.service.getEligibleStudents();
+  }
+
+  // Get submission stats — MUST be declared BEFORE ':id' or ParseIntPipe swallows it.
+  @Get('stats/summary')
+  @Roles('ADMIN', 'SECRETARY', 'TEACHER')
+  getStats() {
+    return this.service.getStats();
   }
 
   // Get submission by ID
@@ -49,19 +65,14 @@ export class SubmissionController {
     return this.service.getSubmissionById(id);
   }
 
-  // Review submission (approve/reject)
+  // Review submission (approve/reject) — reviewer_id suy ra từ JWT (Teacher profile id).
   @Put(':id/review')
+  @Roles('TEACHER', 'ADMIN', 'SECRETARY')
   reviewSubmission(
     @Param('id', ParseIntPipe) id: number,
-    @Body('reviewer_id') reviewerId: number,
+    @CurrentUser() user: JwtUser,
     @Body() dto: ReviewSubmissionDto,
   ) {
-    return this.service.reviewSubmission(id, reviewerId, dto);
-  }
-
-  // Get submission stats
-  @Get('stats/summary')
-  getStats() {
-    return this.service.getStats();
+    return this.service.reviewSubmissionForActor(user, id, dto);
   }
 }
