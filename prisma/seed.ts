@@ -193,32 +193,43 @@ async function main() {
     STUDENT: ['student:read'],
   };
 
-  // Only grant default permissions on first seed. Subsequent runs must NOT
-  // wipe rolePermission rows that an admin has edited via the permission matrix.
-  const existingGrantCount = await prisma.rolePermission.count();
-  if (existingGrantCount === 0) {
-    for (const role of [adminRole, teacherRole, studentRole, secretaryRole]) {
-      for (const permission of permissions) {
-        if (!rolePermissions[role.name]?.includes(permission.name)) continue;
-        await prisma.rolePermission.upsert({
-          where: {
-            role_id_permission_id: {
-              role_id: role.id,
-              permission_id: permission.id,
-            },
-          },
-          update: {},
-          create: {
+  // Sync permissions for system roles. Custom roles added by admin are not touched.
+  const systemRoles = [adminRole, teacherRole, studentRole, secretaryRole];
+  for (const role of systemRoles) {
+    const expectedPermissionIds = permissions
+      .filter(p => rolePermissions[role.name]?.includes(p.name))
+      .map(p => p.id);
+
+    // Get current permissions for this role
+    const currentPermissions = await prisma.rolePermission.findMany({
+      where: { role_id: role.id },
+    });
+    const currentPermissionIds = currentPermissions.map(rp => rp.permission_id);
+
+    // Remove permissions that shouldn't be there
+    const toRemove = currentPermissionIds.filter(id => !expectedPermissionIds.includes(id));
+    if (toRemove.length > 0) {
+      await prisma.rolePermission.deleteMany({
+        where: {
+          role_id: role.id,
+          permission_id: { in: toRemove },
+        },
+      });
+    }
+
+    // Add missing permissions
+    for (const permissionId of expectedPermissionIds) {
+      if (!currentPermissionIds.includes(permissionId)) {
+        await prisma.rolePermission.create({
+          data: {
             role_id: role.id,
-            permission_id: permission.id,
+            permission_id: permissionId,
           },
         });
       }
     }
-    console.log('✅ Đã gán permissions cho tất cả roles');
-  } else {
-    console.log('ℹ️  Bỏ qua gán permissions (đã có dữ liệu phân quyền, giữ nguyên chỉnh sửa của admin)');
   }
+  console.log('✅ Đã đồng bộ permissions cho các system roles');
 
   // 5. Tạo Faculty và Department
   const faculty = await prisma.faculty.upsert({
