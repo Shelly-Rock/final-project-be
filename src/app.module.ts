@@ -13,6 +13,7 @@ import { SubmissionModule } from './modules/submission/submission.module';
 import { CommitteeModule } from './modules/committee/committee.module';
 import { DefenseModule } from './modules/defense/defense.module';
 import { ScoringModule } from './modules/scoring/scoring.module';
+import { ChatModule } from './modules/chat/chat.module';
 import { JwtAuthGuard } from './core/auth/guards/jwtAuth.guard';
 import { PermissionsGuard } from './core/auth/guards/permissions.guard';
 import { RolesGuard } from './core/auth/guards/roles.guard';
@@ -51,6 +52,7 @@ import { DashboardModule } from '@/modules/dashboard/dashboard.module';
     CommitteeModule,
     DefenseModule,
     ScoringModule,
+    ChatModule,
   ],
   providers: [
     {
