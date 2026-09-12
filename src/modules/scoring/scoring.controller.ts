@@ -1,7 +1,15 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { ScoringService } from './scoring.service';
-import { CreateIndependentScoreDto, UpdateScoreDto, SubmitScoreDto, QueryScoresDto, QueryMyScoresDto } from './scoring.dto';
+import {
+  CreateIndependentScoreDto,
+  UpdateScoreDto,
+  SubmitScoreDto,
+  QueryScoresDto,
+  QueryMyScoresDto,
+  QueryMeetingsDto,
+  AdjustMeetingScoreDto,
+} from './scoring.dto';
 import { JwtAuthGuard } from '@core/auth/guards/jwtAuth.guard';
 
 @ApiTags('Scoring')
@@ -11,18 +19,22 @@ import { JwtAuthGuard } from '@core/auth/guards/jwtAuth.guard';
 export class ScoringController {
   constructor(private readonly scoringService: ScoringService) {}
 
+  private userId(req: { user: { sub?: number; id?: number } }) {
+    return Number(req.user.sub ?? req.user.id);
+  }
+
   // ============ TEACHER SCORING ============
 
   @Get('my')
   @ApiOperation({ summary: 'Get my assigned scores (for teachers)' })
   async getMyScores(@Request() req, @Query() query: QueryMyScoresDto) {
-    return this.scoringService.getMyScores(req.user.id, query);
+    return this.scoringService.getMyScores(this.userId(req), query);
   }
 
   @Get('my/stats')
   @ApiOperation({ summary: 'Get my scoring statistics' })
   async getMyStats(@Request() req) {
-    return this.scoringService.getMyStats(req.user.id);
+    return this.scoringService.getMyStats(this.userId(req));
   }
 
   @Get('my/:id')
@@ -38,7 +50,7 @@ export class ScoringController {
     @Param('id') id: string,
     @Body() dto: UpdateScoreDto,
   ) {
-    return this.scoringService.updateScore(parseInt(id), req.user.id, dto);
+    return this.scoringService.updateScore(parseInt(id), this.userId(req), dto);
   }
 
   @Post('my/:id/submit')
@@ -48,10 +60,47 @@ export class ScoringController {
     @Param('id') id: string,
     @Body() dto: SubmitScoreDto,
   ) {
-    return this.scoringService.submitScore(parseInt(id), req.user.id, dto);
+    return this.scoringService.submitScore(parseInt(id), this.userId(req), dto);
   }
 
   // ============ ADMIN SCORING MANAGEMENT ============
+
+  @Get('meetings')
+  @ApiOperation({ summary: 'Danh sách đề tài họp hội đồng (Giai đoạn 5)' })
+  async getMeetings(@Request() req, @Query() query: QueryMeetingsDto) {
+    return this.scoringService.getMeetings(this.userId(req), req.user.role, query);
+  }
+
+  @Get('meetings/:projectId')
+  @ApiOperation({ summary: 'Chi tiết họp hội đồng theo đề tài' })
+  async getMeeting(@Request() req, @Param('projectId') projectId: string) {
+    return this.scoringService.getMeeting(parseInt(projectId), this.userId(req), req.user.role);
+  }
+
+  @Put('meetings/:scoreId')
+  @ApiOperation({ summary: 'Sửa điểm hội đồng sau khi thống nhất (trước khi chốt)' })
+  async adjustMeetingScore(
+    @Request() req,
+    @Param('scoreId') scoreId: string,
+    @Body() dto: AdjustMeetingScoreDto,
+  ) {
+    return this.scoringService.adjustMeetingScore(
+      parseInt(scoreId),
+      this.userId(req),
+      req.user.role,
+      dto,
+    );
+  }
+
+  @Post('meetings/:projectId/finalize')
+  @ApiOperation({ summary: 'Chốt điểm hội đồng (OK)' })
+  async finalizeMeeting(@Request() req, @Param('projectId') projectId: string) {
+    return this.scoringService.finalizeMeeting(
+      parseInt(projectId),
+      this.userId(req),
+      req.user.role,
+    );
+  }
 
   @Get()
   @ApiOperation({ summary: 'Get all scores (admin)' })
