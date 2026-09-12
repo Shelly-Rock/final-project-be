@@ -475,21 +475,27 @@ model report_templates {
 }
 
 model scoring_results {
-  id              Int      @id @default(autoincrement())
-  project_id      Int      @unique
-  student_id      Int
-  gvhd_score      Float?
-  review_score    Float?
-  defense_score   Float?
-  final_score     Float?
-  is_gvhd_passed  Boolean  @default(false)
-  is_final_passed Boolean  @default(false)
-  final_status    String?
-  score_sheet_url String?
-  created_at      DateTime @default(now())
-  updated_at      DateTime
-  projects        Project  @relation(fields: [project_id], references: [id])
-  students        Student  @relation(fields: [student_id], references: [id])
+  id                   Int       @id @default(autoincrement())
+  project_id           Int       @unique
+  student_id           Int
+  gvhd_score           Float?
+  review_score         Float?
+  defense_score        Float?
+  final_score          Float?
+  is_gvhd_passed       Boolean   @default(false)
+  is_final_passed      Boolean   @default(false)
+  final_status         String?
+  score_sheet_url      String?
+  // Giai đoạn 6: tính trọng số + điểm thưởng + công bố bảng điểm
+  bonus_score          Float     @default(0)
+  bonus_note           String?
+  bonus_by_teacher_id  Int?
+  is_published         Boolean   @default(false)
+  published_at         DateTime?
+  created_at           DateTime  @default(now())
+  updated_at           DateTime
+  projects             Project   @relation(fields: [project_id], references: [id])
+  students             Student   @relation(fields: [student_id], references: [id])
 
   @@index([student_id])
 }
