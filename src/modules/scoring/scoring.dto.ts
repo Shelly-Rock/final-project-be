@@ -172,6 +172,62 @@ export class QueryMyScoresDto {
   scoringType?: ScoringType;
 }
 
+export class QueryMeetingsDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Transform(({ value }) => parseInt(value))
+  page?: number = 1;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Transform(({ value }) => parseInt(value))
+  limit?: number = 20;
+
+  @ApiPropertyOptional({ description: 'true = đã chốt, false = chưa chốt' })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === 'true' || value === true) return true;
+    if (value === 'false' || value === false) return false;
+    return undefined;
+  })
+  finalized?: boolean;
+}
+
+export class AdjustMeetingScoreDto {
+  @ApiProperty({ minimum: 0, maximum: 10 })
+  @IsNotEmpty()
+  @IsNumber()
+  @Min(0)
+  @Max(10)
+  score: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  maxScore?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  criteriaScores?: Record<string, number>;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  strengths?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  weaknesses?: string;
+}
+
 // Response DTOs
 export class IndependentScoreResponseDto {
   @ApiProperty()
