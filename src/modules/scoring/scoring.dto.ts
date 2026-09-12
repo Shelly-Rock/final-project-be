@@ -228,6 +228,43 @@ export class AdjustMeetingScoreDto {
   weaknesses?: string;
 }
 
+export class QueryTranscriptsDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Transform(({ value }) => parseInt(value))
+  page?: number = 1;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Transform(({ value }) => parseInt(value))
+  limit?: number = 20;
+
+  @ApiPropertyOptional({ description: 'true = đã công bố, false = chưa công bố' })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === 'true' || value === true) return true;
+    if (value === 'false' || value === false) return false;
+    return undefined;
+  })
+  published?: boolean;
+}
+
+export class UpdateBonusScoreDto {
+  @ApiProperty({ minimum: 0, maximum: 3, description: 'Điểm thưởng do thư ký hội đồng cộng, tối đa 3' })
+  @IsNotEmpty()
+  @IsNumber()
+  @Min(0)
+  @Max(3)
+  bonusScore: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  bonusNote?: string;
+}
+
 // Response DTOs
 export class IndependentScoreResponseDto {
   @ApiProperty()

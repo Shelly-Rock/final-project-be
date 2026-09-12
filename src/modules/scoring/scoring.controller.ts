@@ -9,6 +9,8 @@ import {
   QueryMyScoresDto,
   QueryMeetingsDto,
   AdjustMeetingScoreDto,
+  QueryTranscriptsDto,
+  UpdateBonusScoreDto,
 } from './scoring.dto';
 import { JwtAuthGuard } from '@core/auth/guards/jwtAuth.guard';
 
@@ -96,6 +98,53 @@ export class ScoringController {
   @ApiOperation({ summary: 'Chốt điểm hội đồng (OK)' })
   async finalizeMeeting(@Request() req, @Param('projectId') projectId: string) {
     return this.scoringService.finalizeMeeting(
+      parseInt(projectId),
+      this.userId(req),
+      req.user.role,
+    );
+  }
+
+  @Get('transcripts/me')
+  @ApiOperation({ summary: 'Sinh viên xem bảng điểm đã công bố' })
+  async getMyTranscript(@Request() req) {
+    return this.scoringService.getMyTranscript(this.userId(req));
+  }
+
+  @Get('transcripts')
+  @ApiOperation({ summary: 'Danh sách bảng điểm tổng hợp (Giai đoạn 6)' })
+  async getTranscripts(@Request() req, @Query() query: QueryTranscriptsDto) {
+    return this.scoringService.getTranscripts(this.userId(req), req.user.role, query);
+  }
+
+  @Get('transcripts/:projectId')
+  @ApiOperation({ summary: 'Chi tiết bảng điểm tổng hợp' })
+  async getTranscript(@Request() req, @Param('projectId') projectId: string) {
+    return this.scoringService.getTranscript(
+      parseInt(projectId),
+      this.userId(req),
+      req.user.role,
+    );
+  }
+
+  @Put('transcripts/:projectId/bonus')
+  @ApiOperation({ summary: 'Thư ký hội đồng cộng điểm thưởng (tối đa 3)' })
+  async updateBonusScore(
+    @Request() req,
+    @Param('projectId') projectId: string,
+    @Body() dto: UpdateBonusScoreDto,
+  ) {
+    return this.scoringService.updateBonusScore(
+      parseInt(projectId),
+      this.userId(req),
+      req.user.role,
+      dto,
+    );
+  }
+
+  @Post('transcripts/:projectId/publish')
+  @ApiOperation({ summary: 'Công bố bảng điểm cho sinh viên' })
+  async publishTranscript(@Request() req, @Param('projectId') projectId: string) {
+    return this.scoringService.publishTranscript(
       parseInt(projectId),
       this.userId(req),
       req.user.role,

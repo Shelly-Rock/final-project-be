@@ -9,6 +9,8 @@ import {
   QueryMyScoresDto,
   QueryMeetingsDto,
   AdjustMeetingScoreDto,
+  QueryTranscriptsDto,
+  UpdateBonusScoreDto,
 } from './scoring.dto';
 
 @Injectable()
@@ -952,6 +954,253 @@ export class ScoringService {
       finalStatus: saved.final_status,
       isFinalized: true,
     };
+  }
+
+  // ============ GIAI ĐOẠN 6: TÍNH ĐIỂM TỔNG HỢP + CÔNG BỐ BẢNG ĐIỂM ============
+  // Điểm tổng = GVHD 40% + Phản biện ngoài 20% + TB 3 TV còn lại 40% + điểm thưởng (<=3)
+
+  private async buildTranscript(projectId: number) {
+    const [project, scores, result] = await Promise.all([
+      this.prisma.project.findUnique({
+        where: { id: projectId },
+        include: {
+          student: {
+            select: {
+              student_id: true,
+              first_name: true,
+              middle_name: true,
+              last_name: true,
+              class_name: true,
+            },
+          },
+        },
+      }),
+      this.prisma.independent_scores.findMany({
+        where: { project_id: projectId },
+        include: {
+          teachers: { select: { teacher_id: true, name: true } },
+        },
+      }),
+      this.prisma.scoring_results.findUnique({
+        where: { project_id: projectId },
+      }),
+    ]);
+
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
+    if (!this.isFinalized(result)) {
+      throw new BadRequestException('Đề tài chưa chốt điểm hội đồng (Giai đoạn 5)');
+    }
+
+    const gvhd = scores.find((s) => s.scoring_type === ScoringType.GVHD);
+    const committee = scores.filter((s) => s.scoring_type === ScoringType.COMMITTEE);
+    const external = committee.find((s) => s.role === CommitteeRole.EXTERNAL_REVIEWER);
+    const others = committee.filter((s) => s.role !== CommitteeRole.EXTERNAL_REVIEWER);
+
+    if (gvhd?.score === null || gvhd?.score === undefined) {
+      throw new BadRequestException('Thiếu điểm giảng viên hướng dẫn');
+    }
+    if (external?.score === null || external?.score === undefined) {
+      throw new BadRequestException('Thiếu điểm phản biện ngoài');
+    }
+    if (others.length < 3 || others.some((s) => s.score === null || s.score === undefined)) {
+      throw new BadRequestException('Cần đủ điểm của 3 thành viên hội đồng còn lại');
+    }
+
+    const othersAverage = others.reduce((sum, s) => sum + (s.score || 0), 0) / others.length;
+    const defenseAverage =
+      committee.reduce((sum, s) => sum + (s.score || 0), 0) / committee.length;
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+    const weightedScore = round2(
+      (gvhd.score || 0) * 0.4 + (external.score || 0) * 0.2 + othersAverage * 0.4,
+    );
+    const bonusScore = result?.bonus_score ?? 0;
+    const finalScore = Math.min(10, round2(weightedScore + bonusScore));
+    const failedCount = committee.filter((s) => (s.score || 0) < 4).length;
+
+    return {
+      projectId: project.id,
+      projectCode: project.project_id,
+      projectName: project.project_name,
+      student: project.student
+        ? {
+            studentId: project.student.student_id,
+            firstName: project.student.first_name,
+            middleName: project.student.middle_name,
+            lastName: project.student.last_name,
+            className: project.student.class_name,
+          }
+        : null,
+      isFinalized: true,
+      finalStatus: result?.final_status ?? null,
+      isFinalPassed: (result?.is_final_passed ?? false) && finalScore >= 4,
+      gvhdScore: gvhd.score,
+      gvhdPassed: (gvhd.score || 0) >= 4,
+      externalScore: external.score,
+      externalTeacherName: external.teachers.name,
+      otherScores: others.map((s) => ({
+        teacherName: s.teachers.name,
+        teacherCode: s.teachers.teacher_id,
+        role: s.role,
+        score: s.score,
+      })),
+      othersAverage: round2(othersAverage),
+      defenseAverage: round2(defenseAverage),
+      failedCount,
+      weightedScore,
+      bonusScore,
+      bonusNote: result?.bonus_note ?? null,
+      finalScore,
+      comments: committee.map((s) => ({
+        teacherName: s.teachers.name,
+        role: s.role,
+        notes: s.notes,
+        strengths: s.strengths,
+        weaknesses: s.weaknesses,
+      })),
+      isPublished: result?.is_published ?? false,
+      publishedAt: result?.published_at ?? null,
+    };
+  }
+
+  async getTranscripts(userId: number, role: string, query: QueryTranscriptsDto) {
+    const { page = 1, limit = 20, published } = query;
+    const staff = this.isStaff(role);
+
+    let projectIds: number[];
+    if (staff) {
+      const results = await this.prisma.scoring_results.findMany({
+        where: {
+          OR: [{ final_status: 'PASSED' }, { final_status: 'REJECTED_DEFENSE' }],
+          ...(published !== undefined ? { is_published: published } : {}),
+        },
+        select: { project_id: true },
+      });
+      projectIds = results.map((r) => r.project_id);
+    } else {
+      const teacherId = await this.resolveTeacherId(userId);
+      const mine = await this.prisma.independent_scores.findMany({
+        where: { teacher_id: teacherId, scoring_type: ScoringType.COMMITTEE },
+        select: { project_id: true },
+      });
+      projectIds = [...new Set(mine.map((m) => m.project_id))];
+      if (published !== undefined) {
+        const results = await this.prisma.scoring_results.findMany({
+          where: { project_id: { in: projectIds }, is_published: published },
+          select: { project_id: true },
+        });
+        const allowed = new Set(results.map((r) => r.project_id));
+        projectIds = projectIds.filter((id) => allowed.has(id));
+      }
+    }
+
+    const data: Awaited<ReturnType<ScoringService['buildTranscript']>>[] = [];
+    for (const projectId of projectIds) {
+      try {
+        data.push(await this.buildTranscript(projectId));
+      } catch {
+        continue;
+      }
+    }
+
+    const total = data.length;
+    const start = (page - 1) * limit;
+    return {
+      data: data.slice(start, start + limit),
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
+  async getTranscript(projectId: number, userId: number, role: string) {
+    const access = await this.assertMeetingAccess(projectId, userId, role);
+    const detail = await this.buildTranscript(projectId);
+    const isSecretary = access.staff || access.own?.role === CommitteeRole.SECRETARY;
+    return {
+      ...detail,
+      canAwardBonus: isSecretary && !detail.isPublished,
+      canPublish: access.canFinalize && !detail.isPublished,
+    };
+  }
+
+  async updateBonusScore(
+    projectId: number,
+    userId: number,
+    role: string,
+    dto: UpdateBonusScoreDto,
+  ) {
+    const access = await this.assertMeetingAccess(projectId, userId, role);
+    const isSecretary = access.staff || access.own?.role === CommitteeRole.SECRETARY;
+    if (!isSecretary) {
+      throw new ForbiddenException('Chỉ thư ký hội đồng được cộng điểm thưởng');
+    }
+
+    const detail = await this.buildTranscript(projectId);
+    if (detail.isPublished) {
+      throw new BadRequestException('Bảng điểm đã công bố, không thể sửa điểm thưởng');
+    }
+    const finalScore = Math.min(10, Math.round((detail.weightedScore + dto.bonusScore) * 100) / 100);
+
+    await this.prisma.scoring_results.update({
+      where: { project_id: projectId },
+      data: {
+        bonus_score: dto.bonusScore,
+        bonus_note: dto.bonusNote ?? null,
+        bonus_by_teacher_id: access.teacherId,
+        review_score: detail.externalScore,
+        final_score: finalScore,
+        is_final_passed: detail.finalStatus === 'PASSED' && finalScore >= 4,
+      },
+    });
+
+    return this.buildTranscript(projectId);
+  }
+
+  async publishTranscript(projectId: number, userId: number, role: string) {
+    const access = await this.assertMeetingAccess(projectId, userId, role);
+    if (!access.canFinalize) {
+      throw new ForbiddenException('Bạn không có quyền công bố bảng điểm');
+    }
+
+    const detail = await this.buildTranscript(projectId);
+
+    await this.prisma.scoring_results.update({
+      where: { project_id: projectId },
+      data: {
+        review_score: detail.externalScore,
+        final_score: detail.finalScore,
+        is_final_passed: detail.finalStatus === 'PASSED' && detail.finalScore >= 4,
+        is_published: true,
+        published_at: new Date(),
+      },
+    });
+
+    return this.buildTranscript(projectId);
+  }
+
+  async getMyTranscript(userId: number) {
+    const student = await this.prisma.student.findUnique({
+      where: { user_id: userId },
+    });
+    if (!student) {
+      throw new ForbiddenException('Student profile not found');
+    }
+
+    const project = await this.prisma.project.findUnique({
+      where: { student_id: student.id },
+    });
+    if (!project) {
+      throw new NotFoundException('Bạn chưa có đề tài');
+    }
+
+    const result = await this.prisma.scoring_results.findUnique({
+      where: { project_id: project.id },
+    });
+    if (!result?.is_published) {
+      throw new NotFoundException('Bảng điểm chưa được công bố');
+    }
+
+    return this.buildTranscript(project.id);
   }
 
   private isStaff(role?: string) {
