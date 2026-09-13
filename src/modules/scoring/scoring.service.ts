@@ -1,4 +1,8 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import * as fs from 'fs';
+import * as path from 'path';
+import PizZip from 'pizzip';
+import Docxtemplater from 'docxtemplater';
 import { PrismaService } from '@core/database/prisma/prisma.service';
 import { Prisma, ScoringType, ScoringStatus, CommitteeRole } from '@prisma/client';
 import { CreateIndependentScoreDto, UpdateScoreDto, SubmitScoreDto, QueryScoresDto, QueryMyScoresDto } from './scoring.dto';
@@ -42,7 +46,7 @@ export class ScoringService {
     });
   }
 
-  async updateScore(id: number, teacherId: number, dto: UpdateScoreDto) {
+  async updateScore(id: number, userId: number, dto: UpdateScoreDto) {
     const score = await this.prisma.independent_scores.findUnique({
       where: { id },
     });
@@ -51,8 +55,18 @@ export class ScoringService {
       throw new NotFoundException('Score not found');
     }
 
-    if (score.teacher_id !== teacherId) {
+    // Tra teacher_id từ user_id
+    const teacher = await this.prisma.teacher.findFirst({
+      where: { user_id: userId },
+    });
+
+    // Nếu userId = 0 (truyền cứng từ Admin ở Controller updateScore admin) thì bypass kiểm tra
+    if (userId !== 0 && (!teacher || score.teacher_id !== teacher.id)) {
       throw new ForbiddenException('You are not authorized to update this score');
+    }
+
+    if (score.deadline && new Date() > score.deadline) {
+      throw new BadRequestException('Đã quá thời hạn chấm điểm');
     }
 
     if (score.status === ScoringStatus.SUBMITTED) {
@@ -73,7 +87,7 @@ export class ScoringService {
     });
   }
 
-  async submitScore(id: number, teacherId: number, dto: SubmitScoreDto) {
+  async submitScore(id: number, userId: number, dto: SubmitScoreDto) {
     const score = await this.prisma.independent_scores.findUnique({
       where: { id },
     });
@@ -82,8 +96,16 @@ export class ScoringService {
       throw new NotFoundException('Score not found');
     }
 
-    if (score.teacher_id !== teacherId) {
+    const teacher = await this.prisma.teacher.findFirst({
+      where: { user_id: userId },
+    });
+
+    if (!teacher || score.teacher_id !== teacher.id) {
       throw new ForbiddenException('You are not authorized to submit this score');
+    }
+
+    if (score.deadline && new Date() > score.deadline) {
+      throw new BadRequestException('Đã quá thời hạn chấm điểm');
     }
 
     if (score.status === ScoringStatus.SUBMITTED) {
@@ -184,7 +206,7 @@ export class ScoringService {
     const gvhdScore = allScores.find((s) => s.scoring_type === ScoringType.GVHD);
     const allCommitteeScores = allScores.filter((s) => s.scoring_type === ScoringType.COMMITTEE);
 
-    if (gvhdScore?.score !== null && allCommitteeScores.length > 0) {
+    if (gvhdScore && gvhdScore.score !== null && allCommitteeScores.length > 0) {
       const avgCommittee = allCommitteeScores.reduce((sum, s) => sum + (s.score || 0), 0) / allCommitteeScores.length;
       updateData.final_score = ((gvhdScore.score || 0) + avgCommittee) / 2;
     }
@@ -232,12 +254,20 @@ export class ScoringService {
     return score;
   }
 
-  async getMyScores(teacherId: number, query: QueryMyScoresDto) {
+  async getMyScores(userId: number, query: QueryMyScoresDto) {
     const { page = 1, limit = 20, status, scoringType } = query;
     const skip = (page - 1) * limit;
 
+    // Tra teacher_id thực từ user_id (tránh nhầm lẫn user_id với teacher_id)
+    const teacher = await this.prisma.teacher.findFirst({
+      where: { user_id: userId },
+    });
+    if (!teacher) {
+      return { data: [], meta: { page, limit, total: 0, totalPages: 0 } };
+    }
+
     const where: Prisma.independent_scoresWhereInput = {
-      teacher_id: teacherId,
+      teacher_id: teacher.id,
     };
 
     if (status) {
@@ -276,7 +306,41 @@ export class ScoringService {
     ]);
 
     return {
-      data: scores,
+      data: scores.map((s) => ({
+        id: s.id,
+        projectId: s.project_id,
+        studentId: s.student_id,
+        teacherId: s.teacher_id,
+        scoringType: s.scoring_type,
+        role: s.role,
+        score: s.score,
+        maxScore: s.max_score,
+        criteriaScores: s.criteria_scores,
+        status: s.status,
+        deadline: s.deadline,
+        submittedAt: s.submitted_at,
+        notes: s.notes,
+        strengths: s.strengths,
+        weaknesses: s.weaknesses,
+        createdAt: s.created_at,
+        updatedAt: s.updated_at,
+        project: (s as any).projects
+          ? {
+              projectId: (s as any).projects.project_id,
+              projectCode: (s as any).projects.project_id,
+              projectName: (s as any).projects.project_name,
+            }
+          : undefined,
+        student: (s as any).students
+          ? {
+              studentId: (s as any).students.student_id,
+              firstName: (s as any).students.first_name,
+              middleName: (s as any).students.middle_name,
+              lastName: (s as any).students.last_name,
+              className: (s as any).students.class_name,
+            }
+          : undefined,
+      })),
       meta: {
         page,
         limit,
@@ -357,9 +421,17 @@ export class ScoringService {
     };
   }
 
-  async getMyStats(teacherId: number) {
+  async getMyStats(userId: number) {
+    // Tra teacher_id thực từ user_id
+    const teacher = await this.prisma.teacher.findFirst({
+      where: { user_id: userId },
+    });
+    if (!teacher) {
+      return { total: 0, pending: 0, submitted: 0, failed: 0, passed: 0 };
+    }
+
     const scores = await this.prisma.independent_scores.findMany({
-      where: { teacher_id: teacherId },
+      where: { teacher_id: teacher.id },
     });
 
     return {
@@ -567,6 +639,68 @@ export class ScoringService {
 
     return this.prisma.independent_scores.delete({
       where: { id },
+    });
+  }
+
+  // ============ EXPORT SCORE SHEET ============
+
+  async exportScoreSheetWord(scoreId: number, userId: number): Promise<Buffer> {
+    const teacher = await this.prisma.teacher.findUnique({
+      where: { user_id: userId },
+    });
+
+    if (!teacher) {
+      throw new ForbiddenException('Chỉ giảng viên mới được xuất phiếu chấm');
+    }
+
+    const score = await this.prisma.independent_scores.findUnique({
+      where: { id: scoreId },
+      include: {
+        projects: true,
+        students: true,
+        teachers: true,
+      },
+    });
+
+    if (!score) {
+      throw new NotFoundException('Phiếu chấm không tồn tại');
+    }
+
+    if (score.teacher_id !== teacher.id) {
+      throw new ForbiddenException('Bạn không có quyền xuất phiếu chấm này');
+    }
+
+    // Read the template
+    const templatePath = path.join(process.cwd(), 'src', 'templates', 'score_sheet_template.docx');
+    
+    if (!fs.existsSync(templatePath)) {
+      throw new NotFoundException('Không tìm thấy file mẫu score_sheet_template.docx trong thư mục src/templates.');
+    }
+
+    const content = fs.readFileSync(templatePath, 'binary');
+    const zip = new PizZip(content);
+    const doc = new Docxtemplater(zip, {
+      paragraphLoop: true,
+      linebreaks: true,
+    });
+
+    // Render the document
+    doc.render({
+      student_name: `${score.students.first_name} ${score.students.middle_name} ${score.students.last_name}`,
+      student_mssv: score.students.student_id,
+      project_code: score.projects.project_id,
+      project_name: score.projects.project_name,
+      teacher_name: score.teachers.name,
+      scoring_type: score.scoring_type === ScoringType.GVHD ? 'Giảng viên hướng dẫn' : 'Hội đồng bảo vệ',
+      total_score: score.score || 0,
+      strengths: score.strengths || '',
+      weaknesses: score.weaknesses || '',
+      notes: score.notes || '',
+    });
+
+    return doc.getZip().generate({
+      type: 'nodebuffer',
+      compression: 'DEFLATE',
     });
   }
 }

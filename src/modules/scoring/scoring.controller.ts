@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Request, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { ScoringService } from './scoring.service';
 import { CreateIndependentScoreDto, UpdateScoreDto, SubmitScoreDto, QueryScoresDto, QueryMyScoresDto } from './scoring.dto';
@@ -16,13 +17,13 @@ export class ScoringController {
   @Get('my')
   @ApiOperation({ summary: 'Get my assigned scores (for teachers)' })
   async getMyScores(@Request() req, @Query() query: QueryMyScoresDto) {
-    return this.scoringService.getMyScores(req.user.id, query);
+    return this.scoringService.getMyScores(req.user.sub, query);
   }
 
   @Get('my/stats')
   @ApiOperation({ summary: 'Get my scoring statistics' })
   async getMyStats(@Request() req) {
-    return this.scoringService.getMyStats(req.user.id);
+    return this.scoringService.getMyStats(req.user.sub);
   }
 
   @Get('my/:id')
@@ -38,7 +39,7 @@ export class ScoringController {
     @Param('id') id: string,
     @Body() dto: UpdateScoreDto,
   ) {
-    return this.scoringService.updateScore(parseInt(id), req.user.id, dto);
+    return this.scoringService.updateScore(parseInt(id), req.user.sub, dto);
   }
 
   @Post('my/:id/submit')
@@ -48,7 +49,22 @@ export class ScoringController {
     @Param('id') id: string,
     @Body() dto: SubmitScoreDto,
   ) {
-    return this.scoringService.submitScore(parseInt(id), req.user.id, dto);
+    return this.scoringService.submitScore(parseInt(id), req.user.sub, dto);
+  }
+
+  @Get('my/:id/export/word')
+  @ApiOperation({ summary: 'Export my score sheet to Word' })
+  async exportMyScoreWord(
+    @Request() req,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const buffer = await this.scoringService.exportScoreSheetWord(parseInt(id), req.user.sub);
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'Content-Disposition': `attachment; filename="Phieu_Cham_Diem_${id}.docx"`,
+    });
+    res.send(buffer);
   }
 
   // ============ ADMIN SCORING MANAGEMENT ============

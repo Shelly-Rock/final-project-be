@@ -109,3 +109,46 @@ export class SubmissionStatsDto {
   approved: number;
   rejected: number;
 }
+export class InitDriveUploadDto {
+  @IsInt()
+  @IsNotEmpty()
+  projectId: number;
+
+  @IsString()
+  @IsNotEmpty()
+  fileName: string;
+
+  @IsInt()
+  @IsNotEmpty()
+  fileSize: number;
+
+  @IsString()
+  @IsNotEmpty()
+  mimeType: string;
+}
+
+export class ConfirmDriveUploadDto {
+  @IsInt()
+  @IsNotEmpty()
+  projectId: number;
+
+  @IsString()
+  @IsNotEmpty()
+  driveFileId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  webViewLink: string;
+
+  @IsString()
+  @IsNotEmpty()
+  fileName: string;
+
+  @IsInt()
+  @IsNotEmpty()
+  fileSize: number;
+
+  @IsString()
+  @IsNotEmpty()
+  fileType: string;
+}

@@ -9,7 +9,9 @@ import {
   Query,
   ParseIntPipe,
   UseGuards,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { DefenseService } from './defense.service';
 import {
   CreateDefenseSessionDto,
@@ -36,6 +38,12 @@ export class DefenseController {
   @Get()
   getDefenseSessions(@Query() query: DefenseSessionQueryDto) {
     return this.service.getDefenseSessions(query);
+  }
+
+  // Get available projects for defense
+  @Get('projects/available')
+  getAvailableProjects() {
+    return this.service.getAvailableProjects();
   }
 
   // Get defense session by ID
@@ -92,10 +100,24 @@ export class DefenseController {
     return this.service.deleteDefenseSession(id);
   }
 
-  // Export schedule to Word format
+  // Export schedule to Word format (JSON response)
   @Get(':id/export')
   exportScheduleWord(@Param('id', ParseIntPipe) id: number) {
     return this.service.exportScheduleWord(id);
+  }
+
+  // Export schedule to Word binary file (Blob download)
+  @Get(':id/export/word')
+  async downloadScheduleWord(
+    @Param('id', ParseIntPipe) id: number,
+    @Res() res: Response,
+  ) {
+    const buffer = await this.service.downloadScheduleWord(id);
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'Content-Disposition': `attachment; filename="Lich_Bao_Ve_HD_${id}.docx"`,
+    });
+    res.send(buffer);
   }
 
   // Get defense stats

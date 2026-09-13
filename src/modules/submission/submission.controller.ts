@@ -15,6 +15,8 @@ import {
   CreateSubmissionDto,
   ReviewSubmissionDto,
   SubmissionQueryDto,
+  InitDriveUploadDto,
+  ConfirmDriveUploadDto,
 } from './submission.dto';
 import { JwtAuthGuard } from '@/core/auth/guards/jwtAuth.guard';
 import { RolesGuard } from '@/core/auth/guards/roles.guard';
@@ -27,6 +29,21 @@ import type { JwtUser } from '@/core/auth/interfaces/currentUser.interface';
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class SubmissionController {
   constructor(private readonly service: SubmissionService) {}
+
+  @Post('drive/init-upload')
+  @Roles('STUDENT')
+  initDriveUpload(@Body() dto: InitDriveUploadDto) {
+    return this.service.initDriveUpload(dto);
+  }
+
+  @Post('drive/confirm')
+  @Roles('STUDENT')
+  confirmDriveUpload(
+    @CurrentUser() user: JwtUser,
+    @Body() dto: ConfirmDriveUploadDto,
+  ) {
+    return this.service.confirmDriveUpload(user, dto);
+  }
 
   // Student submits final work — student_id suy ra từ JWT, không nhận từ body.
   @Post()
