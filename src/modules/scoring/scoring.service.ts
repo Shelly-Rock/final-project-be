@@ -11,6 +11,10 @@ import {
   AdjustMeetingScoreDto,
   QueryTranscriptsDto,
   UpdateBonusScoreDto,
+  QueryPostDefenseDto,
+  SetRevisionWindowDto,
+  SubmitRevisionDto,
+  UpdateRankDto,
 } from './scoring.dto';
 
 @Injectable()
@@ -1201,6 +1205,249 @@ export class ScoringService {
     }
 
     return this.buildTranscript(project.id);
+  }
+
+  // ============ GIAI ĐOẠN 7: HẬU KIỂM VÀ XẾP HẠNG ============
+  // Chỉnh sửa hồ sơ theo nhận xét -> Xếp hạng (sort điểm, đồng điểm xử lý thủ công) -> In biểu mẫu.
+
+  private defaultRevisionDeadline(publishedAt: Date | null) {
+    const base = publishedAt ?? new Date();
+    const deadline = new Date(base);
+    deadline.setDate(deadline.getDate() + 14);
+    return deadline;
+  }
+
+  async getPostDefenseList(_userId: number, role: string, query: QueryPostDefenseDto) {
+    if (!this.isStaff(role)) {
+      throw new ForbiddenException('Chỉ thư ký hệ thống được xếp hạng');
+    }
+    const { page = 1, limit = 50 } = query;
+
+    const results = await this.prisma.scoring_results.findMany({
+      where: { is_published: true, final_status: 'PASSED' },
+      include: {
+        projects: {
+          select: {
+            project_id: true,
+            project_name: true,
+            thesis_revisions: {
+              where: { deleted_at: null },
+              orderBy: { submitted_at: 'desc' },
+              take: 1,
+            },
+          },
+        },
+        students: {
+          select: {
+            student_id: true,
+            first_name: true,
+            middle_name: true,
+            last_name: true,
+            class_name: true,
+          },
+        },
+      },
+    });
+
+    // Auto-rank theo điểm tổng giảm dần; rank_override (thủ công) luôn thắng.
+    const sorted = [...results].sort((a, b) => {
+      const aRank = a.rank_override ?? a.rank ?? Number.MAX_SAFE_INTEGER;
+      const bRank = b.rank_override ?? b.rank ?? Number.MAX_SAFE_INTEGER;
+      if (aRank !== bRank) return aRank - bRank;
+      return (b.final_score ?? 0) - (a.final_score ?? 0);
+    });
+
+    const data = sorted.map((r) => {
+      const rank = r.rank_override ?? r.rank ?? null;
+      const latestRevision = r.projects.thesis_revisions[0] ?? null;
+      return {
+        projectId: r.project_id,
+        projectCode: r.projects.project_id,
+        projectName: r.projects.project_name,
+        student: r.students
+          ? {
+              studentId: r.students.student_id,
+              firstName: r.students.first_name,
+              middleName: r.students.middle_name,
+              lastName: r.students.last_name,
+              className: r.students.class_name,
+            }
+          : null,
+        finalScore: r.final_score ?? null,
+        bonusScore: r.bonus_score ?? 0,
+        rank,
+        rankOverride: r.rank_override,
+        rankNote: r.rank_note,
+        revisionDeadline: r.revision_deadline ?? this.defaultRevisionDeadline(r.published_at),
+        revisionCount: latestRevision ? 1 : 0,
+        latestRevisionFile: latestRevision?.file_name ?? null,
+      };
+    });
+
+    const total = data.length;
+    const start = (page - 1) * limit;
+    return {
+      data: data.slice(start, start + limit),
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
+  async computeRankings(_userId: number, role: string) {
+    if (!this.isStaff(role)) {
+      throw new ForbiddenException('Chỉ thư ký hệ thống được xếp hạng');
+    }
+
+    const results = await this.prisma.scoring_results.findMany({
+      where: { is_published: true, final_status: 'PASSED' },
+      select: {
+        project_id: true,
+        final_score: true,
+        rank_override: true,
+      },
+    });
+
+    // Những bản ghi đã có rank_override giữ nguyên; phần còn lại xếp theo điểm giảm dần
+    // vào các slot trống.
+    const overrideSlots = new Map<number, number>();
+    for (const r of results) {
+      if (r.rank_override) overrideSlots.set(r.project_id, r.rank_override);
+    }
+    const takenSlots = new Set(overrideSlots.values());
+
+    const autoRanked = results
+      .filter((r) => !overrideSlots.has(r.project_id))
+      .sort((a, b) => (b.final_score ?? 0) - (a.final_score ?? 0));
+
+    const rankByProject = new Map<number, number>(overrideSlots);
+    let cursor = 1;
+    for (const r of autoRanked) {
+      while (takenSlots.has(cursor)) cursor += 1;
+      rankByProject.set(r.project_id, cursor);
+      cursor += 1;
+    }
+
+    const now = new Date();
+    await this.prisma.$transaction(
+      results.map((r) =>
+        this.prisma.scoring_results.update({
+          where: { project_id: r.project_id },
+          data: { rank: rankByProject.get(r.project_id) ?? null, ranked_at: now },
+        }),
+      ),
+    );
+
+    return { total: results.length, rankedAt: now };
+  }
+
+  async setRevisionWindow(projectId: number, _userId: number, role: string, dto: SetRevisionWindowDto) {
+    if (!this.isStaff(role)) {
+      throw new ForbiddenException('Chỉ thư ký hệ thống được đặt hạn chỉnh sửa');
+    }
+    const result = await this.prisma.scoring_results.findUnique({ where: { project_id: projectId } });
+    if (!result) {
+      throw new NotFoundException('Không tìm thấy kết quả chấm điểm');
+    }
+    await this.prisma.scoring_results.update({
+      where: { project_id: projectId },
+      data: { revision_deadline: new Date(dto.revisionDeadline) },
+    });
+    return { projectId, revisionDeadline: new Date(dto.revisionDeadline) };
+  }
+
+  async updateRank(projectId: number, _userId: number, role: string, dto: UpdateRankDto) {
+    if (!this.isStaff(role)) {
+      throw new ForbiddenException('Chỉ thư ký hệ thống được xếp hạng thủ công');
+    }
+    const result = await this.prisma.scoring_results.findUnique({ where: { project_id: projectId } });
+    if (!result) {
+      throw new NotFoundException('Không tìm thấy kết quả chấm điểm');
+    }
+    await this.prisma.scoring_results.update({
+      where: { project_id: projectId },
+      data: {
+        rank_override: dto.rankOverride,
+        rank: dto.rankOverride,
+        rank_note: dto.rankNote ?? null,
+      },
+    });
+    return { projectId, rank: dto.rankOverride, rankOverride: dto.rankOverride };
+  }
+
+  async getPrintSheet(userId: number, role: string) {
+    if (!this.isStaff(role)) {
+      throw new ForbiddenException('Chỉ thư ký hệ thống được in bảng điểm lưu trữ');
+    }
+    const rows = await this.getPostDefenseList(userId, role, { page: 1, limit: 1000 });
+    return { data: rows.data, generatedAt: new Date() };
+  }
+
+  async getMyRevision(userId: number) {
+    const student = await this.prisma.student.findUnique({ where: { user_id: userId } });
+    if (!student) {
+      throw new ForbiddenException('Student profile not found');
+    }
+    const project = await this.prisma.project.findUnique({ where: { student_id: student.id } });
+    if (!project) {
+      throw new NotFoundException('Bạn chưa có đề tài');
+    }
+    const result = await this.prisma.scoring_results.findUnique({ where: { project_id: project.id } });
+    if (!result?.is_published) {
+      throw new NotFoundException('Bảng điểm chưa được công bố');
+    }
+
+    const transcript = await this.buildTranscript(project.id);
+    const deadline = result.revision_deadline ?? this.defaultRevisionDeadline(result.published_at);
+    const revision = await this.prisma.thesis_revisions.findFirst({
+      where: { project_id: project.id, deleted_at: null },
+      orderBy: { submitted_at: 'desc' },
+    });
+
+    return {
+      ...transcript,
+      revisionDeadline: deadline,
+      canSubmitRevision: deadline.getTime() > Date.now(),
+      revision: revision
+        ? {
+            id: revision.id,
+            fileName: revision.file_name,
+            fileUrl: revision.file_url,
+            submittedAt: revision.submitted_at,
+            note: revision.note,
+          }
+        : null,
+    };
+  }
+
+  async submitRevision(userId: number, dto: SubmitRevisionDto) {
+    const student = await this.prisma.student.findUnique({ where: { user_id: userId } });
+    if (!student) {
+      throw new ForbiddenException('Student profile not found');
+    }
+    const project = await this.prisma.project.findUnique({ where: { student_id: student.id } });
+    if (!project) {
+      throw new NotFoundException('Bạn chưa có đề tài');
+    }
+    const result = await this.prisma.scoring_results.findUnique({ where: { project_id: project.id } });
+    if (!result?.is_published) {
+      throw new BadRequestException('Bảng điểm chưa được công bố, chưa mở chỉnh sửa');
+    }
+    const deadline = result.revision_deadline ?? this.defaultRevisionDeadline(result.published_at);
+    if (deadline.getTime() <= Date.now()) {
+      throw new BadRequestException('Đã hết hạn chỉnh sửa hồ sơ');
+    }
+
+    return this.prisma.thesis_revisions.create({
+      data: {
+        project_id: project.id,
+        student_id: student.id,
+        file_url: dto.fileUrl,
+        file_name: dto.fileName,
+        original_name: dto.originalName,
+        file_size: dto.fileSize,
+        note: dto.note ?? null,
+        updated_at: new Date(),
+      },
+    });
   }
 
   private isStaff(role?: string) {

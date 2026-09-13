@@ -11,6 +11,10 @@ import {
   AdjustMeetingScoreDto,
   QueryTranscriptsDto,
   UpdateBonusScoreDto,
+  QueryPostDefenseDto,
+  SetRevisionWindowDto,
+  SubmitRevisionDto,
+  UpdateRankDto,
 } from './scoring.dto';
 import { JwtAuthGuard } from '@core/auth/guards/jwtAuth.guard';
 
@@ -149,6 +153,68 @@ export class ScoringController {
       this.userId(req),
       req.user.role,
     );
+  }
+
+  // ============ GIAI ĐOẠN 7: HẬU KIỂM VÀ XẾP HẠNG ============
+
+  @Get('post-defense')
+  @ApiOperation({ summary: 'Danh sách xếp hạng sau bảo vệ (Giai đoạn 7)' })
+  async getPostDefense(@Request() req, @Query() query: QueryPostDefenseDto) {
+    return this.scoringService.getPostDefenseList(this.userId(req), req.user.role, query);
+  }
+
+  @Post('post-defense/rank')
+  @ApiOperation({ summary: 'Thư ký hệ thống xếp hạng theo điểm tổng' })
+  async computeRankings(@Request() req) {
+    return this.scoringService.computeRankings(this.userId(req), req.user.role);
+  }
+
+  @Get('post-defense/print')
+  @ApiOperation({ summary: 'Bảng điểm lưu trữ học vụ (in biểu mẫu)' })
+  async getPrintSheet(@Request() req) {
+    return this.scoringService.getPrintSheet(this.userId(req), req.user.role);
+  }
+
+  @Put('post-defense/:projectId/revision-window')
+  @ApiOperation({ summary: 'Đặt hạn chỉnh sửa hồ sơ cho đề tài' })
+  async setRevisionWindow(
+    @Request() req,
+    @Param('projectId') projectId: string,
+    @Body() dto: SetRevisionWindowDto,
+  ) {
+    return this.scoringService.setRevisionWindow(
+      parseInt(projectId),
+      this.userId(req),
+      req.user.role,
+      dto,
+    );
+  }
+
+  @Put('post-defense/:projectId/rank')
+  @ApiOperation({ summary: 'Xếp hạng thủ công khi đồng điểm' })
+  async updateRank(
+    @Request() req,
+    @Param('projectId') projectId: string,
+    @Body() dto: UpdateRankDto,
+  ) {
+    return this.scoringService.updateRank(
+      parseInt(projectId),
+      this.userId(req),
+      req.user.role,
+      dto,
+    );
+  }
+
+  @Get('revisions/me')
+  @ApiOperation({ summary: 'Sinh viên xem hạn và bản chỉnh sửa hồ sơ' })
+  async getMyRevision(@Request() req) {
+    return this.scoringService.getMyRevision(this.userId(req));
+  }
+
+  @Post('revisions/me')
+  @ApiOperation({ summary: 'Sinh viên nộp hồ sơ chỉnh sửa theo nhận xét hội đồng' })
+  async submitRevision(@Request() req, @Body() dto: SubmitRevisionDto) {
+    return this.scoringService.submitRevision(this.userId(req), dto);
   }
 
   @Get()
