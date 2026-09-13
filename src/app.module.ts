@@ -27,6 +27,7 @@ import { AdminConfigModule } from '@/modules/admin-config/admin-config.module';
 import { TopicModule } from '@/modules/topic/topic.module';
 import { AuditModule } from '@/modules/audit/audit.module';
 import { DashboardModule } from '@/modules/dashboard/dashboard.module';
+import { StatisticsModule } from '@/modules/statistics/statistics.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { DashboardModule } from '@/modules/dashboard/dashboard.module';
     PrismaModule,
     AuditModule,
     DashboardModule,
+    StatisticsModule,
     CoreAuthModule,
     AuthModule,
     ExcelModule,
