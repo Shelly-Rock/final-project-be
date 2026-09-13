@@ -260,11 +260,59 @@ async function main() {
       teacherId: 'GV001',
     },
     {
+      email: 'teacher2@system.com',
+      username: 'teacher_demo_2',
+      role: teacherRole,
+      firstName: 'Giảng viên',
+      lastName: 'Hai',
+      teacherId: 'GV002',
+    },
+    {
+      email: 'teacher3@system.com',
+      username: 'teacher_demo_3',
+      role: teacherRole,
+      firstName: 'Giảng viên',
+      lastName: 'Ba',
+      teacherId: 'GV003',
+    },
+    {
+      email: 'teacher4@system.com',
+      username: 'teacher_demo_4',
+      role: teacherRole,
+      firstName: 'Giảng viên',
+      lastName: 'Bốn',
+      teacherId: 'GV004',
+    },
+    {
+      email: 'teacher5@system.com',
+      username: 'teacher_demo_5',
+      role: teacherRole,
+      firstName: 'Giảng viên',
+      lastName: 'Năm',
+      teacherId: 'GV005',
+    },
+    {
+      email: 'teacher6@system.com',
+      username: 'teacher_demo_6',
+      role: teacherRole,
+      firstName: 'Giảng viên',
+      lastName: 'Sáu',
+      teacherId: 'GV006',
+    },
+    {
       email: 'secretary@system.com',
       username: 'secretary_demo',
       role: secretaryRole,
       firstName: 'Thư ký',
       lastName: 'Hệ thống',
+    },
+    {
+      email: 'student@system.com',
+      username: 'student_demo',
+      role: studentRole,
+      firstName: 'Demo',
+      lastName: 'Sinh viên',
+      studentId: 'SV001',
     },
   ];
 
@@ -332,14 +380,71 @@ async function main() {
       });
     }
 
+    if (userData.role.name === 'STUDENT' && userData.studentId) {
+      await prisma.student.upsert({
+        where: { student_id: userData.studentId },
+        update: {
+          user: { connect: { id: user.id } },
+          first_name: userData.firstName,
+          middle_name: '',
+          last_name: userData.lastName,
+          email: userData.email,
+          date_of_birth: new Date('2000-01-01'),
+          gender: 'MALE',
+          class_name: 'K10',
+          major: 'KTPM',
+          course_year: 10,
+          academic_year: '2023-2024',
+        },
+        create: {
+          student_id: userData.studentId,
+          user: { connect: { id: user.id } },
+          first_name: userData.firstName,
+          middle_name: '',
+          last_name: userData.lastName,
+          email: userData.email,
+          date_of_birth: new Date('2000-01-01'),
+          gender: 'MALE',
+          class_name: 'K10',
+          major: 'KTPM',
+          course_year: 10,
+          academic_year: '2023-2024',
+        },
+      });
+    }
+
     console.log(
       `✅ Đã tạo tài khoản (${userData.role.name}): ${user.email} | Username: ${user.username}`,
     );
   }
 
+  // 7. Tạo Project DT001
+  const studentDemo = await prisma.student.findUnique({ where: { student_id: 'SV001' } });
+  const teacherDemo = await prisma.teacher.findUnique({ where: { teacher_id: 'GV001' } });
+
+  if (studentDemo && teacherDemo) {
+    const project = await prisma.project.upsert({
+      where: { project_id: 'DT001' },
+      update: {
+        student_id: studentDemo.id,
+        teacher_id: teacherDemo.id,
+        status: 'APPROVED',
+      },
+      create: {
+        project_id: 'DT001',
+        project_name: 'Hệ thống quản lý sinh viên',
+        description: 'Phát triển hệ thống quản lý sinh viên bằng NextJS và NestJS',
+        student_id: studentDemo.id,
+        teacher_id: teacherDemo.id,
+        status: 'APPROVED',
+      },
+    });
+    console.log(`✅ Đã tạo Đề tài: ${project.project_id} - ${project.project_name}`);
+  }
+
   console.log('🎉 Seed dữ liệu mẫu hoàn tất!');
   console.log('🔑 Mật khẩu mặc định cho tất cả tài khoản là: 1111');
-  console.log('📧 Tất cả tài khoản đã được xác thực email (email_verified_at)');
+  console.log('✉️  Tất cả tài khoản đã được xác thực email (email_verified_at)');
 
   await prisma.$disconnect();
 }

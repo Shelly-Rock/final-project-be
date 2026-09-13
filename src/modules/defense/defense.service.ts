@@ -3,8 +3,14 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '@/core/database/prisma/prisma.service';
+import { ScoringType, ScoringStatus } from '@prisma/client';
+import * as fs from 'fs';
+import * as path from 'path';
+import PizZip from 'pizzip';
+import Docxtemplater from 'docxtemplater';
 import {
   DefenseSessionStatus,
   CreateDefenseSessionDto,
@@ -125,9 +131,115 @@ export class DefenseService {
           updated_at: new Date(),
         })),
       });
+
+      // Tự động tạo phiếu chấm cho toàn bộ thành viên Hội đồng
+      await this.autoCreateScoreSheets(session.id, dto.committee_id, dto.project_ids);
     }
 
     return this.getDefenseSessionById(session.id);
+  }
+
+  // Tự động tạo phiếu chấm độc lập cho từng thành viên hội đồng khi xếp lịch bảo vệ
+  private async autoCreateScoreSheets(sessionId: number, committeeId: number, projectIds: number[]) {
+    const committee = await this.prisma.defense_committees.findUnique({
+      where: { id: committeeId },
+      include: {
+        committee_members: { include: { teachers: true } },
+        committee_external_reviewers: { include: { teachers: true } },
+      },
+    });
+    if (!committee) return;
+
+    const deadline = new Date();
+    deadline.setDate(deadline.getDate() + 7); // Hạn chấm: 7 ngày
+
+    for (const projectId of projectIds) {
+      const project = await this.prisma.project.findUnique({
+        where: { id: projectId },
+      });
+      if (!project) continue;
+
+      const scoresToCreate: any[] = [];
+
+      // Thành viên nội bộ (Chủ tịch, Thư ký, Ủy viên)
+      for (const member of committee.committee_members) {
+        const existing = await this.prisma.independent_scores.findFirst({
+          where: {
+            project_id: projectId,
+            teacher_id: member.teacher_id,
+            scoring_type: ScoringType.COMMITTEE,
+          },
+        });
+        if (!existing) {
+          scoresToCreate.push({
+            project_id: projectId,
+            student_id: project.student_id,
+            teacher_id: member.teacher_id,
+            scoring_type: ScoringType.COMMITTEE,
+            role: member.role,
+            deadline,
+            status: ScoringStatus.PENDING,
+            max_score: 10,
+            updated_at: new Date(),
+          });
+        }
+      }
+
+      // Phản biện ngoài (external reviewers)
+      for (const reviewer of committee.committee_external_reviewers) {
+        const existing = await this.prisma.independent_scores.findFirst({
+          where: {
+            project_id: projectId,
+            teacher_id: reviewer.teacher_id,
+            scoring_type: ScoringType.COMMITTEE,
+          },
+        });
+        if (!existing) {
+          scoresToCreate.push({
+            project_id: projectId,
+            student_id: project.student_id,
+            teacher_id: reviewer.teacher_id,
+            scoring_type: ScoringType.COMMITTEE,
+            role: null,
+            deadline,
+            status: ScoringStatus.PENDING,
+            max_score: 10,
+            updated_at: new Date(),
+          });
+        }
+      }
+
+      if (scoresToCreate.length > 0) {
+        await this.prisma.independent_scores.createMany({
+          data: scoresToCreate,
+          skipDuplicates: true,
+        });
+      }
+    }
+  }
+
+  async getAvailableProjects() {
+    // Lấy các project đã APPROVED và chưa được xếp vào lịch bảo vệ nào
+    const projects = await this.prisma.project.findMany({
+      where: {
+        status: 'APPROVED',
+        defense_session_projects: {
+          none: {},
+        },
+      },
+      include: {
+        student: true,
+        topics: true,
+      },
+    });
+
+    return projects.map((p) => ({
+      id: p.id,
+      projectCode: p.project_id,
+      name: p.project_name,
+      studentName: p.student ? `${p.student.first_name} ${p.student.last_name}` : 'Unknown',
+      studentMssv: p.student?.student_id || 'Unknown',
+    }));
   }
 
   async getDefenseSessions(query: DefenseSessionQueryDto) {
@@ -529,6 +641,35 @@ export class DefenseService {
         student_mssv: p.student_mssv,
       })),
     };
+  }
+
+  async downloadScheduleWord(sessionId: number): Promise<Buffer> {
+    const data = await this.exportScheduleWord(sessionId);
+
+    // Read the template
+    const templatePath = path.join(process.cwd(), 'src', 'templates', 'schedule_template.docx');
+    
+    if (!fs.existsSync(templatePath)) {
+      throw new NotFoundException('Không tìm thấy file mẫu schedule_template.docx trong thư mục src/templates. Vui lòng thiết kế file mẫu và đặt vào hệ thống.');
+    }
+
+    const content = fs.readFileSync(templatePath, 'binary');
+    const zip = new PizZip(content);
+    const doc = new Docxtemplater(zip, {
+      paragraphLoop: true,
+      linebreaks: true,
+    });
+
+    // Render the document
+    doc.render(data);
+
+    // Get the zip document and generate it as a nodebuffer
+    const buf = doc.getZip().generate({
+      type: 'nodebuffer',
+      compression: 'DEFLATE',
+    });
+
+    return buf;
   }
 
   async getStats() {

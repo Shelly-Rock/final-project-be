@@ -476,16 +476,36 @@ export class CommitteeService {
             role: { in: [CommitteeRole.CHAIRMAN, CommitteeRole.SECRETARY, CommitteeRole.INTERNAL_REVIEWER] },
           },
         },
-        committee_external_reviewers: true,
       },
     });
 
     for (const c of committees) {
-      // Only exclude internal members (not external reviewers)
+      // Only exclude internal members of other committees (not external reviewers)
       for (const member of c.committee_members) {
         excludedIds.push(member.teacher_id);
       }
-      // External reviewers CAN be in multiple committees, so don't exclude
+    }
+
+    // Nếu đang sửa 1 Hội đồng, cũng loại trừ các GVHD của các đề tài đang được chấm trong HĐ đó
+    if (committeeId) {
+      const sessions = await this.prisma.defense_sessions.findMany({
+        where: { committee_id: committeeId, deleted_at: null },
+        include: {
+          defense_session_projects: {
+            include: {
+              projects: true,
+            },
+          },
+        },
+      });
+
+      for (const session of sessions) {
+        for (const sp of session.defense_session_projects) {
+          if (sp.projects?.teacher_id) {
+            excludedIds.push(sp.projects.teacher_id);
+          }
+        }
+      }
     }
 
     return [...new Set(excludedIds)];

@@ -4,6 +4,7 @@ import {
   BadRequestException,
   ForbiddenException,
 } from '@nestjs/common';
+import { google } from 'googleapis';
 import { PrismaService } from '@/core/database/prisma/prisma.service';
 import { DeadlinePolicyService } from '@/modules/governance/deadline-policy.service';
 import type { JwtUser } from '@/core/auth/interfaces/currentUser.interface';
@@ -13,6 +14,8 @@ import {
   CreateSubmissionDto,
   ReviewSubmissionDto,
   SubmissionQueryDto,
+  InitDriveUploadDto,
+  ConfirmDriveUploadDto,
 } from './submission.dto';
 
 @Injectable()
@@ -160,6 +163,117 @@ export class SubmissionService {
         file_name: dto.file_name,
         original_name: dto.original_name,
         file_size: dto.file_size,
+        file_type: fileType,
+        status: SubmissionStatus.PENDING,
+        updated_at: new Date(),
+      },
+    });
+  }
+
+  // ========== GOOGLE DRIVE RESUMABLE UPLOAD ==========
+
+  async initDriveUpload(dto: InitDriveUploadDto) {
+    const { projectId, fileName, fileSize, mimeType } = dto;
+    const { projectCode } = this.validateFileName(fileName);
+    
+    const project = await this.prisma.project.findUnique({ where: { id: projectId } });
+    if (!project) throw new NotFoundException('Đề tài không tồn tại');
+    if (project.project_id !== projectCode) {
+      throw new BadRequestException('Tên file không khớp với mã đề tài');
+    }
+
+      try {
+        const auth = new google.auth.OAuth2(
+          process.env.GOOGLE_CLIENT_ID,
+          process.env.GOOGLE_CLIENT_SECRET
+        );
+        auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
+
+        const drive = google.drive({ version: 'v3', auth });
+
+      const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+
+      // 1. Tạo file metadata trống (không có nội dung) để lấy File ID và Link
+      const fileMetadata = {
+        name: fileName,
+        parents: folderId ? [folderId] : undefined,
+      };
+
+      const res = await drive.files.create({
+        requestBody: fileMetadata,
+        fields: 'id, webViewLink',
+      });
+
+      const driveFileId = res.data.id;
+      const webViewLink = res.data.webViewLink;
+
+      if (!driveFileId) {
+        throw new Error('Khong the tao file tren Google Drive');
+      }
+
+      // 2. Sinh sessionUrl cho Resumable Upload bằng cách gọi PATCH update file
+      const tokenResponse = await auth.getAccessToken();
+      const token = tokenResponse?.token || tokenResponse;
+        const patchRes = await fetch(
+          `https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=resumable`,
+          {
+            method: 'PATCH',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'X-Upload-Content-Type': mimeType,
+              'X-Upload-Content-Length': fileSize.toString(),
+              'Origin': process.env.FRONTEND_URL || 'http://localhost:3000',
+            },
+          }
+        );
+        
+        if (!patchRes.ok) {
+          const errorBody = await patchRes.text();
+          throw new Error(`API trả về ${patchRes.status}: ${errorBody}`);
+        }
+
+        const sessionUrl = patchRes.headers.get('location');
+
+        if (!sessionUrl) {
+          throw new Error('Google Drive API khong tra ve location header mac du status OK');
+        }
+
+      return {
+        sessionUrl,
+        driveFileId,
+        webViewLink,
+      };
+    } catch (error: any) {
+      console.error('Lỗi khi khởi tạo Google Drive upload session:', error);
+      throw new BadRequestException(`Không thể khởi tạo phiên tải lên Google Drive: ${error.message}`);
+    }
+  }
+
+  async confirmDriveUpload(user: JwtUser, dto: ConfirmDriveUploadDto) {
+    const student = await this.resolveStudentByUserId(user.sub);
+    const { extension } = this.validateFileName(dto.fileName);
+    const fileType = this.getFileType(extension);
+
+    // Kiểm tra đã nộp chưa
+    const existingSubmission = await this.prisma.final_submissions.findFirst({
+      where: {
+        project_id: dto.projectId,
+        deleted_at: null,
+      },
+    });
+
+    if (existingSubmission) {
+      throw new BadRequestException('Đã nộp bài cho đề tài này rồi');
+    }
+
+    return this.prisma.final_submissions.create({
+      data: {
+        student_id: student.id,
+        project_id: dto.projectId,
+        file_url: dto.webViewLink,
+        file_name: dto.driveFileId,
+        original_name: dto.fileName,
+        file_size: dto.fileSize,
         file_type: fileType,
         status: SubmissionStatus.PENDING,
         updated_at: new Date(),

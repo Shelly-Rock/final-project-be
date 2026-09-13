@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Request, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { ScoringService } from './scoring.service';
 import {
@@ -67,6 +68,21 @@ export class ScoringController {
     @Body() dto: SubmitScoreDto,
   ) {
     return this.scoringService.submitScore(parseInt(id), this.userId(req), dto);
+  }
+
+  @Get('my/:id/export/word')
+  @ApiOperation({ summary: 'Export my score sheet to Word' })
+  async exportMyScoreWord(
+    @Request() req,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const buffer = await this.scoringService.exportScoreSheetWord(parseInt(id), this.userId(req));
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'Content-Disposition': `attachment; filename="Phieu_Cham_Diem_${id}.docx"`,
+    });
+    res.send(buffer);
   }
 
   // ============ ADMIN SCORING MANAGEMENT ============
