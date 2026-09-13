@@ -265,6 +265,67 @@ export class UpdateBonusScoreDto {
   bonusNote?: string;
 }
 
+export class QueryPostDefenseDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Transform(({ value }) => parseInt(value))
+  page?: number = 1;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Transform(({ value }) => parseInt(value))
+  limit?: number = 50;
+}
+
+export class SetRevisionWindowDto {
+  @ApiProperty({ description: 'Hạn cuối sinh viên được chỉnh sửa hồ sơ' })
+  @IsNotEmpty()
+  @IsDateString()
+  revisionDeadline: string;
+}
+
+export class SubmitRevisionDto {
+  @ApiProperty()
+  @IsNotEmpty()
+  @IsString()
+  fileUrl: string;
+
+  @ApiProperty()
+  @IsNotEmpty()
+  @IsString()
+  fileName: string;
+
+  @ApiProperty()
+  @IsNotEmpty()
+  @IsString()
+  originalName: string;
+
+  @ApiProperty()
+  @IsNotEmpty()
+  @IsNumber()
+  fileSize: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  note?: string;
+}
+
+export class UpdateRankDto {
+  @ApiProperty({ minimum: 1, description: 'Thứ hạng thủ công khi đồng điểm' })
+  @IsNotEmpty()
+  @IsNumber()
+  @Min(1)
+  rankOverride: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  rankNote?: string;
+}
+
 // Response DTOs
 export class IndependentScoreResponseDto {
   @ApiProperty()

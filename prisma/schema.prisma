@@ -107,6 +107,7 @@ model Student {
   independent_scores independent_scores[]
   project            Project?
   scoring_results    scoring_results[]
+  thesis_revisions   thesis_revisions[]
   user               User?                @relation(fields: [user_id], references: [id])
 
   @@index([student_id])
@@ -204,6 +205,7 @@ model Project {
   defense_session_projects defense_session_projects[]
   final_submissions        final_submissions?
   independent_scores       independent_scores[]
+  thesis_revisions         thesis_revisions[]
   student                  Student                    @relation(fields: [student_id], references: [id])
   teacher                  Teacher                    @relation(fields: [teacher_id], references: [id])
   topics                   topics?                    @relation(fields: [topic_id], references: [id])
@@ -492,11 +494,38 @@ model scoring_results {
   bonus_by_teacher_id  Int?
   is_published         Boolean   @default(false)
   published_at         DateTime?
+  // Giai đoạn 7: hạn chỉnh sửa hồ sơ + xếp hạng
+  revision_deadline    DateTime?
+  rank                 Int?
+  rank_override        Int?
+  rank_note            String?
+  ranked_at            DateTime?
   created_at           DateTime  @default(now())
   updated_at           DateTime
   projects             Project   @relation(fields: [project_id], references: [id])
   students             Student   @relation(fields: [student_id], references: [id])
 
+  @@index([student_id])
+  @@index([rank])
+}
+
+model thesis_revisions {
+  id            Int       @id @default(autoincrement())
+  project_id    Int
+  student_id    Int
+  file_url      String
+  file_name     String
+  original_name String
+  file_size     Int
+  note          String?
+  submitted_at  DateTime  @default(now())
+  created_at    DateTime  @default(now())
+  updated_at    DateTime
+  deleted_at    DateTime?
+  projects      Project   @relation(fields: [project_id], references: [id])
+  students      Student   @relation(fields: [student_id], references: [id])
+
+  @@index([project_id])
   @@index([student_id])
 }
 
