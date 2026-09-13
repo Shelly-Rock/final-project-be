@@ -15,6 +15,7 @@ import type { Response } from 'express';
 import { JwtAuthGuard } from '@core/auth/guards/jwtAuth.guard';
 import { RolesGuard } from '@core/auth/guards/roles.guard';
 import { Roles } from '@core/auth/decorators/roles.decorator';
+import { Public } from '@core/auth/decorators/public.decorator';
 import { CurrentUser } from '@core/auth/decorators/currentUser.decorator';
 import { TopicService } from './topic.service';
 import {
@@ -40,6 +41,7 @@ export class TopicController {
   // ── Governance state: mọi role đã đăng nhập ──────────────────
 
   @Get('governance-state')
+  @Public()
   @ApiOperation({ summary: 'Trạng thái governance của đợt (deadline, quota, trạng thái stage)' })
   getGovernanceState(@Query('periodId') periodId?: string) {
     const parsed = periodId ? Number(periodId) : undefined;
@@ -151,10 +153,11 @@ export class TopicController {
   // ── Sinh viên (đặt trước :id để không nuốt 'available') ─────
 
   @Get('available')
+  @Public()
   @ApiOperation({ summary: 'Đề tài còn chỗ cho sinh viên đăng ký' })
   listAvailable(
     @Query() query: TopicAvailableQueryDto,
-    @CurrentUser('sub') actorUserId: number,
+    @CurrentUser('sub') actorUserId?: number,
   ) {
     return this.topicService.listAvailableTopics(query, actorUserId);
   }
