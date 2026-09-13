@@ -1,7 +1,9 @@
 allowBuilds:
+  '@google/genai': false
   '@prisma/client': false
   '@prisma/engines': true
   '@scarf/scarf': false
   bcrypt: false
   prisma: true
+  protobufjs: false
   unrs-resolver: false
