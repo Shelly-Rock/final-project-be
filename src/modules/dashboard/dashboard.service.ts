@@ -362,17 +362,19 @@ export class DashboardService {
       try {
         const userId = Number(user.sub);
         if (isNaN(userId)) {
-          throw new Error('Invalid user ID');
+          console.warn('Invalid user ID format:', user.sub);
+          return [];
         }
         const departmentId = await this.getSecretaryDepartmentId(userId);
         if (!departmentId) {
-          throw new Error('Secretary not assigned to any department');
+          console.warn('Secretary not assigned to any department, userId:', userId);
+          return [];
         }
         const deptStats = await this.getDepartmentStatsWithProjectCounts();
         return deptStats.filter(d => d.department_id === departmentId);
       } catch (error) {
         console.error('Error in getDepartmentListScoped for SECRETARY:', error);
-        throw error;
+        return [];
       }
     }
 
