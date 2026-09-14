@@ -352,19 +352,28 @@ export class DashboardService {
   }
 
   async getDepartmentListScoped(user: any) {
-    const role = user.role || 'USER';
+    const role = user?.role || 'USER';
 
     if (role === 'ADMIN') {
       return this.getDepartmentStatsWithProjectCounts();
     }
 
     if (role === 'SECRETARY') {
-      const departmentId = await this.getSecretaryDepartmentId(user.sub);
-      if (!departmentId) {
-        throw new Error('Secretary not assigned to any department');
+      try {
+        const userId = Number(user.sub);
+        if (isNaN(userId)) {
+          throw new Error('Invalid user ID');
+        }
+        const departmentId = await this.getSecretaryDepartmentId(userId);
+        if (!departmentId) {
+          throw new Error('Secretary not assigned to any department');
+        }
+        const deptStats = await this.getDepartmentStatsWithProjectCounts();
+        return deptStats.filter(d => d.department_id === departmentId);
+      } catch (error) {
+        console.error('Error in getDepartmentListScoped for SECRETARY:', error);
+        throw error;
       }
-      const deptStats = await this.getDepartmentStatsWithProjectCounts();
-      return deptStats.filter(d => d.department_id === departmentId);
     }
 
     throw new Error('Unauthorized');
