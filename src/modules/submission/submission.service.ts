@@ -281,6 +281,29 @@ export class SubmissionService {
     });
   }
 
+  async getMySubmissions(user: JwtUser) {
+    const student = await this.resolveStudentByUserId(user.sub);
+
+    const submissions = await this.prisma.final_submissions.findMany({
+      where: {
+        student_id: student.id,
+        deleted_at: null,
+      },
+      orderBy: { submitted_at: 'desc' },
+      include: {
+        projects: {
+          select: { id: true, project_id: true, project_name: true },
+        },
+      },
+    });
+
+    return submissions.map((submission) => ({
+      ...submission,
+      project_code: submission.projects?.project_id,
+      project_name: submission.projects?.project_name,
+    }));
+  }
+
   async getSubmissions(query: SubmissionQueryDto) {
     const { page = 1, limit = 20, status, student_id, project_id } = query;
 

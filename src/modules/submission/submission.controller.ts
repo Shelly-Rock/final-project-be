@@ -30,6 +30,13 @@ import type { JwtUser } from '@/core/auth/interfaces/currentUser.interface';
 export class SubmissionController {
   constructor(private readonly service: SubmissionService) {}
 
+  // Get current student's submissions
+  @Get('my')
+  @Roles('STUDENT')
+  getMySubmissions(@CurrentUser() user: JwtUser) {
+    return this.service.getMySubmissions(user);
+  }
+
   @Post('drive/init-upload')
   @Roles('STUDENT')
   initDriveUpload(@Body() dto: InitDriveUploadDto) {

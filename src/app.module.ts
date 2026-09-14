@@ -28,6 +28,7 @@ import { TopicModule } from '@/modules/topic/topic.module';
 import { AuditModule } from '@/modules/audit/audit.module';
 import { DashboardModule } from '@/modules/dashboard/dashboard.module';
 import { StatisticsModule } from '@/modules/statistics/statistics.module';
+import { AdministrativeModule } from '@/modules/administrative/administrative.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { StatisticsModule } from '@/modules/statistics/statistics.module';
     CoreAuthModule,
     AuthModule,
     ExcelModule,
+    AdministrativeModule,
     TeacherModule,
     StudentModule,
     UserModule,
