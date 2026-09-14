@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@/core/auth/guards/jwtAuth.guard';
 import { RolesGuard } from '@/core/auth/guards/roles.guard';
@@ -55,11 +55,29 @@ export class DashboardController {
   }
 
   @Get('department')
-  @Roles('ADMIN')
-  @ApiOperation({ summary: 'Thống kê tất cả các khoa' })
-  @ApiOkResponse({ description: 'Danh sách khoa với số giảng viên và đề tài' })
-  async getDepartmentStats() {
-    const data = await this.dashboardService.getDepartmentStatsWithProjectCounts();
+  @Roles('ADMIN', 'SECRETARY')
+  @ApiOperation({ summary: 'Danh sách khoa theo phạm vi quyền' })
+  @ApiOkResponse({ description: 'Admin: tất cả khoa; Secretary: khoa được gán' })
+  async getDepartmentList(@CurrentUser() user: JwtUser) {
+    const data = await this.dashboardService.getDepartmentListScoped(user);
+    return { data };
+  }
+
+  @Get('department/:id')
+  @Roles('ADMIN', 'SECRETARY')
+  @ApiOperation({ summary: 'Chi tiết một khoa' })
+  @ApiOkResponse({ description: 'Thống kê khoa, quyền truy cập theo role' })
+  async getDepartmentDetail(@Param('id') departmentId: string, @CurrentUser() user: JwtUser) {
+    const data = await this.dashboardService.getDepartmentDetailScoped(departmentId, user);
+    return { data };
+  }
+
+  @Get('department/:id/progress-reports')
+  @Roles('ADMIN', 'SECRETARY')
+  @ApiOperation({ summary: 'Thống kê báo cáo tiến trình của khoa theo tháng' })
+  @ApiOkResponse({ description: 'Dữ liệu grouped column chart báo cáo' })
+  async getDepartmentProgressReports(@Param('id') departmentId: string, @CurrentUser() user: JwtUser) {
+    const data = await this.dashboardService.getDepartmentProgressReportsScoped(departmentId, user);
     return { data };
   }
 }

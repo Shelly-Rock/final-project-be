@@ -350,4 +350,173 @@ export class DashboardService {
       timestamp: log.created_at,
     }));
   }
+
+  async getDepartmentListScoped(user: any) {
+    const role = user.role || 'USER';
+
+    if (role === 'ADMIN') {
+      return this.getDepartmentStatsWithProjectCounts();
+    }
+
+    if (role === 'SECRETARY') {
+      const departmentId = await this.getSecretaryDepartmentId(user.sub);
+      if (!departmentId) {
+        throw new Error('Secretary not assigned to any department');
+      }
+      const deptStats = await this.getDepartmentStatsWithProjectCounts();
+      return deptStats.filter(d => d.department_id === departmentId);
+    }
+
+    throw new Error('Unauthorized');
+  }
+
+  async getDepartmentDetailScoped(departmentId: string, user: any) {
+    const role = user.role || 'USER';
+
+    if (role === 'SECRETARY') {
+      const secretaryDeptId = await this.getSecretaryDepartmentId(user.sub);
+      if (!secretaryDeptId || secretaryDeptId !== departmentId) {
+        throw new Error('Forbidden');
+      }
+    }
+
+    const dept = await this.prisma.department.findUnique({
+      where: { id: departmentId },
+    });
+
+    if (!dept) {
+      throw new Error('Department not found');
+    }
+
+    const teacherIds = await this.prisma.teacher.findMany({
+      where: { department_id: departmentId, deleted_at: null },
+      select: { id: true },
+    });
+
+    const teacherIdList = teacherIds.map(t => t.id);
+
+    const [pending, approved, rejected] = await Promise.all([
+      this.prisma.project.count({
+        where: {
+          teacher_id: { in: teacherIdList },
+          status: ProjectStatus.PENDING,
+          deleted_at: null,
+        },
+      }),
+      this.prisma.project.count({
+        where: {
+          teacher_id: { in: teacherIdList },
+          status: ProjectStatus.APPROVED,
+          deleted_at: null,
+        },
+      }),
+      this.prisma.project.count({
+        where: {
+          teacher_id: { in: teacherIdList },
+          status: ProjectStatus.REJECTED,
+          deleted_at: null,
+        },
+      }),
+    ]);
+
+    const total = pending + approved + rejected;
+
+    return {
+      department_id: dept.id,
+      department_name: dept.name,
+      teachers: teacherIdList.length,
+      projects: {
+        total,
+        pending,
+        approved,
+        rejected,
+      },
+    };
+  }
+
+  async getDepartmentProgressReportsScoped(departmentId: string, user: any) {
+    const role = user.role || 'USER';
+
+    if (role === 'SECRETARY') {
+      const secretaryDeptId = await this.getSecretaryDepartmentId(user.sub);
+      if (!secretaryDeptId || secretaryDeptId !== departmentId) {
+        throw new Error('Forbidden');
+      }
+    }
+
+    const dept = await this.prisma.department.findUnique({
+      where: { id: departmentId },
+    });
+
+    if (!dept) {
+      throw new Error('Department not found');
+    }
+
+    const teacherIds = await this.prisma.teacher.findMany({
+      where: { department_id: departmentId, deleted_at: null },
+      select: { id: true },
+    });
+
+    const teacherIdList = teacherIds.map(t => t.id);
+
+    const reports = await this.prisma.progress_reports.findMany({
+      where: {
+        teacher_id: { in: teacherIdList },
+        deleted_at: null,
+      },
+      select: {
+        year: true,
+        month: true,
+        status: true,
+      },
+    });
+
+    const summary = {
+      total: reports.length,
+      pending: reports.filter(r => r.status === 'PENDING').length,
+      approved: reports.filter(r => r.status === 'APPROVED').length,
+      rejected: reports.filter(r => r.status === 'REJECTED').length,
+    };
+
+    const grouped = new Map<string, Record<string, number>>();
+
+    reports.forEach(report => {
+      const key = `${report.year}-${String(report.month).padStart(2, '0')}`;
+      if (!grouped.has(key)) {
+        grouped.set(key, { pending: 0, approved: 0, rejected: 0, total: 0 });
+      }
+      const counts = grouped.get(key)!;
+      counts[report.status.toLowerCase()] = (counts[report.status.toLowerCase()] || 0) + 1;
+      counts.total += 1;
+    });
+
+    const series = Array.from(grouped.entries())
+      .map(([key, counts]) => {
+        const [year, month] = key.split('-');
+        const monthNum = parseInt(month, 10);
+        const monthNames = [
+          'Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6',
+          'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12',
+        ];
+        return {
+          year: parseInt(year, 10),
+          month: monthNum,
+          label: monthNames[monthNum - 1],
+          pending: counts.pending,
+          approved: counts.approved,
+          rejected: counts.rejected,
+          total: counts.total,
+        };
+      })
+      .sort((a, b) => a.year - b.year || a.month - b.month);
+
+    return {
+      department: {
+        id: dept.id,
+        name: dept.name,
+      },
+      summary,
+      series,
+    };
+  }
 }
