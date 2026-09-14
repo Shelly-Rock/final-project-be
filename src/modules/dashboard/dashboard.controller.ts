@@ -45,4 +45,12 @@ export class DashboardController {
     }
     return this.dashboardService.getSecretaryDepartmentDetails(departmentId);
   }
+
+  @Get('admin/departments')
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Danh sách các khoa với thống kê' })
+  @ApiOkResponse({ description: 'Thống kê chi tiết từng khoa' })
+  async getAdminDepartments() {
+    return this.dashboardService.getDepartmentStats();
+  }
 }

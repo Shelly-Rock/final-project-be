@@ -185,7 +185,7 @@ export class DashboardService {
     };
   }
 
-  private async getDepartmentStats() {
+  async getDepartmentStats() {
     const departments = await this.prisma.department.findMany({
       include: {
         teachers: {
