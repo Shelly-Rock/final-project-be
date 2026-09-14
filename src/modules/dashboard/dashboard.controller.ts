@@ -27,7 +27,8 @@ export class DashboardController {
   @ApiOperation({ summary: 'Thống kê dashboard cho thư ký (quản lý 1 khoa)' })
   @ApiOkResponse({ description: 'Thống kê tổng quan khoa của thư ký' })
   async getSecretaryDashboard(@CurrentUser() user: JwtUser) {
-    const departmentId = await this.dashboardService.getSecretaryDepartmentId(user.sub);
+    const userId = Number(user.sub);
+    const departmentId = await this.dashboardService.getSecretaryDepartmentId(userId);
     if (!departmentId) {
       return { error: 'Thư ký chưa được gán khoa' };
     }
@@ -39,7 +40,8 @@ export class DashboardController {
   @ApiOperation({ summary: 'Chi tiết khoa cho thư ký' })
   @ApiOkResponse({ description: 'Chi tiết về giáo viên và dự án' })
   async getSecretaryDepartmentDetails(@CurrentUser() user: JwtUser) {
-    const departmentId = await this.dashboardService.getSecretaryDepartmentId(user.sub);
+    const userId = Number(user.sub);
+    const departmentId = await this.dashboardService.getSecretaryDepartmentId(userId);
     if (!departmentId) {
       return { error: 'Thư ký chưa được gán khoa' };
     }
