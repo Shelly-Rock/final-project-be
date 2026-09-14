@@ -182,7 +182,7 @@ export class TopicController {
   // ── Giảng viên ───────────────────────────────────────────────
 
   @Get('mine')
-  @Roles('TEACHER')
+  @Roles('TEACHER', 'ADMIN', 'SECRETARY')
   @ApiOperation({ summary: 'Đề tài của giảng viên hiện tại' })
   listMine(
     @CurrentUser('sub') actorUserId: number,
@@ -196,7 +196,7 @@ export class TopicController {
   }
 
   @Post(':id/approvals/:projectId')
-  @Roles('TEACHER')
+  @Roles('TEACHER', 'ADMIN', 'SECRETARY')
   @ApiOperation({ summary: 'Giảng viên duyệt / từ chối đăng ký' })
   decideRegistration(
     @Param('id', ParseIntPipe) topicId: number,
@@ -213,7 +213,7 @@ export class TopicController {
   }
 
   @Post()
-  @Roles('TEACHER')
+  @Roles('TEACHER', 'ADMIN', 'SECRETARY')
   @ApiOperation({ summary: 'Giảng viên tạo đề tài (kiểm quota + deadline + sĩ số)' })
   createTopic(
     @Body() dto: CreateTopicDto,
@@ -223,7 +223,7 @@ export class TopicController {
   }
 
   @Put(':id')
-  @Roles('TEACHER')
+  @Roles('TEACHER', 'ADMIN', 'SECRETARY')
   @ApiOperation({ summary: 'Giảng viên cập nhật đề tài của mình' })
   updateTopic(
     @Param('id', ParseIntPipe) id: number,
