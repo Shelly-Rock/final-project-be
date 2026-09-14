@@ -10,8 +10,9 @@ import { ROLES_KEY } from '../decorators/roles.decorator';
 
 interface AuthenticatedRequest {
   user?: {
-    sub: number;
-    role: string;
+    sub?: number | string;
+    id?: number | string;
+    role?: string;
   };
 }
 
@@ -35,22 +36,24 @@ export class RolesGuard implements CanActivate {
       return true;
     }
 
-    if (
-      !user ||
-      !Number.isInteger(user.sub) ||
-      user.sub <= 0 ||
-      !user.role?.trim()
-    ) {
+    const userId = Number(user?.sub ?? user?.id);
+    const currentRole = String(user?.role ?? '')
+      .trim()
+      .toUpperCase();
+
+    if (!user || !Number.isInteger(userId) || userId <= 0 || !currentRole) {
       throw new ForbiddenException('User not authenticated');
     }
 
-    const currentRole = user.role;
+    // Keep a numeric sub on the request for @CurrentUser('sub').
+    user.sub = userId;
+    user.role = currentRole;
 
     // The JWT role only identifies the active role. A token minted before the
     // account or assignment was disabled must not retain authorization.
     const assigned = await this.prisma.userRole.findFirst({
       where: {
-        user_id: user.sub,
+        user_id: userId,
         user: { is_active: true, deleted_at: null },
         role: { name: currentRole, deleted_at: null },
       },

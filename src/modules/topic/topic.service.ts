@@ -1347,8 +1347,22 @@ export class TopicService {
   }
 
   async listMyTopics(actorUserId: number, periodId?: number) {
-    const teacher = await this.resolveTeacherByUserId(actorUserId);
     const resolvedPeriodId = periodId ?? (await this.resolveActivePeriodId());
+    const teacher = await this.prisma.teacher.findFirst({
+      where: { user_id: actorUserId, deleted_at: null },
+      select: { id: true },
+    });
+
+    if (!teacher) {
+      return {
+        periodId: resolvedPeriodId,
+        quota: null,
+        governance: await this.deadlinePolicy.getGovernanceView(resolvedPeriodId),
+        pendingApprovals: 0,
+        items: [],
+        total: 0,
+      };
+    }
 
     const [topics, quota, governance] = await Promise.all([
       this.prisma.topics.findMany({

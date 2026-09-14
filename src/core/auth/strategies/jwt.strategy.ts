@@ -17,6 +17,23 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: any) {
-    return payload;
+    // JWT `sub` is often a string after decode; role casing can also differ
+    // from the DB (`teacher` vs `TEACHER`). Normalize so RolesGuard and
+    // @CurrentUser('sub') always see an integer id and uppercase role.
+    const sub = Number(payload?.sub ?? payload?.id);
+    const role = String(payload?.role ?? '')
+      .trim()
+      .toUpperCase();
+    const roles = Array.isArray(payload?.roles)
+      ? payload.roles.map((item: unknown) => String(item).trim().toUpperCase())
+      : payload?.roles;
+
+    return {
+      ...payload,
+      sub,
+      id: Number.isInteger(sub) ? sub : payload?.id,
+      role,
+      roles,
+    };
   }
 }
