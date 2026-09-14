@@ -7,6 +7,7 @@
 export interface JwtUser {
   /** id của users */
   sub: number;
+  id?: number;
   email: string;
   /** role đang active */
   role: string;

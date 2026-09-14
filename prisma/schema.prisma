@@ -126,12 +126,13 @@ model Faculty {
 }
 
 model Department {
-  id         String    @id @db.VarChar(50)
-  name       String    @db.VarChar(255)
-  faculty_id String    @db.VarChar(50)
-  created_at DateTime  @default(now())
-  faculty    Faculty   @relation(fields: [faculty_id], references: [id])
+  id         String      @id @db.VarChar(50)
+  name       String      @db.VarChar(255)
+  faculty_id String      @db.VarChar(50)
+  created_at DateTime    @default(now())
+  faculty    Faculty     @relation(fields: [faculty_id], references: [id])
   teachers   Teacher[]
+  secretary  Secretary?
 
   @@map("departments")
 }
@@ -171,13 +172,15 @@ model Teacher {
 }
 
 model Secretary {
-  id           Int       @id @default(autoincrement())
-  user_id      Int       @unique
-  secretary_id String    @unique
-  created_at   DateTime  @default(now())
-  updated_at   DateTime  @updatedAt
-  deleted_at   DateTime?
-  user         User      @relation(fields: [user_id], references: [id])
+  id            Int        @id @default(autoincrement())
+  user_id       Int        @unique
+  secretary_id  String     @unique
+  department_id String?    @unique @db.VarChar(50)
+  created_at    DateTime   @default(now())
+  updated_at    DateTime   @updatedAt
+  deleted_at    DateTime?
+  user          User       @relation(fields: [user_id], references: [id])
+  department    Department? @relation(fields: [department_id], references: [id])
 
   @@map("secretaries")
 }

@@ -3,100 +3,46 @@ import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swa
 import { JwtAuthGuard } from '@/core/auth/guards/jwtAuth.guard';
 import { RolesGuard } from '@/core/auth/guards/roles.guard';
 import { Roles } from '@/core/auth/decorators/roles.decorator';
-import { PrismaService } from '@/core/database/prisma/prisma.service';
-import { ProjectStatus, ReportStatus } from '@prisma/client';
+import { CurrentUser } from '@/core/auth/decorators/currentUser.decorator';
+import type { JwtUser } from '@/core/auth/interfaces/currentUser.interface';
+import { DashboardService } from './dashboard.service';
 
 @ApiTags('Dashboard')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ADMIN', 'SECRETARY')
 @Controller('dashboard')
 export class DashboardController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly dashboardService: DashboardService) {}
 
-  @Get('secretary')
-  @ApiOperation({ summary: 'Thống kê tổng quan cho thư ký' })
-  @ApiOkResponse({ description: 'Thống kê tổng quan' })
-  async getSecretaryDashboard() {
-    const [
-      totalStudents,
-      totalTeachers,
-      totalProjects,
-      pendingReports,
-      approvedReports,
-      rejectedReports,
-      pendingProjects,
-      approvedProjects,
-      rejectedProjects,
-      totalUsers,
-    ] = await Promise.all([
-      this.prisma.student.count({ where: { deleted_at: null } }),
-      this.prisma.teacher.count({ where: { deleted_at: null } }),
-      this.prisma.project.count({ where: { deleted_at: null } }),
-      this.prisma.progress_reports.count({ where: { status: ReportStatus.PENDING, deleted_at: null } }),
-      this.prisma.progress_reports.count({ where: { status: ReportStatus.APPROVED, deleted_at: null } }),
-      this.prisma.progress_reports.count({ where: { status: ReportStatus.REJECTED, deleted_at: null } }),
-      this.prisma.project.count({ where: { status: ProjectStatus.PENDING, deleted_at: null } }),
-      this.prisma.project.count({ where: { status: ProjectStatus.APPROVED, deleted_at: null } }),
-      this.prisma.project.count({ where: { status: ProjectStatus.REJECTED, deleted_at: null } }),
-      this.prisma.user.count({ where: { deleted_at: null } }),
-    ]);
-
-    return {
-      students: totalStudents,
-      teachers: totalTeachers,
-      projects: totalProjects,
-      users: totalUsers,
-      reports: {
-        pending: pendingReports,
-        approved: approvedReports,
-        rejected: rejectedReports,
-        total: pendingReports + approvedReports + rejectedReports,
-      },
-      projectStatus: {
-        pending: pendingProjects,
-        approved: approvedProjects,
-        rejected: rejectedProjects,
-      },
-    };
+  @Get('admin')
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Thống kê dashboard cho admin (quản lý 1-N khoa)' })
+  @ApiOkResponse({ description: 'Thống kê tổng quan tất cả khoa' })
+  async getAdminDashboard() {
+    return this.dashboardService.getAdminDashboard();
   }
 
-  @Get('department')
-  @ApiOperation({ summary: 'Thống kê theo khoa/bộ môn' })
-  @ApiOkResponse({ description: 'Thống kê theo khoa/bộ môn' })
-  async getDepartmentDashboard() {
-    const departments = await this.prisma.department.findMany({
-      include: {
-        teachers: {
-          where: { deleted_at: null },
-          select: {
-            id: true,
-            project: {
-              select: { id: true, status: true },
-            },
-          },
-        },
-      },
-    });
+  @Get('secretary')
+  @Roles('SECRETARY')
+  @ApiOperation({ summary: 'Thống kê dashboard cho thư ký (quản lý 1 khoa)' })
+  @ApiOkResponse({ description: 'Thống kê tổng quan khoa của thư ký' })
+  async getSecretaryDashboard(@CurrentUser() user: JwtUser) {
+    const departmentId = await this.dashboardService.getSecretaryDepartmentId(user.sub);
+    if (!departmentId) {
+      return { error: 'Thư ký chưa được gán khoa' };
+    }
+    return this.dashboardService.getSecretaryDashboard(departmentId);
+  }
 
-    return departments.map((dept) => {
-      const teacherIds = dept.teachers.map((t) => t.id);
-      const projects = dept.teachers.flatMap((t) => t.project);
-      const pendingProjects = projects.filter((p) => p.status === ProjectStatus.PENDING).length;
-      const approvedProjects = projects.filter((p) => p.status === ProjectStatus.APPROVED).length;
-      const rejectedProjects = projects.filter((p) => p.status === ProjectStatus.REJECTED).length;
-
-      return {
-        department_id: dept.id,
-        department_name: dept.name,
-        teachers: teacherIds.length,
-        projects: {
-          total: projects.length,
-          pending: pendingProjects,
-          approved: approvedProjects,
-          rejected: rejectedProjects,
-        },
-      };
-    });
+  @Get('secretary/department-details')
+  @Roles('SECRETARY')
+  @ApiOperation({ summary: 'Chi tiết khoa cho thư ký' })
+  @ApiOkResponse({ description: 'Chi tiết về giáo viên và dự án' })
+  async getSecretaryDepartmentDetails(@CurrentUser() user: JwtUser) {
+    const departmentId = await this.dashboardService.getSecretaryDepartmentId(user.sub);
+    if (!departmentId) {
+      return { error: 'Thư ký chưa được gán khoa' };
+    }
+    return this.dashboardService.getSecretaryDepartmentDetails(departmentId);
   }
 }
