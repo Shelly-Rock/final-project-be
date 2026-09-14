@@ -53,4 +53,13 @@ export class DashboardController {
   async getAdminDepartments() {
     return this.dashboardService.getDepartmentStats();
   }
+
+  @Get('department')
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Thống kê tất cả các khoa' })
+  @ApiOkResponse({ description: 'Danh sách khoa với số giảng viên và đề tài' })
+  async getDepartmentStats() {
+    const data = await this.dashboardService.getDepartmentStatsWithProjectCounts();
+    return { data };
+  }
 }

@@ -282,6 +282,59 @@ export class DashboardService {
     };
   }
 
+  async getDepartmentStatsWithProjectCounts() {
+    const departments = await this.prisma.department.findMany({
+      include: {
+        teachers: {
+          where: { deleted_at: null },
+          select: { id: true },
+        },
+      },
+    });
+
+    return Promise.all(
+      departments.map(async (dept) => {
+        const [pending, approved, rejected] = await Promise.all([
+          this.prisma.project.count({
+            where: {
+              teacher_id: { in: dept.teachers.map((t) => t.id) },
+              status: ProjectStatus.PENDING,
+              deleted_at: null,
+            },
+          }),
+          this.prisma.project.count({
+            where: {
+              teacher_id: { in: dept.teachers.map((t) => t.id) },
+              status: ProjectStatus.APPROVED,
+              deleted_at: null,
+            },
+          }),
+          this.prisma.project.count({
+            where: {
+              teacher_id: { in: dept.teachers.map((t) => t.id) },
+              status: ProjectStatus.REJECTED,
+              deleted_at: null,
+            },
+          }),
+        ]);
+
+        const total = pending + approved + rejected;
+
+        return {
+          department_id: dept.id,
+          department_name: dept.name,
+          teachers: dept.teachers.length,
+          projects: {
+            total,
+            pending,
+            approved,
+            rejected,
+          },
+        };
+      }),
+    );
+  }
+
   private async getRecentActivities(limit: number = 5) {
     const auditLogs = await this.prisma.audit_logs.findMany({
       take: limit,
