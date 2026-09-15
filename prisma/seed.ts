@@ -108,6 +108,36 @@ async function main() {
       module: 'teacher',
       action: 'delete',
     },
+    {
+      name: 'notification:read',
+      description: 'Xem thông báo',
+      module: 'notification',
+      action: 'read',
+    },
+    {
+      name: 'notification:create',
+      description: 'Tạo thông báo',
+      module: 'notification',
+      action: 'create',
+    },
+    {
+      name: 'notification:send',
+      description: 'Gửi thông báo đến người dùng',
+      module: 'notification',
+      action: 'send',
+    },
+    {
+      name: 'notification:update',
+      description: 'Cập nhật thông báo',
+      module: 'notification',
+      action: 'update',
+    },
+    {
+      name: 'notification:delete',
+      description: 'Xóa thông báo',
+      module: 'notification',
+      action: 'delete',
+    },
   ];
 
   const permissions = [];
@@ -188,9 +218,20 @@ async function main() {
       'student:update',
       'student:delete',
       'teacher:read',
+      'notification:read',
+      'notification:create',
+      'notification:send',
     ],
-    TEACHER: ['student:read'],
-    STUDENT: ['student:read'],
+    TEACHER: [
+      'student:read',
+      'notification:read',
+      'notification:create',
+      'notification:send',
+    ],
+    STUDENT: [
+      'student:read',
+      'notification:read',
+    ],
   };
 
   // Only grant default permissions on first seed. Subsequent runs must NOT

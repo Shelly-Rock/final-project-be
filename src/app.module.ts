@@ -14,6 +14,7 @@ import { CommitteeModule } from './modules/committee/committee.module';
 import { DefenseModule } from './modules/defense/defense.module';
 import { ScoringModule } from './modules/scoring/scoring.module';
 import { ChatModule } from './modules/chat/chat.module';
+import { NotificationModule } from './modules/notification/notification.module';
 import { JwtAuthGuard } from './core/auth/guards/jwtAuth.guard';
 import { PermissionsGuard } from './core/auth/guards/permissions.guard';
 import { RolesGuard } from './core/auth/guards/roles.guard';
@@ -57,6 +58,7 @@ import { AdministrativeModule } from '@/modules/administrative/administrative.mo
     DefenseModule,
     ScoringModule,
     ChatModule,
+    NotificationModule,
   ],
   providers: [
     {
