@@ -530,4 +530,267 @@ export class DashboardService {
       series,
     };
   }
+
+  async getSecretaryDepartmentOverview(departmentId: string, user: any) {
+    const role = user.role || 'USER';
+
+    if (role === 'SECRETARY') {
+      const secretaryDeptId = await this.getSecretaryDepartmentId(user.sub);
+      if (!secretaryDeptId || secretaryDeptId !== departmentId) {
+        throw new Error('Forbidden');
+      }
+    }
+
+    const dept = await this.prisma.department.findUnique({
+      where: { id: departmentId },
+      include: {
+        faculty: { select: { name: true } },
+        teachers: {
+          where: { deleted_at: null },
+          select: { id: true, name: true, email: true },
+        },
+      },
+    });
+
+    if (!dept) {
+      throw new Error('Department not found');
+    }
+
+    const teacherIds = dept.teachers.map(t => t.id);
+
+    const [
+      totalProjects,
+      completedTopics,
+      pendingTopics,
+      failedTopics,
+      totalReports,
+      pendingReports,
+      approvedReports,
+      rejectedReports,
+    ] = await Promise.all([
+      this.prisma.project.count({
+        where: { teacher_id: { in: teacherIds }, deleted_at: null },
+      }),
+      this.prisma.topics.count({
+        where: {
+          teacher_id: { in: teacherIds },
+          status: 'APPROVED',
+        },
+      }),
+      this.prisma.topics.count({
+        where: {
+          teacher_id: { in: teacherIds },
+          status: 'PENDING',
+        },
+      }),
+      this.prisma.topics.count({
+        where: {
+          teacher_id: { in: teacherIds },
+          status: 'REJECTED',
+        },
+      }),
+      this.prisma.progress_reports.count({
+        where: { teacher_id: { in: teacherIds }, deleted_at: null },
+      }),
+      this.prisma.progress_reports.count({
+        where: { teacher_id: { in: teacherIds }, status: 'PENDING', deleted_at: null },
+      }),
+      this.prisma.progress_reports.count({
+        where: { teacher_id: { in: teacherIds }, status: 'APPROVED', deleted_at: null },
+      }),
+      this.prisma.progress_reports.count({
+        where: { teacher_id: { in: teacherIds }, status: 'REJECTED', deleted_at: null },
+      }),
+    ]);
+
+    const topics = await this.prisma.topics.findMany({
+      where: { teacher_id: { in: teacherIds } },
+      include: {
+        teacher: { select: { name: true, id: true } },
+      },
+      take: 10,
+      orderBy: { created_at: 'desc' },
+    });
+
+    return {
+      department: {
+        id: dept.id,
+        name: dept.name,
+        faculty: dept.faculty?.name,
+        code: 'SE-IT',
+        status: 'Đang hoạt động',
+      },
+      stats: {
+        teachers: dept.teachers.length,
+        projects: totalProjects,
+        reports: totalReports,
+        pendingReports,
+      },
+      topicDistribution: {
+        completed: completedTopics,
+        pending: pendingTopics,
+        failed: failedTopics,
+        total: completedTopics + pendingTopics + failedTopics,
+      },
+      reportStats: {
+        pending: pendingReports,
+        approved: approvedReports,
+        rejected: rejectedReports,
+        total: totalReports,
+      },
+      recentTopics: topics.map(t => ({
+        id: t.id,
+        name: t.name,
+        code: t.id.substring(0, 8).toUpperCase(),
+        teacher: {
+          id: t.teacher.id,
+          name: t.teacher.name,
+        },
+        status: t.status,
+        completionPercentage: 100,
+      })),
+    };
+  }
+
+  async getSecretaryDepartmentTopics(departmentId: string, user: any) {
+    const role = user.role || 'USER';
+
+    if (role === 'SECRETARY') {
+      const secretaryDeptId = await this.getSecretaryDepartmentId(user.sub);
+      if (!secretaryDeptId || secretaryDeptId !== departmentId) {
+        throw new Error('Forbidden');
+      }
+    }
+
+    const dept = await this.prisma.department.findUnique({
+      where: { id: departmentId },
+      include: {
+        teachers: {
+          where: { deleted_at: null },
+          select: { id: true },
+        },
+      },
+    });
+
+    if (!dept) {
+      throw new Error('Department not found');
+    }
+
+    const teacherIds = dept.teachers.map(t => t.id);
+
+    const topics = await this.prisma.topics.findMany({
+      where: { teacher_id: { in: teacherIds } },
+      include: {
+        teacher: { select: { id: true, name: true, email: true } },
+      },
+      orderBy: { created_at: 'desc' },
+    });
+
+    return {
+      total: topics.length,
+      data: topics.map(t => ({
+        id: t.id,
+        name: t.name,
+        code: t.id.substring(0, 8).toUpperCase(),
+        teacher: {
+          id: t.teacher.id,
+          name: t.teacher.name,
+          email: t.teacher.email,
+        },
+        status: t.status,
+        completionPercentage: t.status === 'APPROVED' ? 100 : t.status === 'PENDING' ? 50 : 0,
+        createdAt: t.created_at,
+      })),
+    };
+  }
+
+  async getDepartmentSecretaryDetail(departmentId: string, user: any) {
+    const role = user.role || 'USER';
+
+    if (role === 'SECRETARY') {
+      const secretaryDeptId = await this.getSecretaryDepartmentId(user.sub);
+      if (!secretaryDeptId || secretaryDeptId !== departmentId) {
+        throw new Error('Forbidden');
+      }
+    }
+
+    const dept = await this.prisma.department.findUnique({
+      where: { id: departmentId },
+      include: {
+        teachers: {
+          where: { deleted_at: null },
+          select: { id: true, name: true, email: true, position: true },
+        },
+      },
+    });
+
+    if (!dept) {
+      throw new Error('Department not found');
+    }
+
+    const teacherIds = dept.teachers.map(t => t.id);
+
+    const [
+      completedTopics,
+      pendingTopics,
+      delayedTopics,
+      totalReports,
+      pendingReports,
+    ] = await Promise.all([
+      this.prisma.topics.count({
+        where: {
+          teacher_id: { in: teacherIds },
+          status: 'APPROVED',
+        },
+      }),
+      this.prisma.topics.count({
+        where: {
+          teacher_id: { in: teacherIds },
+          status: 'PENDING',
+        },
+      }),
+      this.prisma.topics.count({
+        where: {
+          teacher_id: { in: teacherIds },
+          status: 'REJECTED',
+        },
+      }),
+      this.prisma.progress_reports.count({
+        where: { teacher_id: { in: teacherIds }, deleted_at: null },
+      }),
+      this.prisma.progress_reports.count({
+        where: { teacher_id: { in: teacherIds }, status: 'PENDING', deleted_at: null },
+      }),
+    ]);
+
+    const topics = await this.prisma.topics.findMany({
+      where: { teacher_id: { in: teacherIds } },
+      include: {
+        teacher: { select: { id: true, name: true, email: true, position: true } },
+      },
+      orderBy: { created_at: 'desc' },
+    });
+
+    return {
+      departmentId: dept.id,
+      departmentName: dept.name,
+      departmentCode: 'SE-IT',
+      totalTeachers: dept.teachers.length,
+      totalTopics: completedTopics + pendingTopics + delayedTopics,
+      completedTopics,
+      pendingApprovalTopics: pendingTopics,
+      delayedTopics,
+      totalReports,
+      pendingApprovals: pendingReports,
+      topics: topics.map(t => ({
+        id: t.id,
+        name: t.name,
+        code: t.id.substring(0, 8).toUpperCase(),
+        instructorName: t.teacher.name,
+        instructorRole: t.teacher.position || 'Giảng viên bộ môn',
+        completionPercentage: t.status === 'APPROVED' ? 100 : t.status === 'PENDING' ? 50 : 0,
+        status: t.status === 'APPROVED' ? 'completed' : t.status === 'PENDING' ? 'pending' : 'delayed',
+      })),
+    };
+  }
 }

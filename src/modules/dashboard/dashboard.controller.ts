@@ -82,4 +82,41 @@ export class DashboardController {
     const data = await this.dashboardService.getDepartmentProgressReportsScoped(departmentId, user);
     return { data };
   }
+
+  @Get('secretary/department-overview')
+  @Roles('SECRETARY')
+  @ApiOperation({ summary: 'Tổng quan khoa cho thư ký (chi tiết dashboard)' })
+  @ApiOkResponse({ description: 'Tổng quan đầy đủ khoa với thống kê' })
+  async getSecretaryDepartmentOverview(@CurrentUser() user: JwtUser) {
+    const userId = Number(user.sub);
+    const departmentId = await this.dashboardService.getSecretaryDepartmentId(userId);
+    if (!departmentId) {
+      return { error: 'Thư ký chưa được gán khoa' };
+    }
+    const data = await this.dashboardService.getSecretaryDepartmentOverview(departmentId, user);
+    return { data };
+  }
+
+  @Get('secretary/department-topics')
+  @Roles('SECRETARY')
+  @ApiOperation({ summary: 'Danh sách đề tài của khoa cho thư ký' })
+  @ApiOkResponse({ description: 'Danh sách tất cả đề tài trong khoa' })
+  async getSecretaryDepartmentTopics(@CurrentUser() user: JwtUser) {
+    const userId = Number(user.sub);
+    const departmentId = await this.dashboardService.getSecretaryDepartmentId(userId);
+    if (!departmentId) {
+      return { error: 'Thư ký chưa được gán khoa' };
+    }
+    const data = await this.dashboardService.getSecretaryDepartmentTopics(departmentId, user);
+    return { data };
+  }
+
+  @Get('department/:id/secretary-detail')
+  @Roles('ADMIN', 'SECRETARY')
+  @ApiOperation({ summary: 'Chi tiết khoa cho thư ký với đề tài' })
+  @ApiOkResponse({ description: 'Thông tin chi tiết khoa, giảng viên, và danh sách đề tài' })
+  async getDepartmentSecretaryDetail(@Param('id') departmentId: string, @CurrentUser() user: JwtUser) {
+    const data = await this.dashboardService.getDepartmentSecretaryDetail(departmentId, user);
+    return { data };
+  }
 }
