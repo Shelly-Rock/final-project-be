@@ -231,11 +231,17 @@ export class DashboardService {
   }
 
   async getSecretaryDepartmentId(userId: number): Promise<string | null> {
-    const secretary = await this.prisma.secretary.findUnique({
-      where: { user_id: userId },
-      include: { department: { select: { id: true } } },
-    });
-    return secretary?.department?.id || null;
+    try {
+      const secretary = await this.prisma.secretary.findUnique({
+        where: { user_id: userId },
+        include: { department: { select: { id: true } } },
+      });
+      return secretary?.department?.id || null;
+    } catch (error) {
+      // Fallback if department_id column doesn't exist in production
+      console.log('Note: Secretary department migration not yet applied');
+      return null;
+    }
   }
 
   async getSecretaryDepartmentDetails(departmentId: string) {
