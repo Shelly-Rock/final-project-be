@@ -605,12 +605,24 @@ export class DashboardService {
 
     const topics = await this.prisma.topics.findMany({
       where: { teacher_id: { in: teacherIds } },
-      include: {
-        teacher: { select: { name: true, id: true } },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        teacher_id: true,
       },
       take: 10,
       orderBy: { created_at: 'desc' },
     });
+
+    // Get teacher info separately
+    const topicTeacherMap = new Map();
+    const uniqueTopicTeacherIds = [...new Set(topics.map(t => t.teacher_id))];
+    const topicTeachers = await this.prisma.teacher.findMany({
+      where: { id: { in: uniqueTopicTeacherIds } },
+      select: { id: true, name: true },
+    });
+    topicTeachers.forEach(t => topicTeacherMap.set(t.id, t));
 
     return {
       department: {
@@ -639,13 +651,10 @@ export class DashboardService {
         total: totalReports,
       },
       recentTopics: topics.map(t => ({
-        id: t.id,
+        id: `TOPIC-${t.id}`,
         name: t.name,
-        code: t.id.substring(0, 8).toUpperCase(),
-        teacher: {
-          id: t.teacher.id,
-          name: t.teacher.name,
-        },
+        code: `TOPIC-${t.id}`,
+        teacher: topicTeacherMap.get(t.teacher_id) || { id: t.teacher_id, name: 'Unknown' },
         status: t.status,
         completionPercentage: 100,
       })),
@@ -680,23 +689,32 @@ export class DashboardService {
 
     const topics = await this.prisma.topics.findMany({
       where: { teacher_id: { in: teacherIds } },
-      include: {
-        teacher: { select: { id: true, name: true, email: true } },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        created_at: true,
+        teacher_id: true,
       },
       orderBy: { created_at: 'desc' },
     });
+
+    // Get teacher info separately
+    const teacherMap = new Map();
+    const uniqueTeacherIds = [...new Set(topics.map(t => t.teacher_id))];
+    const teachers = await this.prisma.teacher.findMany({
+      where: { id: { in: uniqueTeacherIds } },
+      select: { id: true, name: true, email: true },
+    });
+    teachers.forEach(t => teacherMap.set(t.id, t));
 
     return {
       total: topics.length,
       data: topics.map(t => ({
         id: t.id,
         name: t.name,
-        code: t.id.substring(0, 8).toUpperCase(),
-        teacher: {
-          id: t.teacher.id,
-          name: t.teacher.name,
-          email: t.teacher.email,
-        },
+        code: `TOPIC-${t.id}`,
+        teacher: teacherMap.get(t.teacher_id) || { id: t.teacher_id, name: 'Unknown', email: '' },
         status: t.status,
         completionPercentage: t.status === 'APPROVED' ? 100 : t.status === 'PENDING' ? 50 : 0,
         createdAt: t.created_at,
@@ -765,11 +783,19 @@ export class DashboardService {
 
     const topics = await this.prisma.topics.findMany({
       where: { teacher_id: { in: teacherIds } },
-      include: {
-        teacher: { select: { id: true, name: true, email: true, position: true } },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        created_at: true,
+        teacher_id: true,
       },
       orderBy: { created_at: 'desc' },
     });
+
+    // Build teacher info map from dept.teachers
+    const teacherMap = new Map();
+    dept.teachers.forEach(t => teacherMap.set(t.id, { name: t.name, email: t.email, position: t.position }));
 
     return {
       departmentId: dept.id,
@@ -782,15 +808,18 @@ export class DashboardService {
       delayedTopics,
       totalReports,
       pendingApprovals: pendingReports,
-      topics: topics.map(t => ({
-        id: t.id,
-        name: t.name,
-        code: t.id.substring(0, 8).toUpperCase(),
-        instructorName: t.teacher.name,
-        instructorRole: t.teacher.position || 'Giảng viên bộ môn',
-        completionPercentage: t.status === 'APPROVED' ? 100 : t.status === 'PENDING' ? 50 : 0,
-        status: t.status === 'APPROVED' ? 'completed' : t.status === 'PENDING' ? 'pending' : 'delayed',
-      })),
+      topics: topics.map(t => {
+        const teacher = teacherMap.get(t.teacher_id) || { name: 'Unknown', position: 'Giảng viên bộ môn' };
+        return {
+          id: t.id,
+          name: t.name,
+          code: `TOPIC-${t.id}`,
+          instructorName: teacher.name,
+          instructorRole: teacher.position || 'Giảng viên bộ môn',
+          completionPercentage: t.status === 'APPROVED' ? 100 : t.status === 'PENDING' ? 50 : 0,
+          status: t.status === 'APPROVED' ? 'completed' : t.status === 'PENDING' ? 'pending' : 'delayed',
+        };
+      }),
     };
   }
 }
