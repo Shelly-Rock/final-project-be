@@ -268,38 +268,6 @@ async function main() {
       teacherId: 'GV002',
     },
     {
-      email: 'teacher3@system.com',
-      username: 'teacher_demo_3',
-      role: teacherRole,
-      firstName: 'Giảng viên',
-      lastName: 'Ba',
-      teacherId: 'GV003',
-    },
-    {
-      email: 'teacher4@system.com',
-      username: 'teacher_demo_4',
-      role: teacherRole,
-      firstName: 'Giảng viên',
-      lastName: 'Bốn',
-      teacherId: 'GV004',
-    },
-    {
-      email: 'teacher5@system.com',
-      username: 'teacher_demo_5',
-      role: teacherRole,
-      firstName: 'Giảng viên',
-      lastName: 'Năm',
-      teacherId: 'GV005',
-    },
-    {
-      email: 'teacher6@system.com',
-      username: 'teacher_demo_6',
-      role: teacherRole,
-      firstName: 'Giảng viên',
-      lastName: 'Sáu',
-      teacherId: 'GV006',
-    },
-    {
       email: 'secretary@system.com',
       username: 'secretary_demo',
       role: secretaryRole,
@@ -311,8 +279,16 @@ async function main() {
       username: 'student_demo',
       role: studentRole,
       firstName: 'Demo',
-      lastName: 'Sinh viên',
+      lastName: 'Sinh viên Trưởng',
       studentId: 'SV001',
+    },
+    {
+      email: 'student2@system.com',
+      username: 'student_demo_2',
+      role: studentRole,
+      firstName: 'Demo',
+      lastName: 'Sinh viên Phụ',
+      studentId: 'SV002',
     },
   ];
 
@@ -418,28 +394,140 @@ async function main() {
     );
   }
 
-  // 7. Tạo Project DT001
-  const studentDemo = await prisma.student.findUnique({ where: { student_id: 'SV001' } });
+  // 7. Tạo dữ liệu mô phỏng luồng đăng ký & upload báo cáo (Simulation)
+  const studentLeader = await prisma.student.findUnique({ where: { student_id: 'SV001' } });
+  const studentMember = await prisma.student.findUnique({ where: { student_id: 'SV002' } });
   const teacherDemo = await prisma.teacher.findUnique({ where: { teacher_id: 'GV001' } });
+  const adminUser = await prisma.user.findFirst({ where: { username: 'admin_sys' } });
 
-  if (studentDemo && teacherDemo) {
-    const project = await prisma.project.upsert({
-      where: { project_id: 'DT001' },
-      update: {
-        student_id: studentDemo.id,
-        teacher_id: teacherDemo.id,
-        status: 'APPROVED',
-      },
+  if (studentLeader && studentMember && teacherDemo && adminUser) {
+    // Bước 7.1: Tạo Registration Period
+    const period = await prisma.registration_periods.upsert({
+      where: { id: 1 },
+      update: {},
       create: {
-        project_id: 'DT001',
-        project_name: 'Hệ thống quản lý sinh viên',
-        description: 'Phát triển hệ thống quản lý sinh viên bằng NextJS và NestJS',
-        student_id: studentDemo.id,
-        teacher_id: teacherDemo.id,
-        status: 'APPROVED',
+        name: 'Học kỳ 1 - Năm học 2024-2025',
+        semester: 'HK1',
+        school_year: '2024-2025',
+        start_date: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000), // 30 days ago
+        teacher_deadline: new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000),
+        student_deadline: new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000),
+        default_quota: 2,
+        status: 'OPEN',
+        updated_at: now,
       },
     });
-    console.log(`✅ Đã tạo Đề tài: ${project.project_id} - ${project.project_name}`);
+    console.log(`✅ Đã tạo Đợt đăng ký: ${period.name}`);
+
+    // Bước 7.2: Tạo Deadline Nộp báo cáo cuối kỳ
+    await prisma.period_deadlines.upsert({
+      where: {
+        period_id_type_seq: {
+          period_id: period.id,
+          type: 'FINAL_SUBMISSION',
+          seq: 1,
+        }
+      },
+      update: {},
+      create: {
+        period_id: period.id,
+        type: 'FINAL_SUBMISSION',
+        seq: 1,
+        label: 'Hạn cuối nộp báo cáo',
+        deadline_at: new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000),  // closes in 14 days
+        updated_at: now,
+      },
+    });
+
+    // Bước 7.3: Tạo Topic thuộc Period
+    const topic = await prisma.topics.upsert({
+      where: { code: 'SE001' },
+      update: { locked_at: now }, // Mô phỏng đã khóa
+      create: {
+        code: 'SE001',
+        name: 'Xây dựng hệ thống quản lý đồ án',
+        description: 'Phát triển hệ thống bằng NextJS, NestJS, Prisma',
+        max_students: 2,
+        registered_students: 2,
+        teacher_id: teacherDemo.id,
+        period_id: period.id,
+        status: 'APPROVED',
+        locked_at: now, // Mô phỏng GV đã khóa
+        updated_at: now,
+      },
+    });
+    console.log(`✅ Đã tạo Đề tài: ${topic.code} - ${topic.name}`);
+
+    // Bước 7.4: Tạo Project cho SV001 (Trưởng nhóm) và SV002 (Thành viên)
+    const projectId1 = `DA-${topic.code}-${studentLeader.student_id}`;
+    await prisma.project.upsert({
+      where: { student_id: studentLeader.id },
+      update: { 
+        project_id: projectId1,
+        topic_id: topic.id,
+        project_name: topic.name,
+        status: 'APPROVED', 
+        is_leader: true, 
+        assigned_task: 'Thiết kế BE & Quản lý nhóm',
+        updated_at: now 
+      },
+      create: {
+        project_id: projectId1,
+        project_name: topic.name,
+        description: topic.description,
+        topic_id: topic.id,
+        student_id: studentLeader.id,
+        teacher_id: teacherDemo.id,
+        status: 'APPROVED',
+        is_leader: true,
+        assigned_task: 'Thiết kế BE & Quản lý nhóm',
+        updated_at: now,
+      },
+    });
+
+    const projectId2 = `DA-${topic.code}-${studentMember.student_id}`;
+    await prisma.project.upsert({
+      where: { student_id: studentMember.id },
+      update: { 
+        project_id: projectId2,
+        topic_id: topic.id,
+        project_name: topic.name,
+        status: 'APPROVED', 
+        is_leader: false, 
+        assigned_task: 'Làm FE UI',
+        updated_at: now 
+      },
+      create: {
+        project_id: projectId2,
+        project_name: topic.name,
+        description: topic.description,
+        topic_id: topic.id,
+        student_id: studentMember.id,
+        teacher_id: teacherDemo.id,
+        status: 'APPROVED',
+        is_leader: false,
+        assigned_task: 'Làm FE UI',
+        updated_at: now,
+      },
+    });
+    console.log(`✅ Đã phân công 2 sinh viên vào Đề tài (SV001 là Trưởng nhóm)`);
+
+    // Bước 7.5: Tạo Student Progress để vượt qua bài check điều kiện nộp bài
+    for (const s of [studentLeader, studentMember]) {
+      await prisma.student_progress.upsert({
+        where: { student_id: s.id },
+        update: { status: 'ON_TRACK', is_banned: false },
+        create: {
+          student_id: s.id,
+          total_reports_required: 4,
+          total_reports_submitted: 4,
+          is_banned: false,
+          status: 'ON_TRACK',
+          updated_at: now,
+        },
+      });
+    }
+    console.log(`✅ Đã khởi tạo tiến độ (Student Progress) cho 2 sinh viên`);
   }
 
   console.log('🎉 Seed dữ liệu mẫu hoàn tất!');

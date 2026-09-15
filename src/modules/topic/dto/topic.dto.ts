@@ -323,3 +323,30 @@ export class TopicAvailableQueryDto {
   @Max(100)
   limit = 20;
 }
+
+/** Một phần tử phân công nhiệm vụ cho 1 sinh viên trong nhóm */
+export class StudentAssignmentDto {
+  @ApiProperty({ description: 'Project ID của sinh viên (id của bản ghi Project)' })
+  @IsInt()
+  @Min(1)
+  projectId: number;
+
+  @ApiProperty({ description: 'Nhiệm vụ được giao cho sinh viên này' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(2_000)
+  assignedTask: string;
+
+  @ApiProperty({ description: 'Đánh dấu sinh viên này là trưởng nhóm' })
+  @IsBoolean()
+  isLeader: boolean;
+}
+
+/** DTO dùng khi GV khóa đề tài kèm phân công nhiệm vụ cho từng thành viên */
+export class LockTopicWithAssignmentsDto {
+  @ApiProperty({ type: [StudentAssignmentDto] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @Type(() => StudentAssignmentDto)
+  assignments: StudentAssignmentDto[];
+}

@@ -202,6 +202,9 @@ model Project {
   decided_by_user_id       Int?
   teacher_decided_at       DateTime?
   moderator_note           String?
+  // Phân công nhóm: GV chỉ định trưởng nhóm và nhiệm vụ khi khóa đề tài
+  is_leader                Boolean                    @default(false)
+  assigned_task            String?
   defense_session_projects defense_session_projects[]
   final_submissions        final_submissions?
   independent_scores       independent_scores[]

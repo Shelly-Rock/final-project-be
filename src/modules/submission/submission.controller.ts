@@ -76,6 +76,23 @@ export class SubmissionController {
     return this.service.getStats();
   }
 
+  // ── Student self-service ─────────────────────────────────────────────────
+  // MUST be declared BEFORE ':id' route to avoid route collision.
+
+  /** Lấy bài nộp của sinh viên đang đăng nhập — chỉ dữ liệu của chính họ. */
+  @Get('my')
+  @Roles('STUDENT')
+  getMySubmissions(@CurrentUser() user: JwtUser) {
+    return this.service.getMySubmissions(user);
+  }
+
+  /** Kiểm tra điều kiện nộp bài của sinh viên đang đăng nhập — không lộ thông tin người khác. */
+  @Get('my/eligibility')
+  @Roles('STUDENT')
+  getMyEligibility(@CurrentUser() user: JwtUser) {
+    return this.service.getMyEligibility(user);
+  }
+
   // Get submission by ID
   @Get(':id')
   getSubmissionById(@Param('id', ParseIntPipe) id: number) {

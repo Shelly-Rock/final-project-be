@@ -24,6 +24,7 @@ import {
   CreateTopicDto,
   ForceUpdateTopicDto,
   GenerateTopicCodesDto,
+  LockTopicWithAssignmentsDto,
   ManualAssignDto,
   RegistrationDecisionDto,
   SearchPeriodEntityQueryDto,
@@ -210,6 +211,19 @@ export class TopicController {
       dto,
       actorUserId,
     );
+  }
+
+  @Post(':id/lock-with-assignments')
+  @Roles('TEACHER')
+  @ApiOperation({
+    summary: 'Giảng viên khóa đề tài và phân công nhiệm vụ cho từng thành viên',
+  })
+  lockTopicWithAssignments(
+    @Param('id', ParseIntPipe) topicId: number,
+    @Body() dto: LockTopicWithAssignmentsDto,
+    @CurrentUser('sub') actorUserId: number,
+  ) {
+    return this.topicService.lockTopicWithAssignments(topicId, dto, actorUserId);
   }
 
   @Post()

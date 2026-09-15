@@ -1379,6 +1379,128 @@ export class TopicService {
     };
   }
 
+  /**
+   * Khóa đề tài kèm phân công nhiệm vụ cho từng thành viên.
+   * Được gọi bởi Giảng viên khi:
+   *   (a) Chủ động bấm nút "Khóa đề tài" (dù chưa full slot), hoặc
+   *   (b) Vừa duyệt sinh viên cuối cùng làm đầy slot và FE phát hiện slot FULL.
+   *
+   * Validate:
+   *   - Đề tài thuộc Giảng viên đang đăng nhập.
+   *   - Chưa bị khóa trước đó.
+   *   - assignments phải cover đúng tất cả SV trạng thái APPROVED của đề tài.
+   *   - Có đúng 1 is_leader = true.
+   */
+  async lockTopicWithAssignments(
+    topicId: number,
+    dto: { assignments: Array<{ projectId: number; assignedTask: string; isLeader: boolean }> },
+    actorUserId: number,
+  ) {
+    const teacher = await this.resolveTeacherByUserId(actorUserId);
+
+    const topic = await this.prisma.topics.findUnique({
+      where: { id: topicId },
+      select: {
+        id: true,
+        teacher_id: true,
+        period_id: true,
+        status: true,
+        max_students: true,
+        locked_at: true,
+      },
+    });
+
+    if (!topic) {
+      throw new NotFoundException(`Không tìm thấy đề tài có id ${topicId}`);
+    }
+    if (topic.teacher_id !== teacher.id) {
+      throw new ForbiddenException('Bạn không có quyền khóa đề tài của giảng viên khác.');
+    }
+    if (topic.locked_at) {
+      throw new ConflictException('Đề tài đã bị khóa trước đó.');
+    }
+
+    // Validate có đúng 1 trưởng nhóm
+    const leaderCount = dto.assignments.filter((a) => a.isLeader).length;
+    if (leaderCount !== 1) {
+      throw new BadRequestException(
+        `Phải chỉ định đúng 1 trưởng nhóm. Hiện tại đang chọn: ${leaderCount}.`,
+      );
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      // Lấy tất cả Project APPROVED thuộc đề tài này
+      const approvedProjects = await tx.project.findMany({
+        where: {
+          topic_id: topicId,
+          status: ProjectStatus.APPROVED,
+          deleted_at: null,
+        },
+        select: { id: true },
+      });
+
+      const approvedIds = new Set(approvedProjects.map((p) => p.id));
+      const assignmentIds = new Set(dto.assignments.map((a) => a.projectId));
+
+      // Kiểm tra assignments phải cover đủ & khớp đúng danh sách SV APPROVED
+      for (const id of approvedIds) {
+        if (!assignmentIds.has(id)) {
+          throw new BadRequestException(
+            `Sinh viên với Project ID ${id} (đã duyệt) chưa được phân công nhiệm vụ.`,
+          );
+        }
+      }
+      for (const id of assignmentIds) {
+        if (!approvedIds.has(id)) {
+          throw new BadRequestException(
+            `Project ID ${id} không thuộc danh sách sinh viên đã duyệt của đề tài này.`,
+          );
+        }
+      }
+
+      // Cập nhật is_leader & assigned_task cho từng Project
+      await Promise.all(
+        dto.assignments.map((a) =>
+          tx.project.update({
+            where: { id: a.projectId },
+            data: {
+              is_leader: a.isLeader,
+              assigned_task: a.assignedTask,
+            },
+          }),
+        ),
+      );
+
+      // Khóa đề tài
+      const now = new Date();
+      await tx.topics.update({
+        where: { id: topicId },
+        data: { locked_at: now, updated_at: now },
+      });
+
+      await tx.topic_audits.create({
+        data: {
+          topic_id: topicId,
+          action: TopicAuditAction.FORCE_UPDATE,
+          before_data: { locked_at: null } as Prisma.InputJsonValue,
+          after_data: {
+            locked_at: now.toISOString(),
+            assignedLeaderProjectId: dto.assignments.find((a) => a.isLeader)?.projectId,
+          } as Prisma.InputJsonValue,
+          reason: 'Giảng viên khóa đề tài và phân công nhiệm vụ nhóm.',
+          actor_user_id: actorUserId,
+        },
+      });
+
+      return {
+        topicId,
+        lockedAt: now.toISOString(),
+        assignmentsApplied: dto.assignments.length,
+        leaderId: dto.assignments.find((a) => a.isLeader)?.projectId,
+      };
+    });
+  }
+
   async decideRegistration(
     topicId: number,
     projectId: number,
@@ -1505,6 +1627,18 @@ export class TopicService {
       include: { student: { select: { id: true, student_id: true } } },
     });
 
+    // Sau khi APPROVE: kiểm tra slot đầy → báo FE bật popup phân công
+    let requiresAssignment = false;
+    if (dto.decision === 'APPROVE') {
+      const freshTopic = await this.prisma.topics.findUnique({
+        where: { id: topicId },
+        select: { registered_students: true, max_students: true, locked_at: true },
+      });
+      if (freshTopic && !freshTopic.locked_at) {
+        requiresAssignment = freshTopic.registered_students >= freshTopic.max_students;
+      }
+    }
+
     return {
       projectId,
       topicId,
@@ -1513,8 +1647,11 @@ export class TopicService {
       statusLabel: PROJECT_STATUS_LABELS[updated.status],
       studentCode: updated.student?.student_id ?? null,
       decidedAt: updated.teacher_decided_at?.toISOString() ?? null,
+      /** true khi vừa duyệt SV cuối làm đầy slot → FE bật popup phân công */
+      requiresAssignment,
     };
   }
+
 
   // ==========================================================
   // Sinh viên
@@ -1629,6 +1766,7 @@ export class TopicService {
       where: { id: topicId },
       select: {
         id: true,
+        code: true,
         period_id: true,
         teacher_id: true,
         name: true,
@@ -1679,7 +1817,13 @@ export class TopicService {
       await this.assertCapacity(tx, topic, 1, existing?.id);
 
       const now = new Date();
+      
+      // Tạo mã project thân thiện thay vì UUID
+      // Ví dụ: DA-SE001-SV001 (Đồ án - Mã Đề tài - Mã SV)
+      const newProjectId = `DA-${topic.code || topic.id}-${student.student_id}`;
+
       const projectData = {
+        project_id: newProjectId,
         project_name: topic.name,
         description: topic.description,
         topic_id: topic.id,
@@ -1703,7 +1847,6 @@ export class TopicService {
           })
         : await tx.project.create({
             data: {
-              project_id: uuidv4(),
               student_id: student.id,
               created_at: now,
               ...projectData,
@@ -1731,6 +1874,7 @@ export class TopicService {
     const project = await this.prisma.project.findFirst({
       where: { student_id: student.id, deleted_at: null },
       include: {
+        // Đề tài từ thư viện (sinh viên đăng ký bình thường)
         topics: {
           select: {
             id: true,
@@ -1738,11 +1882,16 @@ export class TopicService {
             name: true,
             description: true,
             max_students: true,
+            rejection_reason: true,
             status: true,
             period_id: true,
             teachers: { select: { id: true, name: true, email: true } },
             registration_periods: { select: { id: true, name: true } },
           },
+        },
+        // Giảng viên gắn trực tiếp với project (dùng khi topic_id = null)
+        teacher: {
+          select: { id: true, name: true, email: true },
         },
       },
     });
@@ -1754,6 +1903,39 @@ export class TopicService {
       };
     }
 
+    // Nếu project được tạo qua đăng ký thông thường → dùng topics
+    // Nếu topic_id = null (seed data, tự đề xuất, gán tay) → fallback về project fields
+    const topicInfo = project.topics
+      ? {
+          id: project.topics.id,
+          code: project.topics.code,
+          name: project.topics.name,
+          description: project.topics.description,
+          rejectionReason: project.topics.rejection_reason ?? null,
+          maxStudents: project.topics.max_students,
+          status: project.topics.status,
+          statusLabel: TOPIC_STATUS_LABELS[project.topics.status],
+          periodId: project.topics.period_id,
+          periodName: project.topics.registration_periods?.name ?? null,
+          teacherName: project.topics.teachers?.name ?? null,
+          teacherEmail: project.topics.teachers?.email ?? null,
+        }
+      : {
+          // Fallback: dùng thông tin gắn trực tiếp trên project
+          id: null,
+          code: project.project_id,      // UUID làm mã thay thế
+          name: project.project_name,
+          description: project.description,
+          rejectionReason: null,
+          maxStudents: 1,
+          status: null,
+          statusLabel: null,
+          periodId: null,
+          periodName: null,
+          teacherName: project.teacher?.name ?? null,
+          teacherEmail: project.teacher?.email ?? null,
+        };
+
     return {
       student: { id: student.id, studentCode: student.student_id },
       registration: {
@@ -1764,21 +1946,7 @@ export class TopicService {
         moderatorNote: project.moderator_note,
         registeredAt: project.created_at.toISOString(),
         decidedAt: project.teacher_decided_at?.toISOString() ?? null,
-        topic: project.topics
-          ? {
-              id: project.topics.id,
-              code: project.topics.code,
-              name: project.topics.name,
-              description: project.topics.description,
-              maxStudents: project.topics.max_students,
-              status: project.topics.status,
-              statusLabel: TOPIC_STATUS_LABELS[project.topics.status],
-              periodId: project.topics.period_id,
-              periodName: project.topics.registration_periods?.name ?? null,
-              teacherName: project.topics.teachers?.name ?? null,
-              teacherEmail: project.topics.teachers?.email ?? null,
-            }
-          : null,
+        topic: topicInfo,
       },
     };
   }
@@ -2013,7 +2181,7 @@ export class TopicService {
    */
   private async assignStudents(
     tx: Tx,
-    topic: { id: number; teacher_id: number; name: string; description: string },
+    topic: { id: number; teacher_id: number; name: string; description: string; code?: string | null },
     students: Array<{
       id: number;
       student_id: string;
@@ -2027,7 +2195,10 @@ export class TopicService {
     const results = [];
 
     for (const student of students) {
+      const newProjectId = `DA-${topic.code || topic.id}-${student.student_id}`;
+      
       const data = {
+        project_id: newProjectId,
         project_name: topic.name,
         description: topic.description,
         topic_id: topic.id,
@@ -2046,7 +2217,6 @@ export class TopicService {
         ? await tx.project.update({ where: { id: student.project.id }, data })
         : await tx.project.create({
             data: {
-              project_id: uuidv4(),
               student_id: student.id,
               deadline_id: null,
               created_at: now,

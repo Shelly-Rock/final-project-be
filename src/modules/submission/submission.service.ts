@@ -430,6 +430,91 @@ export class SubmissionService {
     }));
   }
 
+  // ========== Student self-service endpoints ==========
+
+  /** Trả về danh sách bài nộp của sinh viên đang đăng nhập — chỉ dữ liệu của chính họ. */
+  async getMySubmissions(user: JwtUser) {
+    const student = await this.resolveStudentByUserId(user.sub);
+
+    const submissions = await this.prisma.final_submissions.findMany({
+      where: { student_id: student.id, deleted_at: null },
+      orderBy: { submitted_at: 'desc' },
+    });
+
+    if (submissions.length === 0) return [];
+
+    // Enrich với thông tin project (không lộ thông tin sinh viên khác)
+    const enriched = await Promise.all(
+      submissions.map(async (s) => {
+        const project = await this.prisma.project.findUnique({
+          where: { id: s.project_id },
+          select: { project_id: true, project_name: true },
+        });
+        return {
+          ...s,
+          project_code: project?.project_id,
+          project_name: project?.project_name,
+        };
+      }),
+    );
+
+    return enriched;
+  }
+
+  /**
+   * Kiểm tra sinh viên đang đăng nhập có đủ điều kiện nộp bài không.
+   * Chỉ trả về trạng thái eligible/not + lý do — không lộ dữ liệu người khác.
+   */
+  async getMyEligibility(user: JwtUser): Promise<{ eligible: boolean; reason?: string; isLeader?: boolean }> {
+    const student = await this.resolveStudentByUserId(user.sub);
+
+    // Kiểm tra quyền đại diện nhóm (trưởng nhóm mới được nộp bài)
+    const project = await this.prisma.project.findFirst({
+      where: { student_id: student.id, deleted_at: null },
+      select: { is_leader: true, topic_id: true },
+    });
+
+    // Nếu đề tài đã được khóa (topic_id != null) thì mới cần kiểm tra is_leader.
+    // Đề tài chưa khóa (hoặc topic_id null) → chưa phân công → chưa biết ai là leader.
+    if (project?.topic_id) {
+      // Kiểm tra topic đã bị locked chưa
+      const topic = await this.prisma.topics.findUnique({
+        where: { id: project.topic_id },
+        select: { locked_at: true },
+      });
+      if (topic?.locked_at && !project.is_leader) {
+        return {
+          eligible: false,
+          isLeader: false,
+          reason: 'Chỉ đại diện nhóm (trưởng nhóm) mới được nộp bài. Vui lòng liên hệ trưởng nhóm của bạn.',
+        };
+      }
+    }
+
+    const progress = await this.prisma.student_progress.findUnique({
+      where: { student_id: student.id },
+    });
+
+    if (!progress) {
+      return { eligible: false, isLeader: project?.is_leader ?? false, reason: 'Chưa có thông tin tiến độ học tập.' };
+    }
+
+    if (progress.is_banned) {
+      return { eligible: false, isLeader: project?.is_leader ?? false, reason: 'Bạn đang bị cấm thi, không thể nộp bài.' };
+    }
+
+    const allowedStatuses = ['ON_TRACK', 'EXTENDED'];
+    if (!allowedStatuses.includes(progress.status)) {
+      return {
+        eligible: false,
+        isLeader: project?.is_leader ?? false,
+        reason: `Trạng thái tiến độ hiện tại (${progress.status}) chưa đủ điều kiện nộp bài.`,
+      };
+    }
+
+    return { eligible: true, isLeader: project?.is_leader ?? true };
+  }
+
   async getStats() {
     const [total, pending, approved, rejected] = await Promise.all([
       this.prisma.final_submissions.count({ where: { deleted_at: null } }),
