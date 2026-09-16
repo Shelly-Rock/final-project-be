@@ -483,9 +483,56 @@ async function main() {
     console.log(`✅ Đã tạo Đề tài: ${project.project_id} - ${project.project_name}`);
   }
 
+  // 8. Tạo Sample Notifications
+  const adminUser = await prisma.user.findUnique({ where: { email: 'admin@system.com' } });
+  const teacherUser = await prisma.user.findUnique({ where: { email: 'teacher@system.com' } });
+  const studentUser = await prisma.user.findUnique({ where: { email: 'student@system.com' } });
+
+  if (adminUser && teacherUser && studentUser) {
+    await prisma.progress_notifications.createMany({
+      data: [
+        {
+          type: 'STATUS_CHANGED',
+          title: 'Thay đổi trạng thái đề tài',
+          message: 'Đề tài của bạn đã được phê duyệt',
+          recipient_id: studentUser.id,
+          sender_id: adminUser.id,
+          is_read: false,
+        },
+        {
+          type: 'REPORT_SUBMITTED',
+          title: 'Báo cáo tiến độ đã được nộp',
+          message: 'Sinh viên vừa nộp báo cáo tiến độ hàng tháng',
+          recipient_id: teacherUser.id,
+          sender_id: studentUser.id,
+          is_read: false,
+        },
+        {
+          type: 'REPORT_APPROVED',
+          title: 'Báo cáo được phê duyệt',
+          message: 'Báo cáo tiến độ của bạn đã được giảng viên phê duyệt',
+          recipient_id: studentUser.id,
+          sender_id: teacherUser.id,
+          is_read: true,
+        },
+        {
+          type: 'BAN_WARNING',
+          title: 'Cảnh báo: Sắp bị cấm nộp bài',
+          message: 'Bạn đã quá hạn nộp báo cáo 3 lần. Cảnh báo cuối cùng trước khi bị cấm.',
+          recipient_id: studentUser.id,
+          sender_id: adminUser.id,
+          is_read: false,
+        },
+      ],
+      skipDuplicates: true,
+    });
+    console.log('✅ Đã tạo Sample Notifications');
+  }
+
   console.log('🎉 Seed dữ liệu mẫu hoàn tất!');
   console.log('🔑 Mật khẩu mặc định cho tất cả tài khoản là: 1111');
   console.log('✉️  Tất cả tài khoản đã được xác thực email (email_verified_at)');
+  console.log('🔔 Thông báo mẫu đã được tạo cho các tài khoản demo');
 
   await prisma.$disconnect();
 }
