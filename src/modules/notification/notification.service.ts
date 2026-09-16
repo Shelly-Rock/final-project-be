@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@core/database/prisma/prisma.service';
 import { CreateNotificationDto, MarkAsReadDto, NotificationDto } from './dto';
-import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class NotificationService {
@@ -27,7 +26,9 @@ export class NotificationService {
   async createMultiple(
     notifications: CreateNotificationDto[],
   ): Promise<NotificationDto[]> {
-    const created = await this.prisma.progress_notifications.createMany({
+    if (notifications.length === 0) return [];
+
+    await this.prisma.progress_notifications.createMany({
       data: notifications.map((n) => ({
         type: n.type,
         title: n.title,
@@ -134,6 +135,73 @@ export class NotificationService {
         },
       },
     });
+  }
+
+  async getUsersByRole(
+    role: 'STUDENT' | 'TEACHER',
+  ): Promise<Array<{ id: number; name: string; email: string }>> {
+    if (role === 'STUDENT') {
+      const students = await this.prisma.student.findMany({
+        where: {
+          user: {
+            is_active: true,
+          },
+        },
+        include: {
+          user: true,
+        },
+      });
+
+      return students.map((s) => ({
+        id: s.user_id || 0,
+        name: `${s.last_name} ${s.first_name}`,
+        email: s.email,
+      }));
+    }
+
+    if (role === 'TEACHER') {
+      const teachers = await this.prisma.teacher.findMany({
+        where: {
+          user: {
+            is_active: true,
+          },
+        },
+        include: {
+          user: true,
+        },
+      });
+
+      return teachers.map((t) => ({
+        id: t.user_id,
+        name: t.name,
+        email: t.email,
+      }));
+    }
+
+    return [];
+  }
+
+  async sendNotification(
+    title: string,
+    message: string,
+    type: any,
+    recipientIds: number[],
+    senderId?: number,
+    relatedStudentId?: number,
+    relatedReportId?: number,
+  ): Promise<NotificationDto[]> {
+    const notifications = await this.createMultiple(
+      recipientIds.map((recipientId) => ({
+        title,
+        message,
+        type: type as any,
+        recipient_id: recipientId,
+        sender_id: senderId,
+        related_student_id: relatedStudentId,
+        related_report_id: relatedReportId,
+      })),
+    );
+    return notifications;
   }
 
   private mapToDto(notification: any): NotificationDto {
