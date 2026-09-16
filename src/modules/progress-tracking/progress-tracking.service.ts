@@ -20,10 +20,10 @@ import {
   ReportQueryDto,
   UpdateStudentProgressDto,
   StudentProgressQueryDto,
-  CreateNotificationDto,
   NotificationQueryDto,
   BanWarningDto,
 } from './progress-tracking.dto';
+import { CreateNotificationDto } from '@/modules/notification/dto';
 
 @Injectable()
 export class ProgressTrackingService {

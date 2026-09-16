@@ -12,7 +12,7 @@ import {
   UseGuards,
   Request as NestRequest,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiExtraModels } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@core/auth/guards/jwtAuth.guard';
 import { NotificationService } from './notification.service';
 import { CreateNotificationDto, MarkAsReadDto, NotificationDto } from './dto';
@@ -21,6 +21,7 @@ import { PermissionsGuard } from '@core/auth/guards/permissions.guard';
 import { PrismaService } from '@core/database/prisma/prisma.service';
 
 @ApiTags('Notifications')
+@ApiExtraModels(CreateNotificationDto)
 @Controller('notification')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @ApiBearerAuth()

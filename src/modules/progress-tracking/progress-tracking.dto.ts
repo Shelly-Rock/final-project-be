@@ -219,39 +219,7 @@ export class StudentProgressQueryDto {
   teacher_id?: number;
 }
 
-// Notification DTOs
-export class CreateNotificationDto {
-  @IsString()
-  @IsNotEmpty()
-  type: NotificationType;
-
-  @IsString()
-  @IsNotEmpty()
-  title: string;
-
-  @IsString()
-  @IsNotEmpty()
-  message: string;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  sender_id?: number;
-
-  @IsInt()
-  recipient_id: number;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  related_student_id?: number;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  related_report_id?: number;
-}
-
+// Notification DTOs - imported from notification module to avoid duplication
 export class NotificationQueryDto {
   @IsOptional()
   @Type(() => Number)

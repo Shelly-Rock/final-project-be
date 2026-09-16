@@ -12,7 +12,7 @@ import {
   HttpStatus,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiTags, ApiExtraModels } from '@nestjs/swagger';
 import { ProgressTrackingService } from './progress-tracking.service';
 import {
   CreateTemplateDto,
@@ -22,9 +22,9 @@ import {
   ReportQueryDto,
   UpdateStudentProgressDto,
   StudentProgressQueryDto,
-  CreateNotificationDto,
   NotificationQueryDto,
 } from './progress-tracking.dto';
+import { CreateNotificationDto } from '@/modules/notification/dto';
 import { JwtAuthGuard } from '@/core/auth/guards/jwtAuth.guard';
 import { RolesGuard } from '@/core/auth/guards/roles.guard';
 import { Roles } from '@/core/auth/decorators/roles.decorator';
@@ -32,6 +32,7 @@ import { CurrentUser } from '@/core/auth/decorators/currentUser.decorator';
 import type { JwtUser } from '@/core/auth/interfaces/currentUser.interface';
 
 @ApiTags('Progress Tracking')
+@ApiExtraModels(CreateNotificationDto)
 @Controller('progress-tracking')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ProgressTrackingController {
