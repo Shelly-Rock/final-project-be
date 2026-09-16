@@ -50,7 +50,6 @@ export class NotificationController {
   }
 
   @Get()
-  @Permissions('notification:read')
   @ApiOperation({ summary: 'Get notifications for current user' })
   async getMyNotifications(
     @NestRequest() req,
@@ -85,7 +84,6 @@ export class NotificationController {
   }
 
   @Get('unread-count')
-  @Permissions('notification:read')
   @ApiOperation({ summary: 'Get count of unread notifications' })
   async getUnreadCount(@NestRequest() req): Promise<{ unreadCount: number }> {
     const unreadCount = await this.notificationService.getUnreadCount(req.user.id);
@@ -104,7 +102,6 @@ export class NotificationController {
 
   @Patch('mark-read')
   @HttpCode(HttpStatus.OK)
-  @Permissions('notification:read')
   @ApiOperation({ summary: 'Mark notifications as read' })
   async markAsRead(
     @Body() dto: MarkAsReadDto,
@@ -115,7 +112,6 @@ export class NotificationController {
 
   @Patch('mark-all-read')
   @HttpCode(HttpStatus.OK)
-  @Permissions('notification:read')
   @ApiOperation({ summary: 'Mark all notifications as read for current user' })
   async markAllAsRead(@NestRequest() req): Promise<{ message: string }> {
     await this.notificationService.markAllAsRead(req.user.id);
@@ -124,7 +120,6 @@ export class NotificationController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
-  @Permissions('notification:read')
   @ApiOperation({ summary: 'Delete a notification' })
   async delete(@Param('id') id: string): Promise<{ message: string }> {
     await this.notificationService.delete(parseInt(id));
@@ -133,7 +128,6 @@ export class NotificationController {
 
   @Delete('all')
   @HttpCode(HttpStatus.OK)
-  @Permissions('notification:read')
   @ApiOperation({ summary: 'Delete all notifications for current user' })
   async deleteAll(@NestRequest() req): Promise<{ message: string }> {
     const notifications = await this.notificationService.findByRecipient(

@@ -234,32 +234,26 @@ async function main() {
     ],
   };
 
-  // Only grant default permissions on first seed. Subsequent runs must NOT
-  // wipe rolePermission rows that an admin has edited via the permission matrix.
-  const existingGrantCount = await prisma.rolePermission.count();
-  if (existingGrantCount === 0) {
-    for (const role of [adminRole, teacherRole, studentRole, secretaryRole]) {
-      for (const permission of permissions) {
-        if (!rolePermissions[role.name]?.includes(permission.name)) continue;
-        await prisma.rolePermission.upsert({
-          where: {
-            role_id_permission_id: {
-              role_id: role.id,
-              permission_id: permission.id,
-            },
-          },
-          update: {},
-          create: {
+  // Grant default permissions for each role
+  for (const role of [adminRole, teacherRole, studentRole, secretaryRole]) {
+    for (const permission of permissions) {
+      if (!rolePermissions[role.name]?.includes(permission.name)) continue;
+      await prisma.rolePermission.upsert({
+        where: {
+          role_id_permission_id: {
             role_id: role.id,
             permission_id: permission.id,
           },
-        });
-      }
+        },
+        update: {},
+        create: {
+          role_id: role.id,
+          permission_id: permission.id,
+        },
+      });
     }
-    console.log('✅ Đã gán permissions cho tất cả roles');
-  } else {
-    console.log('ℹ️  Bỏ qua gán permissions (đã có dữ liệu phân quyền, giữ nguyên chỉnh sửa của admin)');
   }
+  console.log('✅ Đã gán permissions cho tất cả roles');
 
   // 5. Tạo Faculty và Department
   const faculty = await prisma.faculty.upsert({
@@ -459,28 +453,34 @@ async function main() {
     );
   }
 
-  // 7. Tạo Project DT001
-  const studentDemo = await prisma.student.findUnique({ where: { student_id: 'SV001' } });
-  const teacherDemo = await prisma.teacher.findUnique({ where: { teacher_id: 'GV001' } });
+  // 7. Tạo Project DT001 (optional - may fail if student already has project)
+  try {
+    const studentDemo = await prisma.student.findUnique({ where: { student_id: 'SV001' } });
+    const teacherDemo = await prisma.teacher.findUnique({ where: { teacher_id: 'GV001' } });
 
-  if (studentDemo && teacherDemo) {
-    const project = await prisma.project.upsert({
-      where: { project_id: 'DT001' },
-      update: {
-        student_id: studentDemo.id,
-        teacher_id: teacherDemo.id,
-        status: 'APPROVED',
-      },
-      create: {
-        project_id: 'DT001',
-        project_name: 'Hệ thống quản lý sinh viên',
-        description: 'Phát triển hệ thống quản lý sinh viên bằng NextJS và NestJS',
-        student_id: studentDemo.id,
-        teacher_id: teacherDemo.id,
-        status: 'APPROVED',
-      },
-    });
-    console.log(`✅ Đã tạo Đề tài: ${project.project_id} - ${project.project_name}`);
+    if (studentDemo && teacherDemo) {
+      const existingProject = await prisma.project.findUnique({
+        where: { project_id: 'DT001' },
+      });
+
+      if (existingProject) {
+        console.log(`✅ Đề tài DT001 đã tồn tại`);
+      } else {
+        const project = await prisma.project.create({
+          data: {
+            project_id: 'DT001',
+            project_name: 'Hệ thống quản lý sinh viên',
+            description: 'Phát triển hệ thống quản lý sinh viên bằng NextJS và NestJS',
+            student_id: studentDemo.id,
+            teacher_id: teacherDemo.id,
+            status: 'APPROVED',
+          },
+        });
+        console.log(`✅ Đã tạo Đề tài: ${project.project_id} - ${project.project_name}`);
+      }
+    }
+  } catch (error) {
+    console.log(`ℹ️  Bỏ qua tạo Đề tài DT001 (có thể sinh viên đã có dự án khác)`);
   }
 
   // 8. Tạo Sample Notifications
