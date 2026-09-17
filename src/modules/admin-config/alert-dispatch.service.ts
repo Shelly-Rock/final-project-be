@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+﻿import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
   AlertEvent,
   AlertRecipientRole,
@@ -20,7 +20,7 @@ import { SendDeadlineAlertsDto } from './dto';
 
 export interface AlertRecipient {
   role: AlertRecipientRole;
-  /** Teacher.id, Student.id hoặc Secretary.id — không phải User.id. */
+  /** Teacher.id, Student.id hoặc Secretary.id â€” không phải User.id. */
   id: number;
   email: string;
   name: string;
@@ -69,7 +69,7 @@ export class AlertDispatchService {
     return this.sendBatch(deadline, dto.event, recipients);
   }
 
-  /** Scheduler gọi method này sau khi đã kiểm tra kill-switch. */
+  /** Scheduler gọi method này sau khi đã kiỒm tra kill-switch. */
   async sendAutomatic(
     deadlineId: number,
     event: AlertEvent,
@@ -195,7 +195,7 @@ export class AlertDispatchService {
    * - row mới: CREATE PROCESSING;
    * - SENT: luôn skip;
    * - FAILED: một worker duy nhất đổi FAILED -> PROCESSING;
-   * - PROCESSING cũ hơn 15 phút: cho phép worker phục hồi;
+   * - PROCESSING ci hơn 15 phút: cho phép worker phục hồi;
    * - PROCESSING đang chạy: skip.
    */
   private async claimAlert(
@@ -402,8 +402,7 @@ export class AlertDispatchService {
       where: {
         deleted_at: null,
         status: { in: [ProjectStatus.APPROVED, ProjectStatus.ASSIGNED] },
-        topics: { period_id: periodId },
-        final_submissions: null,
+        topics: { period_id: periodId, final_submissions: null },
       },
       select: {
         student: {
@@ -482,3 +481,5 @@ export class AlertDispatchService {
     return message.slice(0, 2_000);
   }
 }
+
+

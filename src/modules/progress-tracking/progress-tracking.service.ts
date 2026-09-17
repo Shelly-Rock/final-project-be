@@ -38,7 +38,7 @@ export class ProgressTrackingService {
   private async resolveTeacherByUserId(userId: number) {
     const teacher = await this.prisma.teacher.findFirst({
       where: { user_id: userId, deleted_at: null },
-      select: { id: true, user_id: true, teacher_id: true, name: true },
+      select: { id: true, user_id: true, teacher_id: true, name: true, department_id: true },
     });
     if (!teacher) {
       throw new ForbiddenException('Tài khoản của bạn chưa được gắn với hồ sơ giảng viên.');
@@ -49,7 +49,7 @@ export class ProgressTrackingService {
   private async resolveStudentByUserId(userId: number) {
     const student = await this.prisma.student.findFirst({
       where: { user_id: userId, deleted_at: null },
-      select: { id: true, user_id: true, student_id: true },
+      select: { id: true, user_id: true, student_id: true, class_name: true },
     });
     if (!student) {
       throw new ForbiddenException('Tài khoản của bạn chưa được gắn với hồ sơ sinh viên.');
@@ -57,9 +57,63 @@ export class ProgressTrackingService {
     return student;
   }
 
+  private async resolveSecretaryByUserId(userId: number) {
+    const secretary = await this.prisma.secretary.findFirst({
+      where: { user_id: userId, deleted_at: null },
+      select: { id: true, user_id: true, department_id: true },
+    });
+    if (!secretary) {
+      throw new ForbiddenException('Tài khoản của bạn chưa được gắn với hồ sơ thư ký.');
+    }
+    return secretary;
+  }
+
   async createTemplateForActor(user: JwtUser, dto: CreateTemplateDto) {
-    const teacher = await this.resolveTeacherByUserId(user.sub);
-    return this.createTemplate(teacher.id, dto);
+    const secretary = await this.resolveSecretaryByUserId(user.sub);
+    if (!secretary.department_id) {
+      throw new BadRequestException('Thư ký chưa được phân bổ về ngành nào.');
+    }
+    return this.createTemplate(secretary.department_id, dto);
+  }
+
+  async cloneTemplates(user: JwtUser, fromPeriodId: number, toPeriodId: number) {
+    const secretary = await this.resolveSecretaryByUserId(user.sub);
+    if (!secretary.department_id) {
+      throw new BadRequestException('Thư ký chưa được phân bổ về ngành nào.');
+    }
+
+    const templatesToClone = await this.prisma.report_templates.findMany({
+      where: {
+        department_id: secretary.department_id,
+        period_id: fromPeriodId,
+        deleted_at: null,
+      },
+    });
+
+    if (!templatesToClone.length) {
+      throw new BadRequestException('Không tìm thấy mẫu nào trong đợt cũ để sao chép.');
+    }
+
+    const newTemplates = templatesToClone.map((t: any) => ({
+      name: t.name,
+      description: t.description,
+      type: t.type,
+      milestone_type: t.milestone_type,
+      file_url: t.file_url,
+      file_name: t.file_name,
+      file_size: t.file_size,
+      department_id: t.department_id,
+      period_id: toPeriodId,
+      is_cloned: true,
+      created_at: new Date(),
+      updated_at: new Date(),
+    }));
+
+    await this.prisma.report_templates.createMany({
+      data: newTemplates,
+    });
+
+    return { message: `Đã sao chép ${newTemplates.length} templates.` };
   }
 
   async createReportForActor(user: JwtUser, dto: CreateReportDto) {
@@ -70,6 +124,11 @@ export class ProgressTrackingService {
   async reviewReportForActor(user: JwtUser, reportId: number, dto: ReviewReportDto) {
     const teacher = await this.resolveTeacherByUserId(user.sub);
     return this.reviewReport(reportId, teacher.id, dto, user.sub);
+  }
+
+  async archiveReportForActor(user: JwtUser, reportId: number) {
+    const secretary = await this.resolveSecretaryByUserId(user.sub);
+    return this.archiveReport(reportId, secretary.id, user.sub);
   }
 
   // Derive notification recipient profile id from JWT (role-aware).
@@ -85,7 +144,6 @@ export class ProgressTrackingService {
       return this.getNotifications(teacher.id, query);
     }
     // ADMIN / SECRETARY: fall back to teacher profile if linked, else use users.id
-    // so the notification stream is still scoped to the actor and not forged via query.
     try {
       const teacher = await this.resolveTeacherByUserId(user.sub);
       return this.getNotifications(teacher.id, query);
@@ -132,22 +190,24 @@ export class ProgressTrackingService {
 
   // ========== Template Methods ==========
 
-  async createTemplate(teacherId: number, dto: CreateTemplateDto) {
+  async createTemplate(departmentId: string, dto: CreateTemplateDto) {
     return this.prisma.report_templates.create({
       data: {
         ...dto,
-        teacher_id: teacherId,
+        department_id: departmentId,
         updated_at: new Date(),
-      },
+      } as any, // Cast to any to bypass TS error on new schema fields if client not regenerated yet
     });
   }
 
   async getTemplates(query: TemplateQueryDto) {
-    const { page = 1, limit = 20, type, teacher_id } = query;
+    const { page = 1, limit = 20, type, department_id, period_id, milestone_type } = query;
 
     const where: any = { deleted_at: null };
     if (type) where.type = type;
-    if (teacher_id) where.teacher_id = teacher_id;
+    if (department_id) where.department_id = department_id;
+    if (period_id) where.period_id = period_id;
+    if (milestone_type) where.milestone_type = milestone_type;
 
     const skip = (page - 1) * limit;
 
@@ -337,15 +397,22 @@ export class ProgressTrackingService {
       reviewed_at: report.reviewed_at?.toISOString() ?? null,
     };
 
+    let newStatus = dto.status || report.status;
+    if (dto.action === 'APPROVE') {
+      newStatus = ReportStatus.APPROVED_BY_TEACHER;
+    } else if (dto.action === 'REJECT') {
+      newStatus = ReportStatus.REVISION_REQUESTED;
+    }
+
     const updatedReport = await this.prisma.progress_reports.update({
       where: { id: reportId },
       data: {
-        status: dto.status,
+        status: newStatus,
         feedback: dto.feedback,
         score: dto.score,
         reviewed_by: reviewerId,
         reviewed_at: new Date(),
-      },
+      } as any,
     });
 
     const afterData = {
@@ -368,15 +435,15 @@ export class ProgressTrackingService {
 
     // Send notification to student
     const notificationType =
-      dto.status === ReportStatus.APPROVED
+      newStatus === ReportStatus.APPROVED_BY_TEACHER
         ? NotificationType.REPORT_APPROVED
-        : dto.status === ReportStatus.REJECTED
+        : newStatus === ReportStatus.REVISION_REQUESTED
         ? NotificationType.REPORT_REJECTED
         : NotificationType.STATUS_CHANGED;
 
     await this.createNotification({
       type: notificationType,
-      title: dto.status === ReportStatus.APPROVED ? 'Báo cáo được duyệt' : 'Báo cáo bị từ chối',
+      title: newStatus === ReportStatus.APPROVED_BY_TEACHER ? 'Báo cáo được duyệt' : 'Báo cáo bị từ chối',
       message: `Báo cáo "${report.title}" đã được duyệt với điểm: ${dto.score ?? 'N/A'}. ${
         dto.feedback ? `Phản hồi: ${dto.feedback}` : ''
       }`,
@@ -384,6 +451,50 @@ export class ProgressTrackingService {
       recipient_id: report.student_id,
       related_student_id: report.student_id,
       related_report_id: reportId,
+    });
+
+    return updatedReport;
+  }
+
+  async archiveReport(reportId: number, secretaryId: number, actorUserId: number) {
+    const report = await this.prisma.progress_reports.findFirst({
+      where: { id: reportId },
+    });
+
+    if (!report) throw new NotFoundException('Report not found');
+    if (report.status !== ReportStatus.APPROVED_BY_TEACHER) {
+      throw new BadRequestException('Chỉ có thể lưu trữ báo cáo đã được giảng viên duyệt.');
+    }
+
+    const beforeData = {
+      status: report.status,
+      archived_by: (report as any).archived_by,
+      archived_at: (report as any).archived_at?.toISOString() ?? null,
+    };
+
+    const updatedReport = await this.prisma.progress_reports.update({
+      where: { id: reportId },
+      data: {
+        status: ReportStatus.ARCHIVED,
+        archived_by: secretaryId,
+        archived_at: new Date(),
+      } as any,
+    });
+
+    const afterData = {
+      status: updatedReport.status,
+      archived_by: updatedReport.archived_by,
+      archived_at: updatedReport.archived_at?.toISOString() ?? null,
+    };
+
+    await this.audit.writeAudit(this.prisma, {
+      actor_user_id: actorUserId,
+      action: AuditAction.UPDATE,
+      entity_type: AuditEntityType.REPORT,
+      entity_id: reportId,
+      before_data: beforeData,
+      after_data: afterData,
+      reason: 'Báo cáo được thư ký lưu trữ',
     });
 
     return updatedReport;

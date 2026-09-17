@@ -1,4 +1,4 @@
-import {
+﻿import {
   Controller,
   Get,
   Post,
@@ -9,7 +9,7 @@ import {
   ParseIntPipe,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { SubmissionService } from './submission.service';
 import {
   CreateSubmissionDto,
@@ -37,6 +37,13 @@ export class SubmissionController {
     return this.service.getMySubmissions(user);
   }
 
+  @Get('my/eligibility')
+  @Roles('STUDENT')
+  @ApiOperation({ summary: 'Kiểm tra sinh viên có phải trưởng nhóm không để nộp bài' })
+  getMyEligibility(@CurrentUser() user: JwtUser) {
+    return this.service.getMyEligibility(user);
+  }
+
   @Post('drive/init-upload')
   @Roles('STUDENT')
   initDriveUpload(@Body() dto: InitDriveUploadDto) {
@@ -52,7 +59,7 @@ export class SubmissionController {
     return this.service.confirmDriveUpload(user, dto);
   }
 
-  // Student submits final work — student_id suy ra từ JWT, không nhận từ body.
+  // Student submits final work â€” student_id suy ra từ JWT, không nhận từ body.
   @Post()
   @Roles('STUDENT')
   createSubmission(
@@ -76,7 +83,7 @@ export class SubmissionController {
     return this.service.getEligibleStudents();
   }
 
-  // Get submission stats — MUST be declared BEFORE ':id' or ParseIntPipe swallows it.
+  // Get submission stats â€” MUST be declared BEFORE ':id' or ParseIntPipe swallows it.
   @Get('stats/summary')
   @Roles('ADMIN', 'SECRETARY', 'TEACHER')
   getStats() {
@@ -89,7 +96,7 @@ export class SubmissionController {
     return this.service.getSubmissionById(id);
   }
 
-  // Review submission (approve/reject) — reviewer_id suy ra từ JWT (Teacher profile id).
+  // Review submission (approve/reject) â€” reviewer_id suy ra từ JWT (Teacher profile id).
   @Put(':id/review')
   @Roles('TEACHER', 'ADMIN', 'SECRETARY')
   reviewSubmission(
@@ -100,3 +107,4 @@ export class SubmissionController {
     return this.service.reviewSubmissionForActor(user, id, dto);
   }
 }
+

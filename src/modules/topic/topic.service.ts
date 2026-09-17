@@ -76,6 +76,8 @@ const MANAGE_INCLUDE = {
       assign_reason: true,
       moderator_note: true,
       teacher_decided_at: true,
+        is_leader: true,
+        assigned_task: true,
       assigned_by_user_id: true,
       decided_by_user_id: true,
       student: {
@@ -105,18 +107,10 @@ export class TopicService {
     private readonly deadlinePolicy: DeadlinePolicyService,
   ) {}
 
-  // ==========================================================
-  // Trạng thái governance (mọi role đã đăng nhập)
-  // ==========================================================
-
   async getGovernanceState(periodId?: number) {
     const resolvedPeriodId = periodId ?? (await this.resolveActivePeriodId());
     return this.deadlinePolicy.getGovernanceView(resolvedPeriodId);
   }
-
-  // ==========================================================
-  // Quản trị: danh sách hợp nhất
-  // ==========================================================
 
   async listManaged(query: TopicManageQueryDto) {
     const periodId = query.periodId ?? (await this.resolveActivePeriodId());
@@ -124,8 +118,6 @@ export class TopicService {
     const page = query.page || 1;
     const limit = query.limit || 20;
 
-    // Facets khoa / bộ môn / GVHD phải ổn định theo TOÀN ĐỢT, không suy ra từ
-    // vài dòng của trang hiện tại — nếu không, đang lọc trang 2 sẽ mất lựa chọn.
     const [topics, total, statusCounts, periodTeachers] = await Promise.all([
       this.prisma.topics.findMany({
         where,
@@ -166,7 +158,6 @@ export class TopicService {
       if (teacher.faculty_id) {
         faculties.set(teacher.faculty_id, teacher.faculty?.name ?? teacher.faculty_id);
       }
-      // Bộ môn chỉ liệt kê trong phạm vi khoa đang lọc (cascade).
       if (
         teacher.department_id &&
         (!query.facultyId || teacher.faculty_id === query.facultyId)
@@ -213,7 +204,6 @@ export class TopicService {
     const periodId = query.periodId ?? (await this.resolveActivePeriodId());
     const where = this.buildManageWhere({ ...query, periodId });
 
-    // Export lấy tối đa 5.000 dòng để không kéo cả bảng xuống bộ nhớ.
     const topics = await this.prisma.topics.findMany({
       where,
       include: MANAGE_INCLUDE,
@@ -231,7 +221,7 @@ export class TopicService {
       { header: 'Tên đề tài', key: 'name', width: 46 },
       { header: 'GVHD', key: 'teacher', width: 26 },
       { header: 'Khoa/Bộ môn', key: 'unit', width: 30 },
-      { header: 'Sĩ số tối đa', key: 'maxStudents', width: 14 },
+      { header: 'Chỉ tiêu tối đa', key: 'maxStudents', width: 14 },
       { header: 'Đã nhận', key: 'registered', width: 10 },
       { header: 'Danh sách SV', key: 'students', width: 52 },
       { header: 'Trạng thái đề tài', key: 'status', width: 18 },
@@ -278,12 +268,6 @@ export class TopicService {
     const limit = query.limit || 20;
     const search = query.search?.trim();
 
-    // Schema chưa có bảng ghi danh SV theo đợt, nên "chưa có đề tài" được
-    // hiểu là chưa có Project (hoặc Project đang ở trạng thái REJECTED) trên
-    // toàn hệ thống. periodId vẫn được nhận để giữ contract ổn định khi
-    // bảng ghi danh được bổ sung sau này.
-    // `student_progress` không có relation ngược trên Student nên trạng thái
-    // cấm được truy vấn riêng ở dưới.
     const finalWhere: Prisma.StudentWhereInput = {
       deleted_at: null,
       AND: [
@@ -458,10 +442,6 @@ export class TopicService {
     };
   }
 
-  // ==========================================================
-  // Quản trị: can thiệp có audit
-  // ==========================================================
-
   async manualAssign(dto: ManualAssignDto, actorUserId: number) {
     return this.prisma.$transaction(async (tx) => {
       const topic = await tx.topics.findUnique({
@@ -625,7 +605,7 @@ export class TopicService {
         ).length;
         if (dto.maxStudents < occupied) {
           throw new BadRequestException(
-            `Không thể giảm sĩ số tối đa xuống ${dto.maxStudents} vì đề tài đang có ${occupied} sinh viên.`,
+            `Không thể giảm chỉ tiêu tối đa xuống ${dto.maxStudents} vì đề tài đang có ${occupied} sinh viên.`,
           );
         }
         data.max_students = dto.maxStudents;
@@ -647,12 +627,10 @@ export class TopicService {
         ).length;
         if (occupied > 0) {
           throw new BadRequestException(
-            'Không thể đổi GVHD khi đề tài đã có sinh viên. Hãy huỷ đăng ký trước.',
+            'Không thể đổi GVHD khi đề tài đã có sinh viên. Hãy hủy đăng ký trước.',
           );
         }
 
-        // Force-edit được phép sau hạn tạo đề tài. Khi đổi GVHD chỉ kiểm
-        // chỉ tiêu của giảng viên mới, không kiểm lại TOPIC_CREATION.
         const quota = await this.deadlinePolicy.getEffectiveQuota(
           topic.period_id,
           dto.teacherId,
@@ -718,14 +696,11 @@ export class TopicService {
         },
       });
 
-      // Đổi GVHD ảnh hưởng chỉ tiêu của cả hai giảng viên.
       await this.syncTeacherQuotaCounter(tx, topic.period_id, updated.teacher_id);
       if (topic.teacher_id !== updated.teacher_id) {
         await this.syncTeacherQuotaCounter(tx, topic.period_id, topic.teacher_id);
       }
 
-      // Tải lại đúng bộ quan hệ mà mapManagedRow() cần — counter đã recompute
-      // xong, nên response phản ánh sĩ số và danh sách SV sau force-edit.
       const managedTopic = await tx.topics.findUnique({
         where: { id: topicId },
         include: MANAGE_INCLUDE,
@@ -807,8 +782,6 @@ export class TopicService {
         });
       }
 
-      // Đồng bộ trạng thái đăng ký: đề tài bị từ chối thì các đăng ký đang
-      // chờ không còn giá trị duyệt.
       if (status === TopicStatus.REJECTED && topics.length) {
         await tx.project.updateMany({
           where: {
@@ -843,7 +816,7 @@ export class TopicService {
         updated: topics.length,
         notFound,
       };
-    });
+    }, { maxWait: 5000, timeout: 60000 });
   }
 
   async createSupplemental(dto: CreateSupplementalTopicDto, actorUserId: number) {
@@ -873,8 +846,6 @@ export class TopicService {
         dto.maxStudents,
       );
 
-      // Đề tài bổ sung được tạo sau deadline → không kiểm TOPIC_CREATION,
-      // nhưng chỉ tiêu của GV vẫn là ràng buộc cứng.
       const quota = await this.deadlinePolicy.getEffectiveQuota(
         dto.periodId,
         dto.teacherId,
@@ -908,7 +879,7 @@ export class TopicService {
       }
       if (students.length > dto.maxStudents) {
         throw new BadRequestException(
-          `Số sinh viên gán (${students.length}) vượt sĩ số tối đa của đề tài (${dto.maxStudents}).`,
+          `Số sinh viên gán (${students.length}) vượt quá chỉ tiêu tối đa của đề tài (${dto.maxStudents}).`,
         );
       }
 
@@ -940,20 +911,12 @@ export class TopicService {
         }
       }
 
-      const deptCode = resolveDepartmentCode(teacher.department_id);
-      const code = await this.allocateTopicCode(
-        tx,
-        period.id,
-        period.school_year,
-        deptCode,
-      );
-
       const now = new Date();
       const topic = await tx.topics.create({
         data: {
           period_id: dto.periodId,
           teacher_id: dto.teacherId,
-          code,
+          code: null,
           name: dto.name,
           description: dto.description,
           max_students: dto.maxStudents,
@@ -1018,93 +981,94 @@ export class TopicService {
           status: project.status,
         })),
       };
-    });
+    }, { maxWait: 5000, timeout: 20000 });
   }
 
   async generateCodes(dto: GenerateTopicCodesDto, actorUserId: number) {
     const period = await this.prisma.registration_periods.findUnique({
       where: { id: dto.periodId },
-      select: { id: true, school_year: true },
     });
-    if (!period) {
-      throw new NotFoundException(
-        `Không tìm thấy đợt đồ án có id ${dto.periodId}`,
-      );
-    }
+    if (!period) throw new NotFoundException('Không tìm thấy đợt đồ án');
 
-    const topics = await this.prisma.topics.findMany({
+    const prefix = dto.prefix?.trim() || 'DT';
+
+    const teacherQuotas = await this.prisma.teacher_quotas.findMany({
+      where: { period_id: dto.periodId },
+      orderBy: { id: 'asc' },
+      select: { teacher_id: true }
+    });
+    const teacherSeqMap = new Map<number, number>();
+    teacherQuotas.forEach((q, idx) => {
+      teacherSeqMap.set(q.teacher_id, idx + 1);
+    });
+
+    const allTopics = await this.prisma.topics.findMany({
+      where: { period_id: dto.periodId },
+      orderBy: { created_at: 'asc' },
+      select: { id: true, teacher_id: true, code: true }
+    });
+
+    const topicSeqMap = new Map<number, number>();
+    const teacherTopicCount = new Map<number, number>();
+    
+    allTopics.forEach((t) => {
+      const currentCount = teacherTopicCount.get(t.teacher_id) || 0;
+      teacherTopicCount.set(t.teacher_id, currentCount + 1);
+      topicSeqMap.set(t.id, currentCount + 1);
+    });
+
+    // 3. Process the topics we actually want to generate codes for
+    const targetTopics = await this.prisma.topics.findMany({
       where: {
         period_id: dto.periodId,
         ...(dto.topicIds?.length ? { id: { in: dto.topicIds } } : {}),
         ...(dto.overwrite ? {} : { code: null }),
       },
-      select: {
-        id: true,
-        code: true,
-        name: true,
-        teachers: { select: { id: true, department_id: true } },
-      },
-      orderBy: [{ created_at: 'asc' }, { id: 'asc' }],
+      select: { id: true, code: true, teacher_id: true }
     });
 
     const generated: Array<{ topicId: number; code: string; previous: string | null }> = [];
     const skipped: number[] = [];
-    // Gom theo (deptCode) để mỗi lần cấp mã mở một transaction ngắn;
-    // sequence tăng atomic nên hai request song song không trùng mã.
-    const forcedDeptCode = dto.departmentCode?.trim() || null;
 
-    for (const topic of topics) {
-      if (!dto.overwrite && topic.code) {
-        skipped.push(topic.id);
-        continue;
-      }
-      const deptCode =
-        forcedDeptCode ?? resolveDepartmentCode(topic.teachers?.department_id);
+    // Use a single transaction for better performance
+    await this.prisma.$transaction(async (tx) => {
+      for (const topic of targetTopics) {
+        if (!dto.overwrite && topic.code) {
+          skipped.push(topic.id);
+          continue;
+        }
 
-      try {
-        const code = await this.prisma.$transaction(async (tx) => {
-          const allocated = await this.allocateTopicCode(
-            tx,
-            period.id,
-            period.school_year,
-            deptCode,
-          );
-          await tx.topics.update({
-            where: { id: topic.id },
-            data: { code: allocated, updated_at: new Date() },
-          });
-          await tx.topic_audits.create({
-            data: {
-              topic_id: topic.id,
-              action: TopicAuditAction.CODE_GENERATE,
-              before_data: { code: topic.code } as Prisma.InputJsonValue,
-              after_data: { code: allocated } as Prisma.InputJsonValue,
-              reason: dto.overwrite
-                ? `Sinh lại mã đề tài hàng loạt (đợt ${period.id}).`
-                : `Sinh mã đề tài hàng loạt (đợt ${period.id}).`,
-              actor_user_id: actorUserId,
-            },
-          });
-          return allocated;
+        const tSeq = teacherSeqMap.get(topic.teacher_id) || 99;
+        const tpSeq = topicSeqMap.get(topic.id) || 99;
+        
+        const allocated = `${prefix}${tSeq}${String(tpSeq).padStart(2, '0')}`;
+
+        await tx.topics.update({
+          where: { id: topic.id },
+          data: { code: allocated, updated_at: new Date() },
         });
 
-        generated.push({ topicId: topic.id, code, previous: topic.code });
-      } catch (error) {
-        this.logger.error(
-          `Không sinh được mã cho đề tài ${topic.id}`,
-          error instanceof Error ? error.stack : undefined,
-        );
-        skipped.push(topic.id);
-      }
-    }
+        await tx.topic_audits.create({
+          data: {
+            topic_id: topic.id,
+            action: TopicAuditAction.CODE_GENERATE,
+            before_data: { code: topic.code } as Prisma.InputJsonValue,
+            after_data: { code: allocated } as Prisma.InputJsonValue,
+            reason: `Sinh mã đề tài (tiền tố: ${prefix})`,
+            actor_user_id: actorUserId,
+          },
+        });
 
+        generated.push({ topicId: topic.id, code: allocated, previous: topic.code });
+      }
+    }, { maxWait: 5000, timeout: 60000 });
+    
     return {
       periodId: period.id,
       generated: generated.length,
       skipped: skipped.length,
       skippedTopicIds: skipped,
       samples: generated.slice(0, 50),
-      items: generated,
     };
   }
 
@@ -1150,10 +1114,10 @@ export class TopicService {
   // Giảng viên
   // ==========================================================
 
+
   async createTopic(dto: CreateTopicDto, actorUserId: number) {
     const teacher = await this.resolveTeacherByUserId(actorUserId);
 
-    // Deadline + quota + sĩ số tối đa đều do policy quyết định.
     const quota = await this.deadlinePolicy.assertTopicWritable(
       dto.periodId,
       teacher.id,
@@ -1171,23 +1135,17 @@ export class TopicService {
         );
       }
 
-      // Mã cấp ngay khi tạo để mã ổn định và không phải sinh lại hàng loạt.
-      const deptCode = resolveDepartmentCode(teacher.department_id);
-      const code = await this.allocateTopicCode(
-        tx,
-        period.id,
-        period.school_year,
-        deptCode,
-      );
-
       const now = new Date();
       const topic = await tx.topics.create({
         data: {
           period_id: dto.periodId,
           teacher_id: teacher.id,
-          code,
+          code: null,
           name: dto.name,
+          english_name: dto.englishName ?? null,
           description: dto.description,
+          objectives: dto.objectives ?? null,
+          technologies: dto.technologies ?? null,
           max_students: dto.maxStudents,
           registered_students: 0,
           status: TopicStatus.PENDING,
@@ -1226,7 +1184,7 @@ export class TopicService {
           maxStudentsPerTopic: quota.maxStudentsPerTopic,
         },
       };
-    });
+    }, { maxWait: 5000, timeout: 20000 });
   }
 
   async updateTopic(
@@ -1260,8 +1218,6 @@ export class TopicService {
       );
     }
 
-    // Sửa đề tài không tiêu tốn quota mới nên checkQuota=false, nhưng deadline
-    // tạo/sửa đề tài vẫn phải còn mở.
     const periodId = dto.periodId ?? topic.period_id;
     await this.deadlinePolicy.assertTopicWritable(periodId, teacher.id, {
       checkQuota: false,
@@ -1287,7 +1243,7 @@ export class TopicService {
         dto.maxStudents < occupied
       ) {
         throw new BadRequestException(
-          `Không thể giảm sĩ số tối đa xuống ${dto.maxStudents} vì đề tài đang có ${occupied} sinh viên.`,
+          `Không thể giảm chỉ tiêu tối đa xuống ${dto.maxStudents} vì đề tài đang có ${occupied} sinh viên.`,
         );
       }
     }
@@ -1301,8 +1257,12 @@ export class TopicService {
       };
 
       const data: Prisma.topicsUpdateInput = { updated_at: new Date() };
+
       if (dto.name !== undefined) data.name = dto.name;
+      if (dto.englishName !== undefined) data.english_name = dto.englishName;
       if (dto.description !== undefined) data.description = dto.description;
+      if (dto.objectives !== undefined) data.objectives = dto.objectives;
+      if (dto.technologies !== undefined) data.technologies = dto.technologies;
       if (dto.maxStudents !== undefined) data.max_students = dto.maxStudents;
       if (dto.periodId !== undefined && dto.periodId !== topic.period_id) {
         data.registration_periods = { connect: { id: dto.periodId } };
@@ -1450,7 +1410,6 @@ export class TopicService {
       );
     }
 
-    // Sau hạn duyệt, GV không được quyết định nữa — Thư ký/Admin xử lý.
     await this.deadlinePolicy.assertApprovalOpen(topic.period_id);
 
     const approve = dto.decision === 'APPROVE';
@@ -1471,6 +1430,29 @@ export class TopicService {
             teacher_decided_at: new Date(),
           },
         });
+
+        const newOccupied = await tx.project.count({
+          where: {
+            topic_id: topicId,
+            deleted_at: null,
+            status: { in: SLOT_OCCUPYING_PROJECT_STATUSES },
+          },
+        });
+        if (newOccupied >= fresh.max_students) {
+          await tx.project.updateMany({
+            where: {
+              topic_id: topicId,
+              deleted_at: null,
+              status: ProjectStatus.PENDING,
+            },
+            data: {
+              status: ProjectStatus.REJECTED,
+              moderator_note: 'Hệ thống tự động từ chối do đề tài đã đủ sĩ số.',
+              updated_at: new Date(),
+            }
+          });
+        }
+
         await this.recomputeRegisteredStudents(tx, topicId);
         await tx.topic_audits.create({
           data: {
@@ -1530,10 +1512,6 @@ export class TopicService {
     };
   }
 
-  // ==========================================================
-  // Sinh viên
-  // ==========================================================
-
   async listAvailableTopics(query: TopicAvailableQueryDto, actorUserId?: number) {
     const periodId = query.periodId ?? (await this.resolveActivePeriodId());
     const search = query.search?.trim();
@@ -1589,6 +1567,9 @@ export class TopicService {
               code: row.code,
               name: row.name,
               description: row.description,
+              englishName: row.englishName,
+              objectives: row.objectives,
+              technologies: row.technologies,
               maxStudents: row.maxStudents,
               registeredCount: row.students.filter((student) =>
                 SLOT_OCCUPYING_PROJECT_STATUSES.includes(
@@ -1604,18 +1585,23 @@ export class TopicService {
               teacherEmail: row.teacher?.email ?? null,
               department: row.teacher?.departmentName ?? null,
               faculty: row.teacher?.facultyName ?? null,
-              students: row.students.map((student) => ({
-                studentCode: student.studentCode,
-                studentName: student.name,
-                status: student.status,
-                statusLabel: student.statusLabel,
-                registeredAt: student.registeredAt,
-              })),
+              students: row.students
+                .filter((student) =>
+                  SLOT_OCCUPYING_PROJECT_STATUSES.includes(
+                    student.status as ProjectStatus,
+                  ),
+                )
+                .map((student) => ({
+                  studentCode: student.studentCode,
+                  studentName: student.name,
+                  status: student.status,
+                  statusLabel: student.statusLabel,
+                  registeredAt: student.registeredAt,
+                })),
               myRegistration: mine,
               createdAt: row.createdAt,
             };
           })
-          // Lưới an toàn: counter có thể lệch với dữ liệu thật.
           .filter(
             (topic) => topic.registeredCount < topic.maxStudents,
           ),
@@ -1664,7 +1650,6 @@ export class TopicService {
       throw new ConflictException('Đề tài đã chốt danh sách sinh viên.');
     }
 
-    // Hạn đăng ký do policy quyết định; deadline_id được lưu vào Project.
     const deadline = await this.deadlinePolicy.assertRegistrationOpen(
       topic.period_id,
     );
@@ -1709,7 +1694,6 @@ export class TopicService {
         updated_at: now,
       };
 
-      // student_id @unique → sinh viên bị từ chối phải tái sử dụng dòng cũ.
       const project = existing
         ? await tx.project.update({
             where: { id: existing.id },
@@ -1756,6 +1740,7 @@ export class TopicService {
             period_id: true,
             teachers: { select: { id: true, name: true, email: true } },
             registration_periods: { select: { id: true, name: true } },
+            locked_at: true,
           },
         },
       },
@@ -1777,6 +1762,8 @@ export class TopicService {
         statusLabel: PROJECT_STATUS_LABELS[project.status],
         moderatorNote: project.moderator_note,
         registeredAt: project.created_at.toISOString(),
+          isLeader: project.is_leader,
+          assignedTask: project.assigned_task,
         decidedAt: project.teacher_decided_at?.toISOString() ?? null,
         topic: project.topics
           ? {
@@ -1791,15 +1778,12 @@ export class TopicService {
               periodName: project.topics.registration_periods?.name ?? null,
               teacherName: project.topics.teachers?.name ?? null,
               teacherEmail: project.topics.teachers?.email ?? null,
+                locked: !!project.topics.locked_at,
             }
           : null,
       },
     };
   }
-
-  // ==========================================================
-  // Chi tiết đề tài
-  // ==========================================================
 
   async findOne(topicId: number) {
     const topic = await this.prisma.topics.findUnique({
@@ -1881,7 +1865,6 @@ export class TopicService {
     });
   }
 
-  /** Đợt đang mở; nếu không có thì lấy đợt sắp diễn ra gần nhất. */
   private async resolveActivePeriodId(): Promise<number> {
     const period =
       (await this.prisma.registration_periods.findFirst({
@@ -1991,10 +1974,6 @@ export class TopicService {
     }
   }
 
-  /**
-   * Kiểm tra còn slot cho `additional` sinh viên. `excludeProjectId` là dòng
-   * Project sẽ được tái sử dụng (không chiếm slot mới).
-   */
   private async assertCapacity(
     tx: Tx,
     topic: { id: number; max_students: number } | null,
@@ -2016,15 +1995,11 @@ export class TopicService {
 
     if (occupied + additional > topic.max_students) {
       throw new ConflictException(
-        `Đề tài đã đạt sĩ số tối đa (${occupied}/${topic.max_students}). Không thể nhận thêm ${additional} sinh viên.`,
+        `Đề tài đã đạt chỉ tiêu tối đa (${occupied}/${topic.max_students}). Không thể nhận thêm ${additional} sinh viên.`,
       );
     }
   }
 
-  /**
-   * Gán sinh viên vào đề tài. Tái sử dụng dòng Project bị REJECTED vì
-   * `Project.student_id` là unique — không thể tạo dòng thứ hai.
-   */
   private async assignStudents(
     tx: Tx,
     topic: { id: number; teacher_id: number; name: string; description: string },
@@ -2075,10 +2050,6 @@ export class TopicService {
     return results;
   }
 
-  /**
-   * `topics.registered_students` là counter suy biến: luôn tính lại từ số
-   * Project thật trong cùng transaction để không lệch với danh sách SV.
-   */
   private async recomputeRegisteredStudents(
     tx: Tx,
     topicId: number,
@@ -2099,47 +2070,6 @@ export class TopicService {
     return counted;
   }
 
-  /**
-   * Cấp mã `DT{year}_{DEPT}_{seq}`. Sequence tăng atomic bằng
-   * INSERT ... ON CONFLICT nên hai request song song không nhận cùng một số.
-   * Nếu mã đã tồn tại (dữ liệu legacy) thì cấp lại số kế tiếp.
-   */
-  private async allocateTopicCode(
-    tx: Tx,
-    periodId: number,
-    schoolYear: string | null,
-    departmentCode: string,
-  ): Promise<string> {
-    const year = resolveCodeYear(schoolYear);
-
-    for (let attempt = 0; attempt < CODE_ALLOCATION_MAX_ATTEMPTS; attempt++) {
-      const rows = await tx.$queryRaw<Array<{ next_seq: number }>>`
-        INSERT INTO topic_code_sequences (period_id, dept_code, next_seq)
-        VALUES (${periodId}, ${departmentCode}, 1)
-        ON CONFLICT (period_id, dept_code)
-        DO UPDATE SET next_seq = topic_code_sequences.next_seq + 1
-        RETURNING next_seq
-      `;
-
-      const sequence = Number(rows?.[0]?.next_seq ?? 1);
-      const code = formatTopicCode(year, departmentCode, sequence);
-
-      const clash = await tx.topics.findUnique({
-        where: { code },
-        select: { id: true },
-      });
-      if (!clash) return code;
-    }
-
-    throw new ConflictException(
-      `Không cấp được mã đề tài cho bộ môn ${departmentCode}. Vui lòng thử lại hoặc liên hệ quản trị.`,
-    );
-  }
-
-  /**
-   * Đồng bộ `teacher_quotas.submitted_topics` với số đề tài thật (không tính
-   * đề tài bị từ chối) để chỉ tiêu hiển thị đúng ở màn quản trị.
-   */
   private async syncTeacherQuotaCounter(
     tx: Tx,
     periodId: number,
@@ -2190,7 +2120,6 @@ export class TopicService {
     });
   }
 
-  /** Đảm bảo hồ sơ tiến độ tồn tại cho SV vừa nhận đề tài. */
   private async ensureStudentProgress(
     tx: Tx,
     studentId: number,
@@ -2230,6 +2159,8 @@ export class TopicService {
         status: project.status,
         statusLabel: PROJECT_STATUS_LABELS[project.status],
         registeredAt: project.created_at.toISOString(),
+          isLeader: project.is_leader,
+          assignedTask: project.assigned_task,
         decidedAt: project.teacher_decided_at?.toISOString() ?? null,
         assignReason: project.assign_reason,
         moderatorNote: project.moderator_note,
@@ -2249,7 +2180,10 @@ export class TopicService {
       id: topic.id,
       code: topic.code,
       name: topic.name,
+      englishName: (topic as any).english_name ?? null,
       description: topic.description,
+      objectives: (topic as any).objectives ?? null,
+      technologies: (topic as any).technologies ?? null,
       maxStudents: topic.max_students,
       registeredStudents: topic.registered_students,
       occupiedStudents: occupied,
@@ -2302,7 +2236,10 @@ export class TopicService {
       periodId: row.periodId,
       periodName: row.periodName,
       name: row.name,
+      englishName: row.englishName,
       description: row.description,
+      objectives: row.objectives,
+      technologies: row.technologies,
       maxStudents: row.maxStudents,
       status: row.status,
       statusLabel: row.statusLabel,
@@ -2321,4 +2258,117 @@ export class TopicService {
       updatedAt: row.updatedAt,
     };
   }
+  async cancelRegistration(topicId: number, actorUserId: number) {
+    const student = await this.resolveStudentByUserId(actorUserId);
+
+    const project = await this.prisma.project.findFirst({
+      where: {
+        topic_id: topicId,
+        student_id: student.id,
+        status: ProjectStatus.PENDING,
+      },
+    });
+
+    if (!project) {
+      throw new BadRequestException('Không tìm thấy yêu cầu đăng ký hợp lệ hoặc đã được duyệt/từ chối.');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.project.delete({
+        where: { id: project.id },
+      });
+      await this.recomputeRegisteredStudents(tx, topicId);
+    });
+
+    return { success: true };
+  }
+
+  async lockWithAssignments(
+    topicId: number,
+    actorUserId: number,
+    assignments: { projectId: number; assignedTask: string; isLeader: boolean }[],
+  ) {
+    const teacher = await this.resolveTeacherByUserId(actorUserId);
+
+    const topic = await this.prisma.topics.findUnique({
+      where: { id: topicId },
+      include: { projects: true },
+    });
+
+    if (!topic || topic.teacher_id !== teacher.id) {
+      throw new ForbiddenException('Không có quyền khóa đề tài này.');
+    }
+
+    if (topic.status !== TopicStatus.APPROVED) {
+      throw new BadRequestException('Đề tài chưa được duyệt.');
+    }
+
+    const approvedProjects = topic.projects.filter(p => p.status === ProjectStatus.APPROVED);
+    
+    // Validate assignments match approved projects
+    const assignmentMap = new Map(assignments.map(a => [a.projectId, a]));
+    for (const proj of approvedProjects) {
+      if (!assignmentMap.has(proj.id)) {
+        throw new BadRequestException('Vui lòng phân công nhiệm vụ cho tất cả sinh viên đã duyệt.');
+      }
+    }
+
+    const leaders = assignments.filter(a => a.isLeader);
+    if (leaders.length !== 1 && approvedProjects.length > 0) {
+      throw new BadRequestException('Phải có đúng 1 nhóm trưởng.');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      // 1. Lock topic
+      await tx.topics.update({
+        where: { id: topicId },
+        data: { locked_at: new Date(), updated_at: new Date() },
+      });
+
+      // 2. Update projects
+      for (const a of assignments) {
+        await tx.project.update({
+          where: { id: a.projectId },
+          data: {
+            is_leader: a.isLeader,
+            assigned_task: a.assignedTask,
+            updated_at: new Date(),
+          },
+        });
+      }
+    });
+
+    return { success: true };
+  }
+
+  async changeLeader(topicId: number, actorUserId: number, projectId: number) {
+    const teacher = await this.resolveTeacherByUserId(actorUserId);
+
+    const topic = await this.prisma.topics.findUnique({
+      where: { id: topicId },
+    });
+
+    if (!topic || topic.teacher_id !== teacher.id) {
+      throw new ForbiddenException('Không có quyền thay đổi trưởng nhóm.');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      // Remove current leader
+      await tx.project.updateMany({
+        where: { topic_id: topicId, is_leader: true },
+        data: { is_leader: false },
+      });
+
+      // Set new leader
+      await tx.project.update({
+        where: { id: projectId },
+        data: { is_leader: true, updated_at: new Date() },
+      });
+    });
+
+    return { success: true };
+  }
 }
+
+
+

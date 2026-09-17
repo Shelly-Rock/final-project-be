@@ -30,6 +30,7 @@ import { AuditModule } from '@/modules/audit/audit.module';
 import { DashboardModule } from '@/modules/dashboard/dashboard.module';
 import { StatisticsModule } from '@/modules/statistics/statistics.module';
 import { AdministrativeModule } from '@/modules/administrative/administrative.module';
+import { UploadModule } from './modules/upload/upload.module';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { AdministrativeModule } from '@/modules/administrative/administrative.mo
     ScoringModule,
     ChatModule,
     NotificationModule,
+    UploadModule,
   ],
   providers: [
     {

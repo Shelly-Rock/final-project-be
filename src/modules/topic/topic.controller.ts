@@ -1,11 +1,11 @@
-import {
+﻿import {
   Body,
   Controller,
   Get,
   Param,
   ParseIntPipe,
   Post,
-  Put,
+  Put, Delete,
   Query,
   Res,
   UseGuards,
@@ -32,7 +32,7 @@ import {
   UpdateTopicDto,
 } from './dto';
 
-@ApiTags('Topics — Governance')
+@ApiTags('Topics â€” Governance')
 @Controller('topics')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class TopicController {
@@ -125,7 +125,7 @@ export class TopicController {
 
   @Post('supplemental')
   @Roles('ADMIN', 'SECRETARY')
-  @ApiOperation({ summary: 'Tạo đề tài bổ sung (quá deadline vẫn cho phép, kiểm quota)' })
+  @ApiOperation({ summary: 'Tạo đề tài bổ sung (quá deadline vẫn cho phép, kiểm tra quota)' })
   createSupplemental(
     @Body() dto: CreateSupplementalTopicDto,
     @CurrentUser('sub') actorUserId: number,
@@ -179,7 +179,38 @@ export class TopicController {
     return this.topicService.registerTopic(id, actorUserId);
   }
 
-  // ── Giảng viên ───────────────────────────────────────────────
+  @Delete(':id/registrations')
+  @Roles('STUDENT')
+  @ApiOperation({ summary: 'Sinh viên hủy đăng ký đề tài' })
+  cancelRegistration(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser('sub') actorUserId: number,
+  ) {
+    return this.topicService.cancelRegistration(id, actorUserId);
+  }
+
+  @Post(':id/lock-with-assignments')
+  @Roles('TEACHER', 'ADMIN', 'SECRETARY')
+  @ApiOperation({ summary: 'Khóa đề tài và chốt danh sách' })
+  lockWithAssignments(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser('sub') actorUserId: number,
+    @Body('assignments') assignments: { projectId: number; assignedTask: string; isLeader: boolean }[],
+  ) {
+    return this.topicService.lockWithAssignments(id, actorUserId, assignments);
+  }
+
+  @Put(':id/change-leader')
+  @Roles('TEACHER', 'ADMIN', 'SECRETARY')
+  @ApiOperation({ summary: 'Đổi trưởng nhóm' })
+  changeLeader(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser('sub') actorUserId: number,
+    @Body('projectId') projectId: number,
+  ) {
+    return this.topicService.changeLeader(id, actorUserId, projectId);
+  }
+
 
   @Get('mine')
   @Roles('TEACHER', 'ADMIN', 'SECRETARY')
@@ -214,7 +245,7 @@ export class TopicController {
 
   @Post()
   @Roles('TEACHER', 'ADMIN', 'SECRETARY')
-  @ApiOperation({ summary: 'Giảng viên tạo đề tài (kiểm quota + deadline + sĩ số)' })
+  @ApiOperation({ summary: 'Giảng viên tạo đề tài (kiểm tra quota + deadline + số lượng)' })
   createTopic(
     @Body() dto: CreateTopicDto,
     @CurrentUser('sub') actorUserId: number,
@@ -233,11 +264,10 @@ export class TopicController {
     return this.topicService.updateTopic(id, dto, actorUserId);
   }
 
-  // ── Chi tiết (đặt cuối để không nuốt các route tĩnh) ─────────
-
   @Get(':id')
   @ApiOperation({ summary: 'Chi tiết đề tài' })
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.topicService.findOne(id);
   }
 }
+

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+﻿import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '@/core/database/prisma/prisma.service';
 import { google } from 'googleapis';
@@ -62,7 +62,7 @@ export class SubmissionCronService {
         if (!project || !project.student_id) continue;
 
         const existingSubmission = await this.prisma.final_submissions.findFirst({
-          where: { project_id: project.id, deleted_at: null },
+          where: { topic_id: project.topic_id, deleted_at: null },
         });
 
         // Nếu file có trên Drive nhưng DB chưa lưu (do FE gọi confirmDriveUpload thất bại/rớt mạng)
@@ -73,8 +73,8 @@ export class SubmissionCronService {
 
           await this.prisma.final_submissions.create({
             data: {
-              student_id: project.student_id,
-              project_id: project.id,
+              submitted_by_student_id: project.student_id,
+              topic_id: project.topic_id,
               file_url: file.webViewLink || '',
               file_name: file.id || '',
               original_name: fileName,
@@ -93,4 +93,5 @@ export class SubmissionCronService {
     }
   }
 }
+
 

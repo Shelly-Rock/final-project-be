@@ -37,7 +37,7 @@
       "@shared/*": ["./src/shared/*"]
     },
     
-    "types": ["node", "jest"],
+    "types": ["node", "jest", "multer"],
     "resolveJsonModule": true,
     "allowJs": false,
     "checkJs": false

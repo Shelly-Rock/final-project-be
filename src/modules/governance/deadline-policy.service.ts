@@ -80,7 +80,7 @@ export class DeadlinePolicyService {
     const quota = await this.getEffectiveQuota(periodId, teacherId);
     if (options.checkQuota !== false && quota.remainingTopics <= 0) {
       throw new ForbiddenException(
-        `Giảng viên đã sử dụng hết chỉ tiêu ${quota.assignedQuota} đề tài trong đợt này.`,
+        `Giảng viên đã đạt chỉ tiêu tối đa ${quota.assignedQuota} đề tài trong đợt đăng ký này.`,
       );
     }
 
