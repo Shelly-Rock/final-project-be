@@ -41,15 +41,39 @@ export class SubmissionService {
   }
 
   private async resolveStudentByUserId(userId: number) {
-    const student = await this.prisma.student.findFirst({
+    let student = await this.prisma.student.findFirst({
       where: { user_id: userId, deleted_at: null },
       select: { id: true, user_id: true, student_id: true },
     });
+
     if (!student) {
-      throw new ForbiddenException(
-        'Tài khoản của bạn chưa được gắn với hồ sơ sinh viên.',
-      );
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, email: true, username: true },
+      });
+      if (!user) {
+        throw new ForbiddenException('User not found');
+      }
+
+      student = await this.prisma.student.create({
+        data: {
+          user: { connect: { id: userId } },
+          student_id: `SV_${Date.now()}`,
+          first_name: user.username || 'Student',
+          middle_name: '',
+          last_name: '',
+          email: user.email,
+          class_name: 'TBD',
+          major: 'TBD',
+          gender: 'MALE',
+          date_of_birth: new Date('2000-01-01'),
+          course_year: 1,
+          academic_year: new Date().getFullYear().toString(),
+        },
+        select: { id: true, user_id: true, student_id: true },
+      });
     }
+
     return student;
   }
 

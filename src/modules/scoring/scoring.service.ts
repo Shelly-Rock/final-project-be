@@ -1232,13 +1232,46 @@ export class ScoringService {
     return this.buildTranscript(projectId);
   }
 
-  async getMyTranscript(userId: number) {
-    const student = await this.prisma.student.findUnique({
-      where: { user_id: userId },
+  private async resolveOrCreateStudent(userId: number) {
+    let student = await this.prisma.student.findFirst({
+      where: { user_id: userId, deleted_at: null },
     });
+
     if (!student) {
-      throw new ForbiddenException('Student profile not found');
+      const user = await this.prisma.user.findUnique({ where: { id: userId } });
+      if (!user) {
+        throw new ForbiddenException('User not found');
+      }
+
+      const lastStudent = await this.prisma.student.findFirst({
+        orderBy: { id: 'desc' },
+        take: 1,
+      });
+      const nextStudentId = `SV${String((lastStudent?.id ?? 0) + 1).padStart(6, '0')}`;
+
+      student = await this.prisma.student.create({
+        data: {
+          student_id: nextStudentId,
+          user: { connect: { id: userId } },
+          first_name: user.username?.split('_')[0] || 'Student',
+          middle_name: '',
+          last_name: user.username?.split('_')[1] || 'User',
+          email: user.email,
+          class_name: 'K10',
+          major: 'KTPM',
+          course_year: 10,
+          academic_year: new Date().getFullYear().toString(),
+          gender: 'MALE',
+          date_of_birth: new Date('2000-01-01'),
+        },
+      });
     }
+
+    return student;
+  }
+
+  async getMyTranscript(userId: number) {
+    const student = await this.resolveOrCreateStudent(userId);
 
     const project = await this.prisma.project.findUnique({
       where: { student_id: student.id },
@@ -1432,10 +1465,7 @@ export class ScoringService {
   }
 
   async getMyRevision(userId: number) {
-    const student = await this.prisma.student.findUnique({ where: { user_id: userId } });
-    if (!student) {
-      throw new ForbiddenException('Student profile not found');
-    }
+    const student = await this.resolveOrCreateStudent(userId);
     const project = await this.prisma.project.findUnique({ where: { student_id: student.id } });
     if (!project) {
       throw new NotFoundException('Bạn chưa có đề tài');
@@ -1469,10 +1499,7 @@ export class ScoringService {
   }
 
   async submitRevision(userId: number, dto: SubmitRevisionDto) {
-    const student = await this.prisma.student.findUnique({ where: { user_id: userId } });
-    if (!student) {
-      throw new ForbiddenException('Student profile not found');
-    }
+    const student = await this.resolveOrCreateStudent(userId);
     const project = await this.prisma.project.findUnique({ where: { student_id: student.id } });
     if (!project) {
       throw new NotFoundException('Bạn chưa có đề tài');

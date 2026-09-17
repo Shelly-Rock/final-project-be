@@ -1838,7 +1838,7 @@ export class TopicService {
   }
 
   private async resolveStudentByUserId(userId: number) {
-    const student = await this.prisma.student.findFirst({
+    let student = await this.prisma.student.findFirst({
       where: { user_id: userId, deleted_at: null },
       select: {
         id: true,
@@ -1851,11 +1851,46 @@ export class TopicService {
         email: true,
       },
     });
+
     if (!student) {
-      throw new ForbiddenException(
-        'Tài khoản của bạn chưa được gắn với hồ sơ sinh viên.',
-      );
+      // Auto-create a minimal student profile for users with STUDENT role
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, email: true },
+      });
+
+      if (!user) {
+        throw new ForbiddenException('User not found');
+      }
+
+      student = await this.prisma.student.create({
+        data: {
+          user: { connect: { id: userId } },
+          student_id: `SV_${userId}_${Date.now()}`,
+          first_name: 'Student',
+          last_name: user.email?.split('@')[0] || 'User',
+          middle_name: '',
+          email: user.email || '',
+          class_name: 'N/A',
+          major: 'N/A',
+          gender: 'MALE',
+          date_of_birth: new Date(),
+          course_year: 1,
+          academic_year: new Date().getFullYear().toString(),
+        },
+        select: {
+          id: true,
+          user_id: true,
+          student_id: true,
+          first_name: true,
+          middle_name: true,
+          last_name: true,
+          class_name: true,
+          email: true,
+        },
+      });
     }
+
     return student;
   }
 
