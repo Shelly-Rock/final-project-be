@@ -1,15 +1,21 @@
 // Progress Tracking Enums - using string literal types for Prisma 7 compatibility
-export type ReportStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'REVISION_REQUESTED';
+export type ReportStatus = 'PENDING_TEACHER' | 'REVISION_REQUESTED' | 'APPROVED_BY_TEACHER' | 'ARCHIVED' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'MISSING';
 export type ProgressStatus = 'ON_TRACK' | 'EXTENDED' | 'TOPIC_CHANGED' | 'BANNED';
 export type TemplateType = 'MONTHLY_REPORT' | 'MIDTERM_REPORT' | 'FINAL_REPORT' | 'PROPOSAL' | 'PRESENTATION';
+export type MilestoneType = 'TOPIC_REGISTRATION' | 'PROGRESS_REPORT' | 'EXCEPTION_REQUEST';
 export type NotificationType = 'STATUS_CHANGED' | 'REPORT_SUBMITTED' | 'REPORT_APPROVED' | 'REPORT_REJECTED' | 'BAN_APPLIED' | 'BAN_WARNING';
 
 // Enum constants for comparison
 export const ReportStatus = {
+  PENDING_TEACHER: 'PENDING_TEACHER' as ReportStatus,
+  REVISION_REQUESTED: 'REVISION_REQUESTED' as ReportStatus,
+  APPROVED_BY_TEACHER: 'APPROVED_BY_TEACHER' as ReportStatus,
+  ARCHIVED: 'ARCHIVED' as ReportStatus,
+  // Giữ lại để tương thích ngược
   PENDING: 'PENDING' as ReportStatus,
   APPROVED: 'APPROVED' as ReportStatus,
   REJECTED: 'REJECTED' as ReportStatus,
-  REVISION_REQUESTED: 'REVISION_REQUESTED' as ReportStatus,
+  MISSING: 'MISSING' as ReportStatus,
 };
 
 export const ProgressStatus = {
@@ -25,6 +31,12 @@ export const TemplateType = {
   FINAL_REPORT: 'FINAL_REPORT' as TemplateType,
   PROPOSAL: 'PROPOSAL' as TemplateType,
   PRESENTATION: 'PRESENTATION' as TemplateType,
+};
+
+export const MilestoneType = {
+  TOPIC_REGISTRATION: 'TOPIC_REGISTRATION' as MilestoneType,
+  PROGRESS_REPORT: 'PROGRESS_REPORT' as MilestoneType,
+  EXCEPTION_REQUEST: 'EXCEPTION_REQUEST' as MilestoneType,
 };
 
 export const NotificationType = {
@@ -57,6 +69,14 @@ export class CreateTemplateDto {
   type: TemplateType;
 
   @IsString()
+  @IsOptional()
+  milestone_type?: MilestoneType;
+
+  @IsInt()
+  @IsOptional()
+  period_id?: number;
+
+  @IsString()
   @IsNotEmpty()
   file_url: string;
 
@@ -66,6 +86,16 @@ export class CreateTemplateDto {
 
   @IsInt()
   file_size: number;
+}
+
+export class CloneTemplateDto {
+  @IsInt()
+  @IsNotEmpty()
+  from_period_id: number;
+
+  @IsInt()
+  @IsNotEmpty()
+  to_period_id: number;
 }
 
 export class TemplateQueryDto {
@@ -87,9 +117,17 @@ export class TemplateQueryDto {
   type?: TemplateType;
 
   @IsOptional()
+  @IsString()
+  milestone_type?: MilestoneType;
+
+  @IsOptional()
+  @IsString()
+  department_id?: string;
+
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
-  teacher_id?: number;
+  period_id?: number;
 }
 
 // Report DTOs
@@ -123,8 +161,12 @@ export class CreateReportDto {
 
 export class ReviewReportDto {
   @IsString()
-  @IsNotEmpty()
-  status: ReportStatus;
+  @IsOptional()
+  action?: 'APPROVE' | 'REJECT';
+
+  @IsString()
+  @IsOptional()
+  status?: ReportStatus; // Backwards compatibility or direct status update
 
   @IsOptional()
   @IsString()
@@ -135,6 +177,12 @@ export class ReviewReportDto {
   @Min(0)
   @Max(10)
   score?: number;
+}
+
+export class ArchiveReportDto {
+  @IsString()
+  @IsNotEmpty()
+  action: 'ARCHIVE';
 }
 
 export class ReportQueryDto {

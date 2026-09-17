@@ -103,7 +103,7 @@ model Student {
   deleted_at         DateTime?
   middle_name        String
   extra_data         Json?
-  final_submissions  final_submissions?
+  final_submissions  final_submissions[]
   independent_scores independent_scores[]
   project            Project?
   scoring_results    scoring_results[]
@@ -126,13 +126,14 @@ model Faculty {
 }
 
 model Department {
-  id         String      @id @db.VarChar(50)
-  name       String      @db.VarChar(255)
-  faculty_id String      @db.VarChar(50)
-  created_at DateTime    @default(now())
-  faculty    Faculty     @relation(fields: [faculty_id], references: [id])
-  teachers   Teacher[]
-  secretary  Secretary?
+  id               String             @id @db.VarChar(50)
+  name             String             @db.VarChar(255)
+  faculty_id       String             @db.VarChar(50)
+  created_at       DateTime           @default(now())
+  faculty          Faculty            @relation(fields: [faculty_id], references: [id])
+  teachers         Teacher[]
+  secretary        Secretary?
+  report_templates report_templates[]
 
   @@map("departments")
 }
@@ -172,14 +173,14 @@ model Teacher {
 }
 
 model Secretary {
-  id            Int        @id @default(autoincrement())
-  user_id       Int        @unique
-  secretary_id  String     @unique
-  department_id String?    @unique @db.VarChar(50)
-  created_at    DateTime   @default(now())
-  updated_at    DateTime   @updatedAt
+  id            Int         @id @default(autoincrement())
+  user_id       Int         @unique
+  secretary_id  String      @unique
+  department_id String?     @unique @db.VarChar(50)
+  created_at    DateTime    @default(now())
+  updated_at    DateTime    @updatedAt
   deleted_at    DateTime?
-  user          User       @relation(fields: [user_id], references: [id])
+  user          User        @relation(fields: [user_id], references: [id])
   department    Department? @relation(fields: [department_id], references: [id])
 
   @@map("secretaries")
@@ -205,8 +206,9 @@ model Project {
   decided_by_user_id       Int?
   teacher_decided_at       DateTime?
   moderator_note           String?
+  is_leader                Boolean                    @default(false)
+  assigned_task            String?
   defense_session_projects defense_session_projects[]
-  final_submissions        final_submissions?
   independent_scores       independent_scores[]
   thesis_revisions         thesis_revisions[]
   student                  Student                    @relation(fields: [student_id], references: [id])
@@ -343,26 +345,26 @@ model exception_requests {
 }
 
 model final_submissions {
-  id               Int              @id @default(autoincrement())
-  student_id       Int              @unique
-  project_id       Int              @unique
-  file_url         String
-  file_name        String
-  original_name    String
-  file_size        Int
-  file_type        SubmissionType
-  status           SubmissionStatus @default(PENDING)
-  submitted_at     DateTime         @default(now())
-  reviewed_by      Int?
-  reviewed_at      DateTime?
-  rejection_reason String?
-  created_at       DateTime         @default(now())
-  updated_at       DateTime
-  deleted_at       DateTime?
-  projects         Project          @relation(fields: [project_id], references: [id])
-  students         Student          @relation(fields: [student_id], references: [id])
+  id                      Int              @id @default(autoincrement())
+  topic_id                Int              @unique
+  submitted_by_student_id Int
+  file_url                String
+  file_name               String
+  original_name           String
+  file_size               Int
+  file_type               SubmissionType
+  status                  SubmissionStatus @default(PENDING)
+  submitted_at            DateTime         @default(now())
+  reviewed_by             Int?
+  reviewed_at             DateTime?
+  rejection_reason        String?
+  created_at              DateTime         @default(now())
+  updated_at              DateTime         @updatedAt
+  deleted_at              DateTime?
+  topics                  topics           @relation(fields: [topic_id], references: [id])
+  student                 Student          @relation(fields: [submitted_by_student_id], references: [id])
 
-  @@index([project_id])
+  @@index([topic_id])
 }
 
 model independent_scores {
@@ -428,6 +430,8 @@ model progress_reports {
   reviewed_by          Int?
   reviewed_at          DateTime?
   missing_marked_at    DateTime?
+  archived_by          Int?
+  archived_at          DateTime?
   created_at           DateTime              @default(now())
   updated_at           DateTime
   deleted_at           DateTime?
@@ -461,52 +465,59 @@ model registration_periods {
   topics                    topics[]
   governance_config         period_governance_configs?
   topic_code_sequences      topic_code_sequences[]
+  report_templates          report_templates[]
 }
 
 model report_templates {
-  id          Int          @id @default(autoincrement())
-  name        String
-  description String?
-  type        TemplateType
-  file_url    String
-  file_name   String
-  file_size   Int
-  teacher_id  Int
-  created_at  DateTime     @default(now())
-  updated_at  DateTime
-  deleted_at  DateTime?
+  id             Int                   @id @default(autoincrement())
+  name           String
+  description    String?
+  type           TemplateType
+  milestone_type MilestoneType         @default(PROGRESS_REPORT)
+  file_url       String
+  file_name      String
+  file_size      Int
+  department_id  String?               @db.VarChar(50)
+  period_id      Int?
+  is_cloned      Boolean               @default(false)
+  created_at     DateTime              @default(now())
+  updated_at     DateTime
+  deleted_at     DateTime?
+  department     Department?           @relation(fields: [department_id], references: [id])
+  period         registration_periods? @relation(fields: [period_id], references: [id])
 
-  @@index([teacher_id])
+  @@index([department_id])
+  @@index([period_id])
 }
 
 model scoring_results {
-  id                   Int       @id @default(autoincrement())
-  project_id           Int       @unique
-  student_id           Int
-  gvhd_score           Float?
-  review_score         Float?
-  defense_score        Float?
-  final_score          Float?
-  is_gvhd_passed       Boolean   @default(false)
-  is_final_passed      Boolean   @default(false)
-  final_status         String?
-  score_sheet_url      String?
+  id                  Int       @id @default(autoincrement())
+  project_id          Int       @unique
+  student_id          Int
+  gvhd_score          Float?
+  review_score        Float?
+  defense_score       Float?
+  final_score         Float?
+  is_gvhd_passed      Boolean   @default(false)
+  is_final_passed     Boolean   @default(false)
+  final_status        String?
+  score_sheet_url     String?
   // Giai đoạn 6: tính trọng số + điểm thưởng + công bố bảng điểm
-  bonus_score          Float     @default(0)
-  bonus_note           String?
-  bonus_by_teacher_id  Int?
-  is_published         Boolean   @default(false)
-  published_at         DateTime?
+  bonus_score         Float     @default(0)
+  bonus_note          String?
+  bonus_by_teacher_id Int?
+  is_published        Boolean   @default(false)
+  published_at        DateTime?
   // Giai đoạn 7: hạn chỉnh sửa hồ sơ + xếp hạng
-  revision_deadline    DateTime?
-  rank                 Int?
-  rank_override        Int?
-  rank_note            String?
-  ranked_at            DateTime?
-  created_at           DateTime  @default(now())
-  updated_at           DateTime
-  projects             Project   @relation(fields: [project_id], references: [id])
-  students             Student   @relation(fields: [student_id], references: [id])
+  revision_deadline   DateTime?
+  rank                Int?
+  rank_override       Int?
+  rank_note           String?
+  ranked_at           DateTime?
+  created_at          DateTime  @default(now())
+  updated_at          DateTime
+  projects            Project   @relation(fields: [project_id], references: [id])
+  students            Student   @relation(fields: [student_id], references: [id])
 
   @@index([student_id])
   @@index([rank])
@@ -573,7 +584,10 @@ model topics {
   teacher_id           Int
   code                 String?              @unique @db.VarChar(80)
   name                 String               @db.VarChar(255)
+  english_name         String?              @db.VarChar(255)
   description          String
+  objectives           String?              @db.Text
+  technologies         String?              @db.Text
   max_students         Int
   registered_students  Int                  @default(0)
   status               TopicStatus          @default(PENDING)
@@ -587,6 +601,7 @@ model topics {
   exception_requests   exception_requests[]
   projects             Project[]
   audits               topic_audits[]
+  final_submissions    final_submissions?
   registration_periods registration_periods @relation(fields: [period_id], references: [id], onDelete: Cascade)
   teachers             Teacher              @relation(fields: [teacher_id], references: [id])
 
@@ -760,10 +775,14 @@ enum RegistrationPeriodStatus {
 }
 
 enum ReportStatus {
+  PENDING_TEACHER // SV mới nộp, chờ GV duyệt
+  REVISION_REQUESTED // GV từ chối, yêu cầu SV sửa lại
+  APPROVED_BY_TEACHER // GV đã duyệt, chờ Thư ký lưu trữ
+  ARCHIVED // Thư ký đã lưu trữ (hoàn tất)
+  // Giữ các trạng thái cũ để không breaking existing reports
   PENDING
   APPROVED
   REJECTED
-  REVISION_REQUESTED
   MISSING
 }
 
@@ -867,6 +886,12 @@ enum TemplateType {
   FINAL_REPORT
   PROPOSAL
   PRESENTATION
+}
+
+enum MilestoneType {
+  TOPIC_REGISTRATION // Giai đoạn 1: Đăng ký đề tài
+  PROGRESS_REPORT // Giai đoạn 2: Báo cáo tiến độ định kỳ
+  EXCEPTION_REQUEST // Giai đoạn 3: Biểu mẫu ngoại lệ (gia hạn, hủy đề tài...)
 }
 
 enum TopicStatus {

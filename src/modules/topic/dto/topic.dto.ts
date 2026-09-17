@@ -99,6 +99,31 @@ export class CreateTopicDto {
   @Min(1)
   @Max(3)
   maxStudents: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  englishName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  objectives?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  technologies?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isException?: boolean;
+
+  @ApiPropertyOptional({ type: [Number] })
+  @IsOptional()
+  @IsArray()
+  preAssignedStudentIds?: number[];
 }
 
 export class UpdateTopicDto extends PartialType(CreateTopicDto) {
@@ -187,12 +212,12 @@ export class GenerateTopicCodesDto {
   @Min(1, { each: true })
   topicIds?: number[];
 
-  @ApiPropertyOptional({ example: 'CNTT' })
+  @ApiPropertyOptional({ example: 'IT22.' })
   @IsOptional()
   @IsString()
   @IsNotEmpty()
   @MaxLength(30)
-  departmentCode?: string;
+  prefix?: string;
 
   @ApiPropertyOptional({ default: false })
   @IsOptional()

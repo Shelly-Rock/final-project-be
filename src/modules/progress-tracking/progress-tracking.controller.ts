@@ -16,9 +16,11 @@ import { ApiTags, ApiExtraModels } from '@nestjs/swagger';
 import { ProgressTrackingService } from './progress-tracking.service';
 import {
   CreateTemplateDto,
+  CloneTemplateDto,
   TemplateQueryDto,
   CreateReportDto,
   ReviewReportDto,
+  ArchiveReportDto,
   ReportQueryDto,
   UpdateStudentProgressDto,
   StudentProgressQueryDto,
@@ -42,12 +44,21 @@ export class ProgressTrackingController {
 
   // teacher_id lấy từ JWT (resolve sang hồ sơ Teacher), không nhận từ body.
   @Post('templates')
-  @Roles('TEACHER', 'ADMIN', 'SECRETARY')
+  @Roles('SECRETARY', 'ADMIN') // Teachers shouldn't upload templates anymore based on new flow
   createTemplate(
     @CurrentUser() user: JwtUser,
     @Body() dto: CreateTemplateDto,
   ) {
     return this.service.createTemplateForActor(user, dto);
+  }
+
+  @Post('templates/clone')
+  @Roles('SECRETARY', 'ADMIN')
+  cloneTemplates(
+    @CurrentUser() user: JwtUser,
+    @Body() dto: CloneTemplateDto,
+  ) {
+    return this.service.cloneTemplates(user, dto.from_period_id, dto.to_period_id);
   }
 
   @Get('templates')
@@ -90,13 +101,23 @@ export class ProgressTrackingController {
 
   // reviewer_id lấy từ JWT (resolve sang hồ sơ Teacher), không nhận từ body.
   @Put('reports/:id/review')
-  @Roles('TEACHER', 'ADMIN', 'SECRETARY')
+  @Roles('TEACHER', 'ADMIN')
   reviewReport(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: JwtUser,
     @Body() dto: ReviewReportDto,
   ) {
     return this.service.reviewReportForActor(user, id, dto);
+  }
+
+  @Put('reports/:id/archive')
+  @Roles('SECRETARY', 'ADMIN')
+  archiveReport(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: JwtUser,
+    @Body() dto: ArchiveReportDto,
+  ) {
+    return this.service.archiveReportForActor(user, id);
   }
 
   // ========== Student Progress Endpoints ==========

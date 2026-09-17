@@ -203,6 +203,13 @@ export class NotificationService {
     );
     return notifications;
   }
+  async deleteAllForUser(userId: number): Promise<void> {
+    await this.prisma.progress_notifications.deleteMany({
+      where: {
+        recipient_id: userId,
+      },
+    });
+  }
 
   private mapToDto(notification: any): NotificationDto {
     return {

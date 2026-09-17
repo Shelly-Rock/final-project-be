@@ -126,22 +126,7 @@ export class NotificationController {
     return { message: 'Notification deleted' };
   }
 
-  @Delete('all')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Delete all notifications for current user' })
-  async deleteAll(@NestRequest() req): Promise<{ message: string }> {
-    const notifications = await this.notificationService.findByRecipient(
-      req.user.id,
-      0,
-      1000,
-    );
-    if (notifications.notifications.length > 0) {
-      await this.notificationService.deleteMany(
-        notifications.notifications.map((n) => n.id),
-      );
-    }
-    return { message: 'All notifications deleted' };
-  }
+
 
   @Post('send')
   @HttpCode(HttpStatus.CREATED)
@@ -168,5 +153,14 @@ export class NotificationController {
       body.relatedStudentId,
       body.relatedReportId,
     );
+  }
+
+  @Delete('all')
+  @HttpCode(HttpStatus.OK)
+  @Permissions('notification:delete')
+  @ApiOperation({ summary: 'Delete all notifications for current user' })
+  async deleteAll(@NestRequest() req): Promise<{ message: string }> {
+    await this.notificationService.deleteAllForUser(req.user.id);
+    return { message: 'All notifications deleted' };
   }
 }

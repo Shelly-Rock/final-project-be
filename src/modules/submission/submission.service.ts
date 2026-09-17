@@ -169,8 +169,8 @@ export class SubmissionService {
     // Check if already submitted
     const existingSubmission = await this.prisma.final_submissions.findFirst({
       where: {
-        student_id: dto.student_id,
-        project_id: dto.project_id,
+        submitted_by_student_id: dto.student_id,
+        topic_id: project.topic_id,
         deleted_at: null,
       },
     });
@@ -181,8 +181,8 @@ export class SubmissionService {
 
     return this.prisma.final_submissions.create({
       data: {
-        student_id: dto.student_id,
-        project_id: dto.project_id,
+        submitted_by_student_id: dto.student_id,
+        topic_id: project.topic_id,
         file_url: dto.file_url,
         file_name: dto.file_name,
         original_name: dto.original_name,
@@ -278,22 +278,29 @@ export class SubmissionService {
     const { extension } = this.validateFileName(dto.fileName);
     const fileType = this.getFileType(extension);
 
-    // Kiểm tra đã nộp chưa
+    // Get the student's project to find the topic_id
+    const project = await this.prisma.project.findUnique({
+      where: { id: dto.projectId },
+    });
+    if (!project) throw new NotFoundException('Không tìm thấy project');
+    if (!project.topic_id) throw new NotFoundException('Project chưa thuộc đề tài nào');
+
+    // Kim tra `A nTp cha
     const existingSubmission = await this.prisma.final_submissions.findFirst({
       where: {
-        project_id: dto.projectId,
+        topic_id: project.topic_id,
         deleted_at: null,
       },
     });
 
     if (existingSubmission) {
-      throw new BadRequestException('Đã nộp bài cho đề tài này rồi');
+      throw new BadRequestException('Đã nộp bài báo cáo cho nhóm này rồi.');
     }
 
     return this.prisma.final_submissions.create({
       data: {
-        student_id: student.id,
-        project_id: dto.projectId,
+        submitted_by_student_id: student.id,
+        topic_id: project.topic_id,
         file_url: dto.webViewLink,
         file_name: dto.driveFileId,
         original_name: dto.fileName,
@@ -305,26 +312,51 @@ export class SubmissionService {
     });
   }
 
+  async getMyEligibility(user: JwtUser) {
+    const student = await this.resolveStudentByUserId(user.sub);
+    const project = await this.prisma.project.findFirst({
+      where: { student_id: student.id, deleted_at: null },
+      orderBy: { created_at: 'desc' },
+    });
+
+    if (!project) {
+      return { eligible: false, reason: 'Chưa tham gia đề tài nào' };
+    }
+    
+    return {
+      eligible: project.is_leader,
+      reason: project.is_leader ? undefined : 'Chỉ trưởng nhóm mới được phép nộp báo cáo tổng.',
+      isLeader: project.is_leader,
+      topicId: project.topic_id,
+    };
+  }
+
   async getMySubmissions(user: JwtUser) {
     const student = await this.resolveStudentByUserId(user.sub);
+    const project = await this.prisma.project.findFirst({
+      where: { student_id: student.id, deleted_at: null },
+      orderBy: { created_at: 'desc' },
+    });
+
+    if (!project || !project.topic_id) return [];
 
     const submissions = await this.prisma.final_submissions.findMany({
       where: {
-        student_id: student.id,
+        topic_id: project.topic_id,
         deleted_at: null,
       },
       orderBy: { submitted_at: 'desc' },
       include: {
-        projects: {
-          select: { id: true, project_id: true, project_name: true },
+        topics: {
+          select: { id: true, name: true, code: true },
         },
       },
     });
 
     return submissions.map((submission) => ({
       ...submission,
-      project_code: submission.projects?.project_id,
-      project_name: submission.projects?.project_name,
+      project_code: submission.topics?.code,
+      project_name: submission.topics?.name,
     }));
   }
 
@@ -333,8 +365,8 @@ export class SubmissionService {
 
     const where: any = { deleted_at: null };
     if (status) where.status = status;
-    if (student_id) where.student_id = student_id;
-    if (project_id) where.project_id = project_id;
+    if (student_id) where.submitted_by_student_id = student_id;
+    if (project_id) where.topic_id = project_id; // Mapping frontend project_id to topic_id
 
     const skip = (page - 1) * limit;
 
@@ -352,7 +384,7 @@ export class SubmissionService {
     const enrichedData = await Promise.all(
       data.map(async (submission) => {
         const student = await this.prisma.student.findUnique({
-          where: { id: submission.student_id },
+          where: { id: submission.submitted_by_student_id },
           select: {
             first_name: true,
             middle_name: true,
@@ -360,9 +392,9 @@ export class SubmissionService {
             student_id: true,
           },
         });
-        const project = await this.prisma.project.findUnique({
-          where: { id: submission.project_id },
-          select: { project_id: true, project_name: true },
+        const topic = await this.prisma.topics.findUnique({
+          where: { id: submission.topic_id },
+          select: { code: true, name: true },
         });
         return {
           ...submission,
@@ -370,8 +402,8 @@ export class SubmissionService {
             ? `${student.first_name} ${student.middle_name} ${student.last_name}`
             : '',
           student_mssv: student?.student_id,
-          project_code: project?.project_id,
-          project_name: project?.project_name,
+          project_code: topic?.code,
+          project_name: topic?.name,
         };
       }),
     );
@@ -395,7 +427,7 @@ export class SubmissionService {
     }
 
     const student = await this.prisma.student.findUnique({
-      where: { id: submission.student_id },
+      where: { id: submission.submitted_by_student_id },
       select: {
         first_name: true,
         middle_name: true,
@@ -403,9 +435,9 @@ export class SubmissionService {
         student_id: true,
       },
     });
-    const project = await this.prisma.project.findUnique({
-      where: { id: submission.project_id },
-      select: { project_id: true, project_name: true },
+    const topic = await this.prisma.topics.findUnique({
+      where: { id: submission.topic_id },
+      select: { code: true, name: true },
     });
 
     return {
@@ -414,8 +446,8 @@ export class SubmissionService {
         ? `${student.first_name} ${student.middle_name} ${student.last_name}`
         : '',
       student_mssv: student?.student_id,
-      project_code: project?.project_id,
-      project_name: project?.project_name,
+      project_code: topic?.code,
+      project_name: topic?.name,
     };
   }
 

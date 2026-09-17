@@ -5,7 +5,6 @@ import { ProjectStatus, TopicStatus } from '@prisma/client';
  * sinh viên bị từ chối có thể đăng ký đề tài khác.
  */
 export const SLOT_OCCUPYING_PROJECT_STATUSES: ProjectStatus[] = [
-  ProjectStatus.PENDING,
   ProjectStatus.APPROVED,
   ProjectStatus.WAITING_SECRETARY,
   ProjectStatus.ASSIGNED,
