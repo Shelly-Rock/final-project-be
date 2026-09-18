@@ -397,19 +397,58 @@ model independent_scores {
 }
 
 model progress_notifications {
-  id                 Int              @id @default(autoincrement())
+  id                 Int                      @id @default(autoincrement())
   type               NotificationType
   title              String
   message            String
-  is_read            Boolean          @default(false)
+  is_read            Boolean                  @default(false)
   sender_id          Int?
   recipient_id       Int
   related_student_id Int?
   related_report_id  Int?
-  created_at         DateTime         @default(now())
+  created_at         DateTime                 @default(now())
 
   @@index([recipient_id])
   @@index([sender_id])
+}
+
+model notification_drafts {
+  id                Int       @id @default(autoincrement())
+  priority          NotificationPriority @default(NORMAL)
+  title             String
+  message           String
+  type              NotificationType
+  sender_id         Int?
+  recipient_ids     Json      // Array of recipient IDs
+  recipient_type    String?   // 'DEPARTMENT', 'ROLE', 'CUSTOM'
+  recipient_detail  Json?     // Details about recipients (dept_ids, role names, etc.)
+  file_url          String?
+  file_name         String?
+  file_size         Int?
+  require_read_24h   Boolean   @default(false)
+  pin_to_top        Boolean   @default(false)
+  status            DraftStatus @default(UNSENT)
+  sent_at           DateTime?
+  sent_count        Int?      // Number of notifications sent
+  read_count        Int?      // Number of notifications read
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
+
+  @@index([sender_id])
+  @@index([status])
+}
+
+enum NotificationPriority {
+  NORMAL
+  DIRECTIVE
+  URGENT
+  REMINDER
+}
+
+enum DraftStatus {
+  UNSENT
+  SENT
+  ARCHIVED
 }
 
 model progress_reports {

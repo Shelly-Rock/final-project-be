@@ -163,4 +163,175 @@ export class NotificationController {
     await this.notificationService.deleteAllForUser(req.user.id);
     return { message: 'All notifications deleted' };
   }
+
+  @Get('drafts')
+  @ApiOperation({ summary: 'Get draft notifications for current user' })
+  async getDrafts(@NestRequest() req): Promise<{ drafts: any[] }> {
+    const drafts = await this.notificationService.getDrafts(req.user.id);
+    return { drafts };
+  }
+
+  @Post('drafts')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Save notification as draft' })
+  async saveDraft(
+    @NestRequest() req,
+    @Body()
+    body: {
+      title: string;
+      message: string;
+      type: string;
+      priority: string;
+      recipientIds: number[];
+      fileName?: string;
+      fileUrl?: string;
+      fileSize?: number;
+    },
+  ): Promise<any> {
+    return this.notificationService.saveDraft(
+      body.title,
+      body.message,
+      body.type,
+      body.priority,
+      body.recipientIds,
+      req.user.id,
+      body.fileName,
+      body.fileUrl,
+      body.fileSize,
+    );
+  }
+
+  @Get('drafts/:id')
+  @ApiOperation({ summary: 'Get draft by ID' })
+  async getDraftById(@Param('id') id: string): Promise<any> {
+    return this.notificationService.getDraftById(parseInt(id));
+  }
+
+  @Patch('drafts/:id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Update draft notification' })
+  async updateDraft(
+    @Param('id') id: string,
+    @Body()
+    body: {
+      title: string;
+      message: string;
+      type: string;
+      priority: string;
+      recipientIds: number[];
+      fileName?: string;
+      fileUrl?: string;
+      fileSize?: number;
+    },
+  ): Promise<any> {
+    return this.notificationService.updateDraft(
+      parseInt(id),
+      body.title,
+      body.message,
+      body.type,
+      body.priority,
+      body.recipientIds,
+      body.fileName,
+      body.fileUrl,
+      body.fileSize,
+    );
+  }
+
+  @Delete('drafts/:id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Delete draft notification' })
+  async deleteDraft(@Param('id') id: string): Promise<{ message: string }> {
+    await this.notificationService.deleteDraft(parseInt(id));
+    return { message: 'Draft deleted' };
+  }
+
+  @Post('drafts/:id/publish')
+  @HttpCode(HttpStatus.OK)
+  @Permissions('notification:send')
+  @ApiOperation({ summary: 'Publish draft notification' })
+  async publishDraft(@Param('id') id: string): Promise<NotificationDto[]> {
+    return this.notificationService.publishDraft(parseInt(id));
+  }
+
+  @Get('compose/departments')
+  @ApiOperation({ summary: 'Get departments for recipient selection' })
+  async getDepartments(): Promise<{
+    departments: Array<{ id: string; name: string }>;
+  }> {
+    const departments = await this.notificationService.getDepartments();
+    return { departments };
+  }
+
+  @Get('compose/departments/:deptId/users')
+  @ApiOperation({ summary: 'Get users by department' })
+  async getUsersByDepartment(
+    @Param('deptId') deptId: string,
+  ): Promise<{
+    users: Array<{ id: number; name: string; email: string; role: string }>;
+  }> {
+    const users = await this.notificationService.getUsersByDepartment(deptId);
+    return { users };
+  }
+
+  @Get('compose/stats')
+  @ApiOperation({ summary: 'Get notification statistics for dashboard' })
+  async getNotificationStats(): Promise<{
+    total: number;
+    urgent: number;
+    avgReadRate: number;
+    pending: number;
+  }> {
+    return this.notificationService.getNotificationStats();
+  }
+
+  @Post('compose/send')
+  @HttpCode(HttpStatus.CREATED)
+  @Permissions('notification:send')
+  @ApiOperation({ summary: 'Compose and send notification' })
+  async composeAndSend(
+    @NestRequest() req,
+    @Body()
+    body: {
+      title: string;
+      message: string;
+      type: string;
+      priority: string;
+      recipientIds: number[];
+      saveDraft?: boolean;
+      attachmentUrl?: string;
+    },
+  ): Promise<{
+    message: string;
+    notifications?: NotificationDto[];
+    draftId?: number;
+  }> {
+    if (body.saveDraft) {
+      const draft = await this.notificationService.saveDraft(
+        body.title,
+        body.message,
+        body.type,
+        body.priority,
+        body.recipientIds,
+        req.user.id,
+        body.attachmentUrl,
+      );
+      return {
+        message: 'Notification saved as draft',
+        draftId: draft.id,
+      };
+    }
+
+    const notifications = await this.notificationService.sendNotification(
+      body.title,
+      body.message,
+      body.type,
+      body.recipientIds,
+      req.user.id,
+    );
+
+    return {
+      message: 'Notification sent successfully',
+      notifications,
+    };
+  }
 }

@@ -211,6 +211,174 @@ export class NotificationService {
     });
   }
 
+  async saveDraft(
+    title: string,
+    message: string,
+    type: any,
+    priority: string,
+    recipientIds: number[],
+    senderId: number,
+    fileName?: string,
+    fileUrl?: string,
+    fileSize?: number,
+  ): Promise<any> {
+    return this.prisma.notification_drafts.create({
+      data: {
+        title,
+        message,
+        type: type as any,
+        priority: priority as any,
+        recipient_ids: recipientIds,
+        sender_id: senderId,
+        file_url: fileUrl,
+        file_name: fileName,
+        file_size: fileSize,
+        status: 'UNSENT' as any,
+      },
+    });
+  }
+
+  async getDrafts(senderId: number): Promise<any[]> {
+    return this.prisma.notification_drafts.findMany({
+      where: {
+        sender_id: senderId,
+        status: 'UNSENT' as any,
+      },
+      orderBy: {
+        updated_at: 'desc',
+      },
+    });
+  }
+
+  async getDraftById(draftId: number): Promise<any> {
+    return this.prisma.notification_drafts.findUnique({
+      where: { id: draftId },
+    });
+  }
+
+  async updateDraft(
+    draftId: number,
+    title: string,
+    message: string,
+    type: any,
+    priority: string,
+    recipientIds: number[],
+    fileName?: string,
+    fileUrl?: string,
+    fileSize?: number,
+  ): Promise<any> {
+    return this.prisma.notification_drafts.update({
+      where: { id: draftId },
+      data: {
+        title,
+        message,
+        type: type as any,
+        priority: priority as any,
+        recipient_ids: recipientIds,
+        file_url: fileUrl,
+        file_name: fileName,
+        file_size: fileSize,
+        updated_at: new Date(),
+      },
+    });
+  }
+
+  async deleteDraft(draftId: number): Promise<void> {
+    await this.prisma.notification_drafts.delete({
+      where: { id: draftId },
+    });
+  }
+
+  async publishDraft(draftId: number): Promise<NotificationDto[]> {
+    const draft = await this.prisma.notification_drafts.findUnique({
+      where: { id: draftId },
+    });
+
+    if (!draft) {
+      throw new Error('Draft not found');
+    }
+
+    const notifications = await this.sendNotification(
+      draft.title,
+      draft.message,
+      draft.type,
+      draft.recipient_ids as number[],
+      draft.sender_id,
+    );
+
+    await this.prisma.notification_drafts.update({
+      where: { id: draftId },
+      data: { status: 'PUBLISHED' as any },
+    });
+
+    return notifications;
+  }
+
+  async getDepartments(): Promise<
+    Array<{ id: string; name: string }>
+  > {
+    const departments = await this.prisma.department.findMany();
+    return departments.map((d) => ({
+      id: d.id,
+      name: d.name,
+    }));
+  }
+
+  async getUsersByDepartment(
+    departmentId: string,
+  ): Promise<
+    Array<{ id: number; name: string; email: string; role: string }>
+  > {
+    const teachers = await this.prisma.teacher.findMany({
+      where: {
+        department_id: departmentId,
+        user: {
+          is_active: true,
+        },
+      },
+      include: {
+        user: true,
+      },
+    });
+
+    return teachers.map((t) => ({
+      id: t.user_id,
+      name: t.name,
+      email: t.email,
+      role: 'TEACHER',
+    }));
+  }
+
+  async getUnreadCountByRole(role: string): Promise<number> {
+    // This would need role-based filtering logic
+    // For now, return 0 or implement based on your role system
+    return 0;
+  }
+
+  async getNotificationStats(): Promise<{
+    total: number;
+    urgent: number;
+    avgReadRate: number;
+    pending: number;
+  }> {
+    const [total, urgent, pending] = await Promise.all([
+      this.prisma.progress_notifications.count(),
+      this.prisma.progress_notifications.count({
+        where: { type: 'STATUS_CHANGED' as any },
+      }),
+      this.prisma.notification_drafts.count({
+        where: { status: 'DRAFT' as any },
+      }),
+    ]);
+
+    return {
+      total,
+      urgent,
+      avgReadRate: 0,
+      pending,
+    };
+  }
+
   private mapToDto(notification: any): NotificationDto {
     return {
       id: notification.id,
