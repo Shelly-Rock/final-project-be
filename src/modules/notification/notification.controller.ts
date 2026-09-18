@@ -22,7 +22,7 @@ import { PrismaService } from '@core/database/prisma/prisma.service';
 
 @ApiTags('Notifications')
 @ApiExtraModels(CreateNotificationDto)
-@Controller('notification')
+@Controller('notifications')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @ApiBearerAuth()
 export class NotificationController {
