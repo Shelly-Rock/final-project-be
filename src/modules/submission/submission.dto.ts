@@ -1,6 +1,14 @@
 // Submission DTOs
 import { Type } from 'class-transformer';
-import { IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, Min, Max } from 'class-validator';
+import {
+  IsEnum,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Min,
+  Max,
+} from 'class-validator';
 
 export enum SubmissionStatus {
   PENDING = 'PENDING',

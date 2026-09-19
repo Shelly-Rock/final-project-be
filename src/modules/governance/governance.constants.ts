@@ -97,7 +97,9 @@ export interface EffectiveQuota {
 }
 
 /** Định dạng ngày giờ kiểu Việt Nam cho message lỗi/email. */
-export function formatViDateTime(value: Date | string | null | undefined): string {
+export function formatViDateTime(
+  value: Date | string | null | undefined,
+): string {
   if (!value) return '—';
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return '—';
@@ -118,18 +120,27 @@ export function parseAlertOffsets(raw: unknown): number[] {
       list = [];
     }
   }
-  if (!Array.isArray(list)) return [...ALLOWED_ALERT_OFFSETS].sort((a, b) => b - a);
+  if (!Array.isArray(list))
+    return [...ALLOWED_ALERT_OFFSETS].sort((a, b) => b - a);
 
   const parsed = list
     .map((item) => Number(item))
-    .filter((item) => Number.isInteger(item) && (ALLOWED_ALERT_OFFSETS as readonly number[]).includes(item));
+    .filter(
+      (item) =>
+        Number.isInteger(item) &&
+        (ALLOWED_ALERT_OFFSETS as readonly number[]).includes(item),
+    );
 
   const unique = [...new Set(parsed)].sort((a, b) => b - a);
-  return unique.length > 0 ? unique : [...ALLOWED_ALERT_OFFSETS].sort((a, b) => b - a);
+  return unique.length > 0
+    ? unique
+    : [...ALLOWED_ALERT_OFFSETS].sort((a, b) => b - a);
 }
 
 /** Map AlertEvent từ offset ngày. */
-export function eventForOffset(offsetDays: number): 'DUE_IN_3_DAYS' | 'DUE_IN_1_DAY' | 'EXPIRED' {
+export function eventForOffset(
+  offsetDays: number,
+): 'DUE_IN_3_DAYS' | 'DUE_IN_1_DAY' | 'EXPIRED' {
   if (offsetDays >= 3) return 'DUE_IN_3_DAYS';
   if (offsetDays >= 1) return 'DUE_IN_1_DAY';
   return 'EXPIRED';

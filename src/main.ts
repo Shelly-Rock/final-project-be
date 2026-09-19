@@ -73,13 +73,15 @@ async function bootstrap() {
   // Apply rate limiting middleware for sensitive endpoints
   const rateLimitMiddleware = new RateLimitMiddleware(60000, 100); // 100 requests per minute for general endpoints
   const strictRateLimitMiddleware = new RateLimitMiddleware(60000, 20); // 20 requests per minute for sensitive auth endpoints
-  
+
   app.use((req, res, next) => {
     // Apply stricter rate limiting to sensitive auth endpoints
-    if (req.path.includes('/auth/login') || 
-        req.path.includes('/auth/register') || 
-        req.path.includes('/auth/forgot-password') ||
-        req.path.includes('/auth/resend-verification')) {
+    if (
+      req.path.includes('/auth/login') ||
+      req.path.includes('/auth/register') ||
+      req.path.includes('/auth/forgot-password') ||
+      req.path.includes('/auth/resend-verification')
+    ) {
       return strictRateLimitMiddleware.use(req, res, next);
     }
     return rateLimitMiddleware.use(req, res, next);

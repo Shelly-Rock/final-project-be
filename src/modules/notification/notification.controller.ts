@@ -12,7 +12,12 @@ import {
   UseGuards,
   Request as NestRequest,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiExtraModels } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiExtraModels,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from '@core/auth/guards/jwtAuth.guard';
 import { NotificationService } from './notification.service';
 import { CreateNotificationDto, MarkAsReadDto, NotificationDto } from './dto';
@@ -66,13 +71,16 @@ export class NotificationController {
     const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 20));
     const skip = (pageNum - 1) * limitNum;
 
-    const { notifications, total } = await this.notificationService.findByRecipient(
-      req.user.id,
-      skip,
-      limitNum,
-    );
+    const { notifications, total } =
+      await this.notificationService.findByRecipient(
+        req.user.id,
+        skip,
+        limitNum,
+      );
 
-    const unreadCount = await this.notificationService.getUnreadCount(req.user.id);
+    const unreadCount = await this.notificationService.getUnreadCount(
+      req.user.id,
+    );
 
     return {
       notifications,
@@ -86,7 +94,9 @@ export class NotificationController {
   @Get('unread-count')
   @ApiOperation({ summary: 'Get count of unread notifications' })
   async getUnreadCount(@NestRequest() req): Promise<{ unreadCount: number }> {
-    const unreadCount = await this.notificationService.getUnreadCount(req.user.id);
+    const unreadCount = await this.notificationService.getUnreadCount(
+      req.user.id,
+    );
     return { unreadCount };
   }
 
@@ -96,16 +106,16 @@ export class NotificationController {
   async getUsersByRole(
     @Param('role') role: string,
   ): Promise<{ users: Array<{ id: number; name: string; email: string }> }> {
-    const users = await this.notificationService.getUsersByRole(role as 'STUDENT' | 'TEACHER');
+    const users = await this.notificationService.getUsersByRole(
+      role as 'STUDENT' | 'TEACHER',
+    );
     return { users };
   }
 
   @Patch('mark-read')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Mark notifications as read' })
-  async markAsRead(
-    @Body() dto: MarkAsReadDto,
-  ): Promise<{ message: string }> {
+  async markAsRead(@Body() dto: MarkAsReadDto): Promise<{ message: string }> {
     await this.notificationService.markAsRead(dto.notificationIds);
     return { message: 'Notifications marked as read' };
   }
@@ -125,8 +135,6 @@ export class NotificationController {
     await this.notificationService.delete(parseInt(id));
     return { message: 'Notification deleted' };
   }
-
-
 
   @Post('send')
   @HttpCode(HttpStatus.CREATED)
@@ -264,9 +272,7 @@ export class NotificationController {
 
   @Get('compose/departments/:deptId/users')
   @ApiOperation({ summary: 'Get users by department' })
-  async getUsersByDepartment(
-    @Param('deptId') deptId: string,
-  ): Promise<{
+  async getUsersByDepartment(@Param('deptId') deptId: string): Promise<{
     users: Array<{ id: number; name: string; email: string; role: string }>;
   }> {
     const users = await this.notificationService.getUsersByDepartment(deptId);

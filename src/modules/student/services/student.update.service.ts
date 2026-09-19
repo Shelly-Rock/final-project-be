@@ -83,7 +83,7 @@ export class UpdateStudentService {
         ...currentExtraData,
         ...(dto.phone !== undefined ? { phone: dto.phone } : {}),
         ...(dto.address !== undefined ? { address: dto.address } : {}),
-      } as Prisma.InputJsonValue;
+      };
     }
 
     if (dto.email && dto.email !== student.email) {

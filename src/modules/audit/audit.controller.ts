@@ -1,5 +1,10 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from '@/core/auth/guards/jwtAuth.guard';
 import { RolesGuard } from '@/core/auth/guards/roles.guard';
 import { Roles } from '@/core/auth/decorators/roles.decorator';

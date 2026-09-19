@@ -10,7 +10,10 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '@core/database/prisma/prisma.service';
 import { AlertDispatchService } from './alert-dispatch.service';
-import { eventForOffset, parseAlertOffsets } from '@modules/governance/governance.constants';
+import {
+  eventForOffset,
+  parseAlertOffsets,
+} from '@modules/governance/governance.constants';
 
 @Injectable()
 export class GovernanceSchedulerService {
@@ -55,7 +58,7 @@ export class GovernanceSchedulerService {
 
           const result = await this.alertDispatch.sendAutomatic(
             deadline.id,
-            eventForOffset(offsetDays) as AlertEvent,
+            eventForOffset(offsetDays),
           );
           sent += result.sent;
           skipped += result.skipped;

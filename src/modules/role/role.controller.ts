@@ -44,7 +44,10 @@ export class RoleController {
   @Roles('ADMIN')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Tạo mới một role' })
-  @ApiCreatedResponse({ type: RoleResponseDto, description: 'Role đã được tạo thành công' })
+  @ApiCreatedResponse({
+    type: RoleResponseDto,
+    description: 'Role đã được tạo thành công',
+  })
   async create(
     @Body() createRoleDto: CreateRoleDto,
     @CurrentUser('sub') actorUserId: number,
@@ -86,10 +89,24 @@ export class RoleController {
   @Get('users')
   @Roles('ADMIN')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Lấy danh sách user kèm roles (trang quản lý phân quyền)' })
-  @ApiQuery({ name: 'page', required: false, description: 'Trang (mặc định 1)' })
-  @ApiQuery({ name: 'limit', required: false, description: 'Số phần tử/trang (mặc định 20, tối đa 100)' })
-  @ApiQuery({ name: 'search', required: false, description: 'Tìm theo email hoặc username' })
+  @ApiOperation({
+    summary: 'Lấy danh sách user kèm roles (trang quản lý phân quyền)',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    description: 'Trang (mặc định 1)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Số phần tử/trang (mặc định 20, tối đa 100)',
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    description: 'Tìm theo email hoặc username',
+  })
   async listUsersWithRoles(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -185,7 +202,10 @@ export class RoleController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Cập nhật thông tin role' })
   @ApiParam({ name: 'id', description: 'ID của role', type: Number })
-  @ApiOkResponse({ type: RoleResponseDto, description: 'Role đã được cập nhật' })
+  @ApiOkResponse({
+    type: RoleResponseDto,
+    description: 'Role đã được cập nhật',
+  })
   async update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateRoleDto: UpdateRoleDto,
@@ -204,7 +224,10 @@ export class RoleController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Gán permissions cho role' })
   @ApiParam({ name: 'id', description: 'ID của role', type: Number })
-  @ApiOkResponse({ type: RoleResponseDto, description: 'Permissions đã được gán' })
+  @ApiOkResponse({
+    type: RoleResponseDto,
+    description: 'Permissions đã được gán',
+  })
   async assignPermissions(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateRolePermissionsDto,
@@ -227,7 +250,11 @@ export class RoleController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Xóa role (soft delete)' })
   @ApiParam({ name: 'id', description: 'ID của role', type: Number })
-  @ApiQuery({ name: 'hardDelete', required: false, description: 'Xóa vĩnh viễn' })
+  @ApiQuery({
+    name: 'hardDelete',
+    required: false,
+    description: 'Xóa vĩnh viễn',
+  })
   @ApiOkResponse({ description: 'Role đã được xóa' })
   async remove(
     @Param('id', ParseIntPipe) id: number,
@@ -247,7 +274,10 @@ export class RoleController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Khôi phục role đã xóa' })
   @ApiParam({ name: 'id', description: 'ID của role', type: Number })
-  @ApiOkResponse({ type: RoleResponseDto, description: 'Role đã được khôi phục' })
+  @ApiOkResponse({
+    type: RoleResponseDto,
+    description: 'Role đã được khôi phục',
+  })
   async restore(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser('sub') actorUserId: number,

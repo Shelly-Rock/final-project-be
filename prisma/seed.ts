@@ -373,6 +373,22 @@ async function main() {
       lastName: 'Sinh viên',
       studentId: 'SV004',
     },
+    {
+      email: 'student5@system.com',
+      username: 'student_demo_5',
+      role: studentRole,
+      firstName: 'Năm',
+      lastName: 'Sinh viên',
+      studentId: 'SV005',
+    },
+    {
+      email: 'student6@system.com',
+      username: 'student_demo_6',
+      role: studentRole,
+      firstName: 'Sáu',
+      lastName: 'Sinh viên',
+      studentId: 'SV006',
+    },
   ];
 
   for (const userData of defaultUsers) {

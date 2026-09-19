@@ -42,6 +42,11 @@ export class RolesGuard implements CanActivate {
       .toUpperCase();
 
     if (!user || !Number.isInteger(userId) || userId <= 0 || !currentRole) {
+      console.error('RolesGuard: User not authenticated', user);
+      require('fs').appendFileSync(
+        'roles-debug.log',
+        `[${new Date().toISOString()}] Auth fail: ${JSON.stringify(user)}\n`,
+      );
       throw new ForbiddenException('User not authenticated');
     }
 
@@ -61,6 +66,14 @@ export class RolesGuard implements CanActivate {
     });
 
     if (!assigned) {
+      console.error('RolesGuard: Role not assigned to user in DB', {
+        userId,
+        currentRole,
+      });
+      require('fs').appendFileSync(
+        'roles-debug.log',
+        `[${new Date().toISOString()}] No DB Role: ${userId} ${currentRole}\n`,
+      );
       throw new ForbiddenException(
         'Vai trò hiện tại không còn được gán cho tài khoản. Vui lòng đăng nhập lại.',
       );
@@ -68,11 +81,23 @@ export class RolesGuard implements CanActivate {
 
     // Authorize only the verified active role, never another assigned role.
     if (requiredRoles && !requiredRoles.includes(currentRole)) {
+      console.error('RolesGuard: Role mismatch', {
+        requiredRoles,
+        currentRole,
+      });
+      require('fs').appendFileSync(
+        'roles-debug.log',
+        `[${new Date().toISOString()}] Mismatch: ${currentRole} vs ${requiredRoles}\n`,
+      );
       throw new ForbiddenException(
         `Requires one of roles: ${requiredRoles.join(', ')}. Current role: ${currentRole}`,
       );
     }
 
+    require('fs').appendFileSync(
+      'roles-debug.log',
+      `[${new Date().toISOString()}] Auth Success: ${currentRole}\n`,
+    );
     return true;
   }
 }

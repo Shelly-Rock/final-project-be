@@ -1,9 +1,25 @@
 // Progress Tracking Enums - using string literal types for Prisma 7 compatibility
-export type ReportStatus = 'PENDING_TEACHER' | 'REVISION_REQUESTED' | 'APPROVED_BY_TEACHER' | 'ARCHIVED' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'MISSING';
-export type ProgressStatus = 'ON_TRACK' | 'EXTENDED' | 'TOPIC_CHANGED' | 'BANNED';
-export type TemplateType = 'MONTHLY_REPORT' | 'MIDTERM_REPORT' | 'FINAL_REPORT' | 'PROPOSAL' | 'PRESENTATION';
-export type MilestoneType = 'TOPIC_REGISTRATION' | 'PROGRESS_REPORT' | 'EXCEPTION_REQUEST';
-export type NotificationType = 'STATUS_CHANGED' | 'REPORT_SUBMITTED' | 'REPORT_APPROVED' | 'REPORT_REJECTED' | 'BAN_APPLIED' | 'BAN_WARNING';
+export type ReportStatus =
+  | 'PENDING_TEACHER'
+  | 'REVISION_REQUESTED'
+  | 'APPROVED_BY_TEACHER'
+  | 'ARCHIVED'
+  | 'PENDING'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'MISSING';
+export type ProgressStatus =
+  | 'ON_TRACK'
+  | 'EXTENDED'
+  | 'TOPIC_CHANGED'
+  | 'BANNED';
+export type NotificationType =
+  | 'STATUS_CHANGED'
+  | 'REPORT_SUBMITTED'
+  | 'REPORT_APPROVED'
+  | 'REPORT_REJECTED'
+  | 'BAN_APPLIED'
+  | 'BAN_WARNING';
 
 // Enum constants for comparison
 export const ReportStatus = {
@@ -25,20 +41,6 @@ export const ProgressStatus = {
   BANNED: 'BANNED' as ProgressStatus,
 };
 
-export const TemplateType = {
-  MONTHLY_REPORT: 'MONTHLY_REPORT' as TemplateType,
-  MIDTERM_REPORT: 'MIDTERM_REPORT' as TemplateType,
-  FINAL_REPORT: 'FINAL_REPORT' as TemplateType,
-  PROPOSAL: 'PROPOSAL' as TemplateType,
-  PRESENTATION: 'PRESENTATION' as TemplateType,
-};
-
-export const MilestoneType = {
-  TOPIC_REGISTRATION: 'TOPIC_REGISTRATION' as MilestoneType,
-  PROGRESS_REPORT: 'PROGRESS_REPORT' as MilestoneType,
-  EXCEPTION_REQUEST: 'EXCEPTION_REQUEST' as MilestoneType,
-};
-
 export const NotificationType = {
   STATUS_CHANGED: 'STATUS_CHANGED' as NotificationType,
   REPORT_SUBMITTED: 'REPORT_SUBMITTED' as NotificationType,
@@ -51,7 +53,18 @@ export const NotificationType = {
 // ========== Request DTOs ==========
 
 import { Type } from 'class-transformer';
-import { IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, Min, Max, IsBoolean, IsDateString } from 'class-validator';
+import {
+  IsEnum,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Min,
+  Max,
+  IsBoolean,
+  IsDateString,
+  IsArray,
+} from 'class-validator';
 import { Transform, TransformFnParams } from 'class-transformer';
 
 // Template DTOs
@@ -64,13 +77,9 @@ export class CreateTemplateDto {
   @IsString()
   description?: string;
 
-  @IsString()
-  @IsNotEmpty()
-  type: TemplateType;
-
-  @IsString()
+  @IsArray()
   @IsOptional()
-  milestone_type?: MilestoneType;
+  deadline_ids?: number[];
 
   @IsInt()
   @IsOptional()
@@ -114,20 +123,17 @@ export class TemplateQueryDto {
 
   @IsOptional()
   @IsString()
-  type?: TemplateType;
-
-  @IsOptional()
-  @IsString()
-  milestone_type?: MilestoneType;
-
-  @IsOptional()
-  @IsString()
   department_id?: string;
 
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   period_id?: number;
+
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  is_exception?: boolean;
 }
 
 // Report DTOs
@@ -136,9 +142,9 @@ export class CreateReportDto {
   @IsNotEmpty()
   title: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  content: string;
+  content?: string;
 
   @IsOptional()
   @IsString()
@@ -148,15 +154,25 @@ export class CreateReportDto {
   @IsString()
   file_name?: string;
 
+  @IsOptional()
   @IsInt()
   @Min(1)
   @Max(12)
-  month: number;
+  month?: number;
 
+  @IsOptional()
   @IsInt()
   @Min(2020)
   @Max(2100)
-  year: number;
+  year?: number;
+
+  @IsOptional()
+  @IsInt()
+  deadline_id?: number;
+
+  @IsOptional()
+  @IsInt()
+  period_id?: number;
 }
 
 export class ReviewReportDto {
@@ -302,7 +318,6 @@ export class ReportTemplateResponseDto {
   id: number;
   name: string;
   description: string | null;
-  type: TemplateType;
   file_url: string;
   file_name: string;
   file_size: number;
@@ -382,4 +397,16 @@ export class BanWarningDto {
   days_until_ban: number;
   reports_submitted: number;
   reports_required: number;
+}
+
+export class TimelineQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  period_id?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  student_id?: number;
 }

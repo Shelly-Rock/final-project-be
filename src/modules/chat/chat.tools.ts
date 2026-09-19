@@ -70,7 +70,11 @@ function str(args: Record<string, unknown>, key: string): string | undefined {
 function num(args: Record<string, unknown>, key: string): number | undefined {
   const value = args[key];
   if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string' && value.trim() && Number.isFinite(Number(value))) {
+  if (
+    typeof value === 'string' &&
+    value.trim() &&
+    Number.isFinite(Number(value))
+  ) {
     return Number(value);
   }
   return undefined;
@@ -160,7 +164,8 @@ export class ChatToolsService {
         name: 'get_my_registration',
         description: 'Đăng ký đề tài của sinh viên đang đăng nhập.',
         parametersJsonSchema: EMPTY_SCHEMA,
-        run: async () => wrapSafe(() => this.topics.getMyRegistration(actorUserId)),
+        run: async () =>
+          wrapSafe(() => this.topics.getMyRegistration(actorUserId)),
       },
       {
         name: 'get_my_progress',
@@ -277,7 +282,8 @@ export class ChatToolsService {
     const teacherTools: ChatToolDef[] = [
       {
         name: 'get_reports',
-        description: 'Báo cáo tiến trình thuộc phạm vi giảng viên đang đăng nhập.',
+        description:
+          'Báo cáo tiến trình thuộc phạm vi giảng viên đang đăng nhập.',
         parametersJsonSchema: {
           type: 'object',
           properties: { status: { type: 'string' } },
@@ -332,14 +338,18 @@ export class ChatToolsService {
         description: 'Danh sách bài nộp cuối kỳ trong phạm vi quyền hiện tại.',
         parametersJsonSchema: EMPTY_SCHEMA,
         run: async () =>
-          wrapSafe(() => this.submissions.getSubmissions({ limit: 15, page: 1 })),
+          wrapSafe(() =>
+            this.submissions.getSubmissions({ limit: 15, page: 1 }),
+          ),
       },
       {
         name: 'get_defense_sessions',
         description: 'Lịch bảo vệ trong phạm vi quyền hiện tại.',
         parametersJsonSchema: EMPTY_SCHEMA,
         run: async () =>
-          wrapSafe(() => this.defense.getDefenseSessions({ limit: 15, page: 1 })),
+          wrapSafe(() =>
+            this.defense.getDefenseSessions({ limit: 15, page: 1 }),
+          ),
       },
     ];
 
@@ -370,7 +380,10 @@ export class ChatToolsService {
         parametersJsonSchema: {
           type: 'object',
           properties: {
-            studentId: { type: 'integer', description: 'ID sinh viên trên hệ thống' },
+            studentId: {
+              type: 'integer',
+              description: 'ID sinh viên trên hệ thống',
+            },
           },
           required: ['studentId'],
         },
@@ -380,7 +393,9 @@ export class ChatToolsService {
           }
           const studentId = num(args, 'studentId');
           if (!studentId) return JSON.stringify(EMPTY);
-          return wrapSafe(() => this.progress.getStudentProgressById(studentId));
+          return wrapSafe(() =>
+            this.progress.getStudentProgressById(studentId),
+          );
         },
       },
       {
@@ -420,7 +435,9 @@ export class ChatToolsService {
         description: 'Kết quả điểm tổng hợp.',
         parametersJsonSchema: EMPTY_SCHEMA,
         run: async () =>
-          wrapSafe(() => this.scoring.getAllScoringResults({ limit: 15, page: 1 })),
+          wrapSafe(() =>
+            this.scoring.getAllScoringResults({ limit: 15, page: 1 }),
+          ),
       },
       {
         name: 'get_all_scores',

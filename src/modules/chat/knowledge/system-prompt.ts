@@ -30,9 +30,14 @@ Danh sách: tối đa 8 mục, rồi bảo xem thêm trên trang tương ứng.
 
 Từ chối ngoài lề: một câu ngắn + 2 việc bot làm được.`;
 
-export function buildRoleSystemBlock(role: ChatRole, displayName: string): string {
+export function buildRoleSystemBlock(
+  role: ChatRole,
+  displayName: string,
+): string {
   const faqs = faqForRole(role)
-    .map((item) => `- ${item.q} → ${item.a}${item.href ? ` (${item.href})` : ''}`)
+    .map(
+      (item) => `- ${item.q} → ${item.a}${item.href ? ` (${item.href})` : ''}`,
+    )
     .join('\n');
 
   return `Người dùng: ${displayName || 'không tên'}

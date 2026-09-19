@@ -6,7 +6,9 @@ import { CreateNotificationDto, MarkAsReadDto, NotificationDto } from './dto';
 export class NotificationService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(createNotificationDto: CreateNotificationDto): Promise<NotificationDto> {
+  async create(
+    createNotificationDto: CreateNotificationDto,
+  ): Promise<NotificationDto> {
     const notification = await this.prisma.progress_notifications.create({
       data: {
         type: createNotificationDto.type,
@@ -41,17 +43,18 @@ export class NotificationService {
       })),
     });
 
-    const createdNotifications = await this.prisma.progress_notifications.findMany({
-      where: {
-        created_at: {
-          gte: new Date(Date.now() - 60000),
+    const createdNotifications =
+      await this.prisma.progress_notifications.findMany({
+        where: {
+          created_at: {
+            gte: new Date(Date.now() - 60000),
+          },
         },
-      },
-      orderBy: {
-        created_at: 'desc',
-      },
-      take: notifications.length,
-    });
+        orderBy: {
+          created_at: 'desc',
+        },
+        take: notifications.length,
+      });
 
     return createdNotifications.map((n) => this.mapToDto(n));
   }
@@ -194,7 +197,7 @@ export class NotificationService {
       recipientIds.map((recipientId) => ({
         title,
         message,
-        type: type as any,
+        type: type,
         recipient_id: recipientId,
         sender_id: senderId,
         related_student_id: relatedStudentId,
@@ -226,7 +229,7 @@ export class NotificationService {
       data: {
         title,
         message,
-        type: type as any,
+        type: type,
         priority: priority as any,
         recipient_ids: recipientIds,
         sender_id: senderId,
@@ -272,7 +275,7 @@ export class NotificationService {
       data: {
         title,
         message,
-        type: type as any,
+        type: type,
         priority: priority as any,
         recipient_ids: recipientIds,
         file_url: fileUrl,
@@ -314,9 +317,7 @@ export class NotificationService {
     return notifications;
   }
 
-  async getDepartments(): Promise<
-    Array<{ id: string; name: string }>
-  > {
+  async getDepartments(): Promise<Array<{ id: string; name: string }>> {
     const departments = await this.prisma.department.findMany();
     return departments.map((d) => ({
       id: d.id,
@@ -326,9 +327,7 @@ export class NotificationService {
 
   async getUsersByDepartment(
     departmentId: string,
-  ): Promise<
-    Array<{ id: number; name: string; email: string; role: string }>
-  > {
+  ): Promise<Array<{ id: number; name: string; email: string; role: string }>> {
     const teachers = await this.prisma.teacher.findMany({
       where: {
         department_id: departmentId,

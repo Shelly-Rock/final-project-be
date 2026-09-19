@@ -11,18 +11,23 @@ export class SendNotificationDto {
   @IsString()
   message: string;
 
-  @ApiProperty({ enum: [
-    'STATUS_CHANGED',
-    'REPORT_SUBMITTED',
-    'REPORT_APPROVED',
-    'REPORT_REJECTED',
-    'BAN_APPLIED',
-    'BAN_WARNING',
-  ]})
+  @ApiProperty({
+    enum: [
+      'STATUS_CHANGED',
+      'REPORT_SUBMITTED',
+      'REPORT_APPROVED',
+      'REPORT_REJECTED',
+      'BAN_APPLIED',
+      'BAN_WARNING',
+    ],
+  })
   @IsEnum(NotificationType)
   type: NotificationType;
 
-  @ApiProperty({ example: [1, 2, 3], description: 'List of recipient user IDs' })
+  @ApiProperty({
+    example: [1, 2, 3],
+    description: 'List of recipient user IDs',
+  })
   @IsArray()
   @IsInt({ each: true })
   recipientIds: number[];

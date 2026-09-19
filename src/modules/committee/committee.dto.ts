@@ -1,6 +1,16 @@
 // Committee DTOs
 import { Type } from 'class-transformer';
-import { IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, Min, Max, IsArray, ValidateNested } from 'class-validator';
+import {
+  IsEnum,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Min,
+  Max,
+  IsArray,
+  ValidateNested,
+} from 'class-validator';
 
 export enum CommitteeRole {
   CHAIRMAN = 'CHAIRMAN',

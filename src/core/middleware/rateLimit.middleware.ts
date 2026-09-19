@@ -1,4 +1,9 @@
-import { Injectable, NestMiddleware, HttpException, HttpStatus } from '@nestjs/common';
+import {
+  Injectable,
+  NestMiddleware,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 
 interface RateLimitStore {

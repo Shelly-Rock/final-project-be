@@ -36,9 +36,7 @@ export class StatisticsService {
     const results = await this.prisma.scoring_results.findMany({
       where: {
         final_status: { not: null },
-        ...(periodId
-          ? { projects: { topics: { period_id: periodId } } }
-          : {}),
+        ...(periodId ? { projects: { topics: { period_id: periodId } } } : {}),
       },
       select: {
         final_status: true,
@@ -142,7 +140,12 @@ export class StatisticsService {
 
     const seatsByTeacher = new Map<
       number,
-      { chairman: number; secretary: number; internal: number; external: number }
+      {
+        chairman: number;
+        secretary: number;
+        internal: number;
+        external: number;
+      }
     >();
     const seatOf = (tid: number) => {
       let rec = seatsByTeacher.get(tid);
@@ -204,7 +207,10 @@ export class StatisticsService {
     ];
     summary.getRow(1).font = { bold: true };
     summary.addRow({ label: 'Kỳ báo cáo', value: periodName });
-    summary.addRow({ label: 'Tổng đề tài đã có kết quả bảo vệ', value: academic.total });
+    summary.addRow({
+      label: 'Tổng đề tài đã có kết quả bảo vệ',
+      value: academic.total,
+    });
     summary.addRow({ label: 'Đã công bố điểm', value: academic.published });
     summary.addRow({ label: 'Đậu', value: academic.passed });
     summary.addRow({ label: 'Rớt', value: academic.failed });

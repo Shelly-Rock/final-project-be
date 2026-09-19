@@ -1,10 +1,20 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import * as fs from 'fs';
 import * as path from 'path';
 import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
 import { PrismaService } from '@core/database/prisma/prisma.service';
-import { Prisma, ScoringType, ScoringStatus, CommitteeRole } from '@prisma/client';
+import {
+  Prisma,
+  ScoringType,
+  ScoringStatus,
+  CommitteeRole,
+} from '@prisma/client';
 import {
   CreateIndependentScoreDto,
   UpdateScoreDto,
@@ -31,7 +41,9 @@ export class ScoringService {
     const { projectId, studentId, teacherId, scoringType, role } = dto;
 
     const deadline = new Date();
-    deadline.setDate(deadline.getDate() + (scoringType === ScoringType.GVHD ? 7 : 3));
+    deadline.setDate(
+      deadline.getDate() + (scoringType === ScoringType.GVHD ? 7 : 3),
+    );
 
     const existing = await this.prisma.independent_scores.findFirst({
       where: {
@@ -42,7 +54,9 @@ export class ScoringService {
     });
 
     if (existing) {
-      throw new BadRequestException('Score record already exists for this project and teacher');
+      throw new BadRequestException(
+        'Score record already exists for this project and teacher',
+      );
     }
 
     return this.prisma.independent_scores.create({
@@ -71,10 +85,14 @@ export class ScoringService {
 
     const teacherId = await this.resolveTeacherId(userId, false);
     if (teacherId && score.teacher_id !== teacherId) {
-      throw new ForbiddenException('You are not authorized to update this score');
+      throw new ForbiddenException(
+        'You are not authorized to update this score',
+      );
     }
     if (!teacherId && userId !== 0) {
-      throw new ForbiddenException('You are not authorized to update this score');
+      throw new ForbiddenException(
+        'You are not authorized to update this score',
+      );
     }
 
     if (score.deadline && new Date() > score.deadline) {
@@ -90,7 +108,7 @@ export class ScoringService {
       data: {
         score: dto.score,
         max_score: dto.maxScore,
-        criteria_scores: dto.criteriaScores as Prisma.JsonValue,
+        criteria_scores: dto.criteriaScores,
         status: dto.status,
         notes: dto.notes,
         strengths: dto.strengths,
@@ -110,7 +128,9 @@ export class ScoringService {
 
     const teacherId = await this.resolveTeacherId(userId);
     if (score.teacher_id !== teacherId) {
-      throw new ForbiddenException('You are not authorized to submit this score');
+      throw new ForbiddenException(
+        'You are not authorized to submit this score',
+      );
     }
 
     if (score.deadline && new Date() > score.deadline) {
@@ -128,7 +148,7 @@ export class ScoringService {
       data: {
         score: dto.score,
         max_score: dto.maxScore || 10,
-        criteria_scores: dto.criteriaScores as Prisma.JsonValue,
+        criteria_scores: dto.criteriaScores,
         notes: dto.notes,
         strengths: dto.strengths,
         weaknesses: dto.weaknesses,
@@ -138,12 +158,20 @@ export class ScoringService {
     });
 
     // Update scoring result
-    await this.updateScoringResult(score.project_id, score.scoring_type, dto.score);
+    await this.updateScoringResult(
+      score.project_id,
+      score.scoring_type,
+      dto.score,
+    );
 
     return updatedScore;
   }
 
-  async updateScoringResult(projectId: number, scoringType: ScoringType, score: number) {
+  async updateScoringResult(
+    projectId: number,
+    scoringType: ScoringType,
+    score: number,
+  ) {
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
     });
@@ -180,17 +208,25 @@ export class ScoringService {
         where: {
           project_id: projectId,
           scoring_type: ScoringType.COMMITTEE,
-          status: { in: [ScoringStatus.SUBMITTED, ScoringStatus.FAILED, ScoringStatus.PASSED] },
+          status: {
+            in: [
+              ScoringStatus.SUBMITTED,
+              ScoringStatus.FAILED,
+              ScoringStatus.PASSED,
+            ],
+          },
           score: { not: null },
         },
       });
 
       // Calculate average defense score
       if (committeeScores.length > 0) {
-        const totalScore = committeeScores.reduce((sum, s) => sum + (s.score || 0), 0);
+        const totalScore = committeeScores.reduce(
+          (sum, s) => sum + (s.score || 0),
+          0,
+        );
         updateData.defense_score = totalScore / committeeScores.length;
       }
-
     }
 
     // Calculate final score if both GVHD and defense scores are available
@@ -201,11 +237,21 @@ export class ScoringService {
       },
     });
 
-    const gvhdScore = allScores.find((s) => s.scoring_type === ScoringType.GVHD);
-    const allCommitteeScores = allScores.filter((s) => s.scoring_type === ScoringType.COMMITTEE);
+    const gvhdScore = allScores.find(
+      (s) => s.scoring_type === ScoringType.GVHD,
+    );
+    const allCommitteeScores = allScores.filter(
+      (s) => s.scoring_type === ScoringType.COMMITTEE,
+    );
 
-    if (gvhdScore && gvhdScore.score !== null && allCommitteeScores.length > 0) {
-      const avgCommittee = allCommitteeScores.reduce((sum, s) => sum + (s.score || 0), 0) / allCommitteeScores.length;
+    if (
+      gvhdScore &&
+      gvhdScore.score !== null &&
+      allCommitteeScores.length > 0
+    ) {
+      const avgCommittee =
+        allCommitteeScores.reduce((sum, s) => sum + (s.score || 0), 0) /
+        allCommitteeScores.length;
       updateData.final_score = ((gvhdScore.score || 0) + avgCommittee) / 2;
     }
 
@@ -357,7 +403,15 @@ export class ScoringService {
   }
 
   async getScores(query: QueryScoresDto) {
-    const { page = 1, limit = 20, scoringType, status, teacherId, projectId, studentId } = query;
+    const {
+      page = 1,
+      limit = 20,
+      scoringType,
+      status,
+      teacherId,
+      projectId,
+      studentId,
+    } = query;
     const skip = (page - 1) * limit;
 
     const where: Prisma.independent_scoresWhereInput = {};
@@ -424,8 +478,13 @@ export class ScoringService {
 
     return {
       total: scores.length,
-      pending: scores.filter((s) => s.status === ScoringStatus.PENDING || s.status === ScoringStatus.IN_PROGRESS).length,
-      submitted: scores.filter((s) => s.status === ScoringStatus.SUBMITTED).length,
+      pending: scores.filter(
+        (s) =>
+          s.status === ScoringStatus.PENDING ||
+          s.status === ScoringStatus.IN_PROGRESS,
+      ).length,
+      submitted: scores.filter((s) => s.status === ScoringStatus.SUBMITTED)
+        .length,
       failed: scores.filter((s) => s.status === ScoringStatus.FAILED).length,
       passed: scores.filter((s) => s.status === ScoringStatus.PASSED).length,
     };
@@ -538,12 +597,13 @@ export class ScoringService {
   // ============ ASSIGN SCORES TO COMMITTEE ============
 
   async assignScoresToCommittee(sessionProjectId: number, committeeId: number) {
-    const sessionProject = await this.prisma.defense_session_projects.findUnique({
-      where: { id: sessionProjectId },
-      include: {
-        projects: true,
-      },
-    });
+    const sessionProject =
+      await this.prisma.defense_session_projects.findUnique({
+        where: { id: sessionProjectId },
+        include: {
+          projects: true,
+        },
+      });
 
     if (!sessionProject) {
       throw new NotFoundException('Session project not found');
@@ -776,7 +836,9 @@ export class ScoringService {
       throw new NotFoundException('Project not found');
     }
 
-    const committeeScores = scores.filter((s) => s.scoring_type === ScoringType.COMMITTEE);
+    const committeeScores = scores.filter(
+      (s) => s.scoring_type === ScoringType.COMMITTEE,
+    );
     const gvhd = scores.find((s) => s.scoring_type === ScoringType.GVHD);
     const scored = committeeScores.filter((s) => s.score !== null);
     const defenseAverage =
@@ -835,7 +897,8 @@ export class ScoringService {
       })),
       defenseAverage,
       finalScorePreview: result?.final_score ?? finalScorePreview,
-      gvhdPassed: result?.is_gvhd_passed ?? (gvhdScore !== null ? gvhdScore >= 4 : null),
+      gvhdPassed:
+        result?.is_gvhd_passed ?? (gvhdScore !== null ? gvhdScore >= 4 : null),
       finalStatus: result?.final_status ?? null,
       isFinalPassed: result?.is_final_passed ?? false,
       isFinalized,
@@ -860,10 +923,16 @@ export class ScoringService {
     }
 
     if (score.scoring_type !== ScoringType.COMMITTEE) {
-      throw new BadRequestException('Chỉ được sửa điểm hội đồng trong phiên họp');
+      throw new BadRequestException(
+        'Chỉ được sửa điểm hội đồng trong phiên họp',
+      );
     }
 
-    const access = await this.assertMeetingAccess(score.project_id, userId, role);
+    const access = await this.assertMeetingAccess(
+      score.project_id,
+      userId,
+      role,
+    );
     const result = await this.prisma.scoring_results.findUnique({
       where: { project_id: score.project_id },
     });
@@ -882,7 +951,8 @@ export class ScoringService {
       data: {
         score: dto.score,
         max_score: dto.maxScore ?? score.max_score,
-        criteria_scores: (dto.criteriaScores as Prisma.JsonValue) ?? score.criteria_scores,
+        criteria_scores:
+          (dto.criteriaScores as Prisma.JsonValue) ?? score.criteria_scores,
         notes: dto.notes ?? score.notes,
         strengths: dto.strengths ?? score.strengths,
         weaknesses: dto.weaknesses ?? score.weaknesses,
@@ -894,7 +964,11 @@ export class ScoringService {
       },
     });
 
-    await this.updateScoringResult(score.project_id, ScoringType.COMMITTEE, dto.score);
+    await this.updateScoringResult(
+      score.project_id,
+      ScoringType.COMMITTEE,
+      dto.score,
+    );
 
     return {
       id: updated.id,
@@ -923,8 +997,13 @@ export class ScoringService {
       throw new BadRequestException('Điểm hội đồng đã được chốt');
     }
 
-    if (result?.final_status === 'REJECTED_GVHD' || result?.is_gvhd_passed === false) {
-      throw new BadRequestException('GVHD chưa đạt, không thể chốt điểm hội đồng');
+    if (
+      result?.final_status === 'REJECTED_GVHD' ||
+      result?.is_gvhd_passed === false
+    ) {
+      throw new BadRequestException(
+        'GVHD chưa đạt, không thể chốt điểm hội đồng',
+      );
     }
 
     const committeeScores = await this.prisma.independent_scores.findMany({
@@ -940,16 +1019,23 @@ export class ScoringService {
 
     const missing = committeeScores.filter((s) => s.score === null);
     if (missing.length > 0) {
-      throw new BadRequestException('Tất cả thành viên hội đồng phải có điểm trước khi chốt');
+      throw new BadRequestException(
+        'Tất cả thành viên hội đồng phải có điểm trước khi chốt',
+      );
     }
 
     if (committeeScores.length < 3) {
-      throw new BadRequestException('Cần tối thiểu 3 thành viên hội đồng để chốt điểm');
+      throw new BadRequestException(
+        'Cần tối thiểu 3 thành viên hội đồng để chốt điểm',
+      );
     }
 
     const defenseScore =
-      committeeScores.reduce((sum, s) => sum + (s.score || 0), 0) / committeeScores.length;
-    const failedCount = committeeScores.filter((s) => (s.score || 0) < 4).length;
+      committeeScores.reduce((sum, s) => sum + (s.score || 0), 0) /
+      committeeScores.length;
+    const failedCount = committeeScores.filter(
+      (s) => (s.score || 0) < 4,
+    ).length;
     const passed = failedCount === 0;
 
     const gvhd =
@@ -962,7 +1048,9 @@ export class ScoringService {
       null;
 
     const finalScore = gvhd !== null ? (gvhd + defenseScore) / 2 : defenseScore;
-    const project = await this.prisma.project.findUnique({ where: { id: projectId } });
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+    });
     if (!project) {
       throw new NotFoundException('Project not found');
     }
@@ -972,7 +1060,10 @@ export class ScoringService {
         await tx.independent_scores.update({
           where: { id: score.id },
           data: {
-            status: (score.score || 0) < 4 ? ScoringStatus.FAILED : ScoringStatus.PASSED,
+            status:
+              (score.score || 0) < 4
+                ? ScoringStatus.FAILED
+                : ScoringStatus.PASSED,
             submitted_at: score.submitted_at ?? new Date(),
           },
         });
@@ -1044,13 +1135,21 @@ export class ScoringService {
       throw new NotFoundException('Project not found');
     }
     if (!this.isFinalized(result)) {
-      throw new BadRequestException('Đề tài chưa chốt điểm hội đồng (Giai đoạn 5)');
+      throw new BadRequestException(
+        'Đề tài chưa chốt điểm hội đồng (Giai đoạn 5)',
+      );
     }
 
     const gvhd = scores.find((s) => s.scoring_type === ScoringType.GVHD);
-    const committee = scores.filter((s) => s.scoring_type === ScoringType.COMMITTEE);
-    const external = committee.find((s) => s.role === CommitteeRole.EXTERNAL_REVIEWER);
-    const others = committee.filter((s) => s.role !== CommitteeRole.EXTERNAL_REVIEWER);
+    const committee = scores.filter(
+      (s) => s.scoring_type === ScoringType.COMMITTEE,
+    );
+    const external = committee.find(
+      (s) => s.role === CommitteeRole.EXTERNAL_REVIEWER,
+    );
+    const others = committee.filter(
+      (s) => s.role !== CommitteeRole.EXTERNAL_REVIEWER,
+    );
 
     if (gvhd?.score === null || gvhd?.score === undefined) {
       throw new BadRequestException('Thiếu điểm giảng viên hướng dẫn');
@@ -1058,16 +1157,24 @@ export class ScoringService {
     if (external?.score === null || external?.score === undefined) {
       throw new BadRequestException('Thiếu điểm phản biện ngoài');
     }
-    if (others.length < 3 || others.some((s) => s.score === null || s.score === undefined)) {
-      throw new BadRequestException('Cần đủ điểm của 3 thành viên hội đồng còn lại');
+    if (
+      others.length < 3 ||
+      others.some((s) => s.score === null || s.score === undefined)
+    ) {
+      throw new BadRequestException(
+        'Cần đủ điểm của 3 thành viên hội đồng còn lại',
+      );
     }
 
-    const othersAverage = others.reduce((sum, s) => sum + (s.score || 0), 0) / others.length;
+    const othersAverage =
+      others.reduce((sum, s) => sum + (s.score || 0), 0) / others.length;
     const defenseAverage =
       committee.reduce((sum, s) => sum + (s.score || 0), 0) / committee.length;
     const round2 = (n: number) => Math.round(n * 100) / 100;
     const weightedScore = round2(
-      (gvhd.score || 0) * 0.4 + (external.score || 0) * 0.2 + othersAverage * 0.4,
+      (gvhd.score || 0) * 0.4 +
+        (external.score || 0) * 0.2 +
+        othersAverage * 0.4,
     );
     const bonusScore = result?.bonus_score ?? 0;
     const finalScore = Math.min(10, round2(weightedScore + bonusScore));
@@ -1118,7 +1225,11 @@ export class ScoringService {
     };
   }
 
-  async getTranscripts(userId: number, role: string, query: QueryTranscriptsDto) {
+  async getTranscripts(
+    userId: number,
+    role: string,
+    query: QueryTranscriptsDto,
+  ) {
     const { page = 1, limit = 20, published } = query;
     const staff = this.isStaff(role);
 
@@ -1126,7 +1237,10 @@ export class ScoringService {
     if (staff) {
       const results = await this.prisma.scoring_results.findMany({
         where: {
-          OR: [{ final_status: 'PASSED' }, { final_status: 'REJECTED_DEFENSE' }],
+          OR: [
+            { final_status: 'PASSED' },
+            { final_status: 'REJECTED_DEFENSE' },
+          ],
           ...(published !== undefined ? { is_published: published } : {}),
         },
         select: { project_id: true },
@@ -1169,7 +1283,8 @@ export class ScoringService {
   async getTranscript(projectId: number, userId: number, role: string) {
     const access = await this.assertMeetingAccess(projectId, userId, role);
     const detail = await this.buildTranscript(projectId);
-    const isSecretary = access.staff || access.own?.role === CommitteeRole.SECRETARY;
+    const isSecretary =
+      access.staff || access.own?.role === CommitteeRole.SECRETARY;
     return {
       ...detail,
       canAwardBonus: isSecretary && !detail.isPublished,
@@ -1184,16 +1299,22 @@ export class ScoringService {
     dto: UpdateBonusScoreDto,
   ) {
     const access = await this.assertMeetingAccess(projectId, userId, role);
-    const isSecretary = access.staff || access.own?.role === CommitteeRole.SECRETARY;
+    const isSecretary =
+      access.staff || access.own?.role === CommitteeRole.SECRETARY;
     if (!isSecretary) {
       throw new ForbiddenException('Chỉ thư ký hội đồng được cộng điểm thưởng');
     }
 
     const detail = await this.buildTranscript(projectId);
     if (detail.isPublished) {
-      throw new BadRequestException('Bảng điểm đã công bố, không thể sửa điểm thưởng');
+      throw new BadRequestException(
+        'Bảng điểm đã công bố, không thể sửa điểm thưởng',
+      );
     }
-    const finalScore = Math.min(10, Math.round((detail.weightedScore + dto.bonusScore) * 100) / 100);
+    const finalScore = Math.min(
+      10,
+      Math.round((detail.weightedScore + dto.bonusScore) * 100) / 100,
+    );
 
     await this.prisma.scoring_results.update({
       where: { project_id: projectId },
@@ -1223,7 +1344,8 @@ export class ScoringService {
       data: {
         review_score: detail.externalScore,
         final_score: detail.finalScore,
-        is_final_passed: detail.finalStatus === 'PASSED' && detail.finalScore >= 4,
+        is_final_passed:
+          detail.finalStatus === 'PASSED' && detail.finalScore >= 4,
         is_published: true,
         published_at: new Date(),
       },
@@ -1300,7 +1422,11 @@ export class ScoringService {
     return deadline;
   }
 
-  async getPostDefenseList(_userId: number, role: string, query: QueryPostDefenseDto) {
+  async getPostDefenseList(
+    _userId: number,
+    role: string,
+    query: QueryPostDefenseDto,
+  ) {
     if (!this.isStaff(role)) {
       throw new ForbiddenException('Chỉ thư ký hệ thống được xếp hạng');
     }
@@ -1361,7 +1487,8 @@ export class ScoringService {
         rank,
         rankOverride: r.rank_override,
         rankNote: r.rank_note,
-        revisionDeadline: r.revision_deadline ?? this.defaultRevisionDeadline(r.published_at),
+        revisionDeadline:
+          r.revision_deadline ?? this.defaultRevisionDeadline(r.published_at),
         revisionCount: latestRevision ? 1 : 0,
         latestRevisionFile: latestRevision?.file_name ?? null,
       };
@@ -1414,7 +1541,10 @@ export class ScoringService {
       results.map((r) =>
         this.prisma.scoring_results.update({
           where: { project_id: r.project_id },
-          data: { rank: rankByProject.get(r.project_id) ?? null, ranked_at: now },
+          data: {
+            rank: rankByProject.get(r.project_id) ?? null,
+            ranked_at: now,
+          },
         }),
       ),
     );
@@ -1422,11 +1552,20 @@ export class ScoringService {
     return { total: results.length, rankedAt: now };
   }
 
-  async setRevisionWindow(projectId: number, _userId: number, role: string, dto: SetRevisionWindowDto) {
+  async setRevisionWindow(
+    projectId: number,
+    _userId: number,
+    role: string,
+    dto: SetRevisionWindowDto,
+  ) {
     if (!this.isStaff(role)) {
-      throw new ForbiddenException('Chỉ thư ký hệ thống được đặt hạn chỉnh sửa');
+      throw new ForbiddenException(
+        'Chỉ thư ký hệ thống được đặt hạn chỉnh sửa',
+      );
     }
-    const result = await this.prisma.scoring_results.findUnique({ where: { project_id: projectId } });
+    const result = await this.prisma.scoring_results.findUnique({
+      where: { project_id: projectId },
+    });
     if (!result) {
       throw new NotFoundException('Không tìm thấy kết quả chấm điểm');
     }
@@ -1437,11 +1576,20 @@ export class ScoringService {
     return { projectId, revisionDeadline: new Date(dto.revisionDeadline) };
   }
 
-  async updateRank(projectId: number, _userId: number, role: string, dto: UpdateRankDto) {
+  async updateRank(
+    projectId: number,
+    _userId: number,
+    role: string,
+    dto: UpdateRankDto,
+  ) {
     if (!this.isStaff(role)) {
-      throw new ForbiddenException('Chỉ thư ký hệ thống được xếp hạng thủ công');
+      throw new ForbiddenException(
+        'Chỉ thư ký hệ thống được xếp hạng thủ công',
+      );
     }
-    const result = await this.prisma.scoring_results.findUnique({ where: { project_id: projectId } });
+    const result = await this.prisma.scoring_results.findUnique({
+      where: { project_id: projectId },
+    });
     if (!result) {
       throw new NotFoundException('Không tìm thấy kết quả chấm điểm');
     }
@@ -1453,30 +1601,45 @@ export class ScoringService {
         rank_note: dto.rankNote ?? null,
       },
     });
-    return { projectId, rank: dto.rankOverride, rankOverride: dto.rankOverride };
+    return {
+      projectId,
+      rank: dto.rankOverride,
+      rankOverride: dto.rankOverride,
+    };
   }
 
   async getPrintSheet(userId: number, role: string) {
     if (!this.isStaff(role)) {
-      throw new ForbiddenException('Chỉ thư ký hệ thống được in bảng điểm lưu trữ');
+      throw new ForbiddenException(
+        'Chỉ thư ký hệ thống được in bảng điểm lưu trữ',
+      );
     }
-    const rows = await this.getPostDefenseList(userId, role, { page: 1, limit: 1000 });
+    const rows = await this.getPostDefenseList(userId, role, {
+      page: 1,
+      limit: 1000,
+    });
     return { data: rows.data, generatedAt: new Date() };
   }
 
   async getMyRevision(userId: number) {
     const student = await this.resolveOrCreateStudent(userId);
-    const project = await this.prisma.project.findUnique({ where: { student_id: student.id } });
+    const project = await this.prisma.project.findUnique({
+      where: { student_id: student.id },
+    });
     if (!project) {
       throw new NotFoundException('Bạn chưa có đề tài');
     }
-    const result = await this.prisma.scoring_results.findUnique({ where: { project_id: project.id } });
+    const result = await this.prisma.scoring_results.findUnique({
+      where: { project_id: project.id },
+    });
     if (!result?.is_published) {
       throw new NotFoundException('Bảng điểm chưa được công bố');
     }
 
     const transcript = await this.buildTranscript(project.id);
-    const deadline = result.revision_deadline ?? this.defaultRevisionDeadline(result.published_at);
+    const deadline =
+      result.revision_deadline ??
+      this.defaultRevisionDeadline(result.published_at);
     const revision = await this.prisma.thesis_revisions.findFirst({
       where: { project_id: project.id, deleted_at: null },
       orderBy: { submitted_at: 'desc' },
@@ -1500,15 +1663,23 @@ export class ScoringService {
 
   async submitRevision(userId: number, dto: SubmitRevisionDto) {
     const student = await this.resolveOrCreateStudent(userId);
-    const project = await this.prisma.project.findUnique({ where: { student_id: student.id } });
+    const project = await this.prisma.project.findUnique({
+      where: { student_id: student.id },
+    });
     if (!project) {
       throw new NotFoundException('Bạn chưa có đề tài');
     }
-    const result = await this.prisma.scoring_results.findUnique({ where: { project_id: project.id } });
+    const result = await this.prisma.scoring_results.findUnique({
+      where: { project_id: project.id },
+    });
     if (!result?.is_published) {
-      throw new BadRequestException('Bảng điểm chưa được công bố, chưa mở chỉnh sửa');
+      throw new BadRequestException(
+        'Bảng điểm chưa được công bố, chưa mở chỉnh sửa',
+      );
     }
-    const deadline = result.revision_deadline ?? this.defaultRevisionDeadline(result.published_at);
+    const deadline =
+      result.revision_deadline ??
+      this.defaultRevisionDeadline(result.published_at);
     if (deadline.getTime() <= Date.now()) {
       throw new BadRequestException('Đã hết hạn chỉnh sửa hồ sơ');
     }
@@ -1533,7 +1704,10 @@ export class ScoringService {
   }
 
   private isFinalized(result?: { final_status?: string | null } | null) {
-    return result?.final_status === 'PASSED' || result?.final_status === 'REJECTED_DEFENSE';
+    return (
+      result?.final_status === 'PASSED' ||
+      result?.final_status === 'REJECTED_DEFENSE'
+    );
   }
 
   private async resolveTeacherId(userId: number, required = true) {
@@ -1553,7 +1727,11 @@ export class ScoringService {
     return null;
   }
 
-  private async assertMeetingAccess(projectId: number, userId: number, role: string) {
+  private async assertMeetingAccess(
+    projectId: number,
+    userId: number,
+    role: string,
+  ) {
     const staff = this.isStaff(role);
     const teacherId = await this.resolveTeacherId(userId, false);
 
@@ -1614,10 +1792,17 @@ export class ScoringService {
     }
 
     // Read the template
-    const templatePath = path.join(process.cwd(), 'src', 'templates', 'score_sheet_template.docx');
+    const templatePath = path.join(
+      process.cwd(),
+      'src',
+      'templates',
+      'score_sheet_template.docx',
+    );
 
     if (!fs.existsSync(templatePath)) {
-      throw new NotFoundException('Không tìm thấy file mẫu score_sheet_template.docx trong thư mục src/templates.');
+      throw new NotFoundException(
+        'Không tìm thấy file mẫu score_sheet_template.docx trong thư mục src/templates.',
+      );
     }
 
     const content = fs.readFileSync(templatePath, 'binary');
@@ -1634,7 +1819,10 @@ export class ScoringService {
       project_code: score.projects.project_id,
       project_name: score.projects.project_name,
       teacher_name: score.teachers.name,
-      scoring_type: score.scoring_type === ScoringType.GVHD ? 'Giảng viên hướng dẫn' : 'Hội đồng bảo vệ',
+      scoring_type:
+        score.scoring_type === ScoringType.GVHD
+          ? 'Giảng viên hướng dẫn'
+          : 'Hội đồng bảo vệ',
       total_score: score.score || 0,
       strengths: score.strengths || '',
       weaknesses: score.weaknesses || '',

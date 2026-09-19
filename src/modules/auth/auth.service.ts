@@ -702,7 +702,10 @@ export class AuthService {
    * Used by the frontend to build the dynamic ability/menu after login
    * or after switching roles.
    */
-  async getEffectivePermissions(userId: number, activeRoleName: string): Promise<string[]> {
+  async getEffectivePermissions(
+    userId: number,
+    activeRoleName: string,
+  ): Promise<string[]> {
     const permissions = await this.prisma.permission.findMany({
       where: {
         deleted_at: null,

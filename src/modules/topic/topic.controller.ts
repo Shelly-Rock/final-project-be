@@ -1,11 +1,12 @@
-﻿import {
+import {
   Body,
   Controller,
   Get,
   Param,
   ParseIntPipe,
   Post,
-  Put, Delete,
+  Put,
+  Delete,
   Query,
   Res,
   UseGuards,
@@ -28,6 +29,7 @@ import {
   RegistrationDecisionDto,
   SearchPeriodEntityQueryDto,
   TopicAvailableQueryDto,
+  RegisterTopicDto,
   TopicManageQueryDto,
   UpdateTopicDto,
 } from './dto';
@@ -42,11 +44,14 @@ export class TopicController {
 
   @Get('governance-state')
   @Public()
-  @ApiOperation({ summary: 'Trạng thái governance của đợt (deadline, quota, trạng thái stage)' })
+  @ApiOperation({
+    summary:
+      'Trạng thái governance của đợt (deadline, quota, trạng thái stage)',
+  })
   getGovernanceState(@Query('periodId') periodId?: string) {
     const parsed = periodId ? Number(periodId) : undefined;
     return this.topicService.getGovernanceState(
-      Number.isFinite(parsed as number) ? (parsed as number) : undefined,
+      Number.isFinite(parsed) ? parsed : undefined,
     );
   }
 
@@ -54,7 +59,9 @@ export class TopicController {
 
   @Get('manage')
   @Roles('ADMIN', 'SECRETARY')
-  @ApiOperation({ summary: 'Danh sách đề tài hợp nhất (lọc, tìm kiếm, phân trang server)' })
+  @ApiOperation({
+    summary: 'Danh sách đề tài hợp nhất (lọc, tìm kiếm, phân trang server)',
+  })
   listManaged(@Query() query: TopicManageQueryDto) {
     return this.topicService.listManaged(query);
   }
@@ -85,7 +92,9 @@ export class TopicController {
 
   @Get('manage/teachers-with-quota')
   @Roles('ADMIN', 'SECRETARY')
-  @ApiOperation({ summary: 'Giảng viên còn chỉ tiêu (phục vụ tạo đề tài bổ sung)' })
+  @ApiOperation({
+    summary: 'Giảng viên còn chỉ tiêu (phục vụ tạo đề tài bổ sung)',
+  })
   listTeachersWithQuota(@Query() query: SearchPeriodEntityQueryDto) {
     return this.topicService.listTeachersWithQuota(query);
   }
@@ -94,7 +103,9 @@ export class TopicController {
 
   @Post('manual-assign')
   @Roles('ADMIN', 'SECRETARY')
-  @ApiOperation({ summary: 'Gán trực tiếp sinh viên vào đề tài (bắt buộc lý do)' })
+  @ApiOperation({
+    summary: 'Gán trực tiếp sinh viên vào đề tài (bắt buộc lý do)',
+  })
   manualAssign(
     @Body() dto: ManualAssignDto,
     @CurrentUser('sub') actorUserId: number,
@@ -104,7 +115,10 @@ export class TopicController {
 
   @Put(':id/force-update')
   @Roles('ADMIN', 'SECRETARY')
-  @ApiOperation({ summary: 'Chỉnh sửa cưỡng bức đề tài sau deadline (bắt buộc lý do, ghi audit)' })
+  @ApiOperation({
+    summary:
+      'Chỉnh sửa cưỡng bức đề tài sau deadline (bắt buộc lý do, ghi audit)',
+  })
   forceUpdate(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: ForceUpdateTopicDto,
@@ -125,7 +139,9 @@ export class TopicController {
 
   @Post('supplemental')
   @Roles('ADMIN', 'SECRETARY')
-  @ApiOperation({ summary: 'Tạo đề tài bổ sung (quá deadline vẫn cho phép, kiểm tra quota)' })
+  @ApiOperation({
+    summary: 'Tạo đề tài bổ sung (quá deadline vẫn cho phép, kiểm tra quota)',
+  })
   createSupplemental(
     @Body() dto: CreateSupplementalTopicDto,
     @CurrentUser('sub') actorUserId: number,
@@ -145,7 +161,9 @@ export class TopicController {
 
   @Get(':id/audits')
   @Roles('ADMIN', 'SECRETARY')
-  @ApiOperation({ summary: 'Lịch sử can thiệp (force-update, bulk, gán, sinh mã)' })
+  @ApiOperation({
+    summary: 'Lịch sử can thiệp (force-update, bulk, gán, sinh mã)',
+  })
   listAudits(@Param('id', ParseIntPipe) id: number) {
     return this.topicService.listAudits(id);
   }
@@ -175,8 +193,9 @@ export class TopicController {
   registerTopic(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser('sub') actorUserId: number,
+    @Body() dto: RegisterTopicDto,
   ) {
-    return this.topicService.registerTopic(id, actorUserId);
+    return this.topicService.registerTopic(id, actorUserId, dto.studentMessage);
   }
 
   @Delete(':id/registrations')
@@ -195,7 +214,12 @@ export class TopicController {
   lockWithAssignments(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser('sub') actorUserId: number,
-    @Body('assignments') assignments: { projectId: number; assignedTask: string; isLeader: boolean }[],
+    @Body('assignments')
+    assignments: {
+      projectId: number;
+      assignedTask: string;
+      isLeader: boolean;
+    }[],
   ) {
     return this.topicService.lockWithAssignments(id, actorUserId, assignments);
   }
@@ -211,7 +235,6 @@ export class TopicController {
     return this.topicService.changeLeader(id, actorUserId, projectId);
   }
 
-
   @Get('mine')
   @Roles('TEACHER', 'ADMIN', 'SECRETARY')
   @ApiOperation({ summary: 'Đề tài của giảng viên hiện tại' })
@@ -222,7 +245,7 @@ export class TopicController {
     const parsed = periodId ? Number(periodId) : undefined;
     return this.topicService.listMyTopics(
       actorUserId,
-      Number.isFinite(parsed as number) ? (parsed as number) : undefined,
+      Number.isFinite(parsed) ? parsed : undefined,
     );
   }
 
@@ -245,7 +268,9 @@ export class TopicController {
 
   @Post()
   @Roles('TEACHER', 'ADMIN', 'SECRETARY')
-  @ApiOperation({ summary: 'Giảng viên tạo đề tài (kiểm tra quota + deadline + số lượng)' })
+  @ApiOperation({
+    summary: 'Giảng viên tạo đề tài (kiểm tra quota + deadline + số lượng)',
+  })
   createTopic(
     @Body() dto: CreateTopicDto,
     @CurrentUser('sub') actorUserId: number,
@@ -270,4 +295,3 @@ export class TopicController {
     return this.topicService.findOne(id);
   }
 }
-

@@ -30,7 +30,9 @@ export class ChatController {
   ) {
     const last = dto.messages[dto.messages.length - 1];
     if (!last || last.role !== 'user' || !last.content.trim()) {
-      throw new BadRequestException('Tin nhắn cuối phải là câu hỏi của người dùng');
+      throw new BadRequestException(
+        'Tin nhắn cuối phải là câu hỏi của người dùng',
+      );
     }
 
     if (!this.chatService.getApiKey()) {

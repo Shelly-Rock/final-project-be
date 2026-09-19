@@ -39,7 +39,9 @@ export class GetStudentByIdService {
     return this.mapToResponseDTO(student);
   }
 
-  async getStudentByStudentId(studentId: string): Promise<GetListStudentRespDTO> {
+  async getStudentByStudentId(
+    studentId: string,
+  ): Promise<GetListStudentRespDTO> {
     const student = await this.prismaService.student.findUnique({
       where: { student_id: studentId },
       include: {

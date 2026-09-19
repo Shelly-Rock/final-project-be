@@ -196,8 +196,7 @@ export class RegistrationPeriodService {
       update: {
         assigned_quota: dto.assignedQuota,
         submitted_topics: submittedTopics,
-        max_students:
-          dto.assignedQuota * config.max_students_per_topic,
+        max_students: dto.assignedQuota * config.max_students_per_topic,
         status,
         is_override: true,
       },
@@ -206,8 +205,7 @@ export class RegistrationPeriodService {
         teacher_id: teacherId,
         assigned_quota: dto.assignedQuota,
         submitted_topics: submittedTopics,
-        max_students:
-          dto.assignedQuota * config.max_students_per_topic,
+        max_students: dto.assignedQuota * config.max_students_per_topic,
         status,
         is_override: true,
       },

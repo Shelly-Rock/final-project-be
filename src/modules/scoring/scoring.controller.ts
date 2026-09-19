@@ -1,6 +1,23 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Request, Res } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  Request,
+  Res,
+} from '@nestjs/common';
 import type { Response } from 'express';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { ScoringService } from './scoring.service';
 import {
   CreateIndependentScoreDto,
@@ -86,9 +103,13 @@ export class ScoringController {
     @Param('id') id: string,
     @Res() res: Response,
   ) {
-    const buffer = await this.scoringService.exportScoreSheetWord(parseInt(id), this.userId(req));
+    const buffer = await this.scoringService.exportScoreSheetWord(
+      parseInt(id),
+      this.userId(req),
+    );
     res.set({
-      'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'Content-Type':
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'Content-Disposition': `attachment; filename="Phieu_Cham_Diem_${id}.docx"`,
     });
     res.send(buffer);
@@ -100,19 +121,29 @@ export class ScoringController {
   @Roles('ADMIN', 'SECRETARY', 'TEACHER')
   @ApiOperation({ summary: 'Danh sách đề tài họp hội đồng (Giai đoạn 5)' })
   async getMeetings(@Request() req, @Query() query: QueryMeetingsDto) {
-    return this.scoringService.getMeetings(this.userId(req), req.user.role, query);
+    return this.scoringService.getMeetings(
+      this.userId(req),
+      req.user.role,
+      query,
+    );
   }
 
   @Get('meetings/:projectId')
   @Roles('ADMIN', 'SECRETARY', 'TEACHER')
   @ApiOperation({ summary: 'Chi tiết họp hội đồng theo đề tài' })
   async getMeeting(@Request() req, @Param('projectId') projectId: string) {
-    return this.scoringService.getMeeting(parseInt(projectId), this.userId(req), req.user.role);
+    return this.scoringService.getMeeting(
+      parseInt(projectId),
+      this.userId(req),
+      req.user.role,
+    );
   }
 
   @Put('meetings/:scoreId')
   @Roles('ADMIN', 'SECRETARY', 'TEACHER')
-  @ApiOperation({ summary: 'Sửa điểm hội đồng sau khi thống nhất (trước khi chốt)' })
+  @ApiOperation({
+    summary: 'Sửa điểm hội đồng sau khi thống nhất (trước khi chốt)',
+  })
   async adjustMeetingScore(
     @Request() req,
     @Param('scoreId') scoreId: string,
@@ -148,7 +179,11 @@ export class ScoringController {
   @Roles('ADMIN', 'SECRETARY', 'TEACHER')
   @ApiOperation({ summary: 'Danh sách bảng điểm tổng hợp (Giai đoạn 6)' })
   async getTranscripts(@Request() req, @Query() query: QueryTranscriptsDto) {
-    return this.scoringService.getTranscripts(this.userId(req), req.user.role, query);
+    return this.scoringService.getTranscripts(
+      this.userId(req),
+      req.user.role,
+      query,
+    );
   }
 
   @Get('transcripts/:projectId')
@@ -181,7 +216,10 @@ export class ScoringController {
   @Post('transcripts/:projectId/publish')
   @Roles('ADMIN', 'SECRETARY')
   @ApiOperation({ summary: 'Công bố bảng điểm cho sinh viên' })
-  async publishTranscript(@Request() req, @Param('projectId') projectId: string) {
+  async publishTranscript(
+    @Request() req,
+    @Param('projectId') projectId: string,
+  ) {
     return this.scoringService.publishTranscript(
       parseInt(projectId),
       this.userId(req),
@@ -195,7 +233,11 @@ export class ScoringController {
   @Roles('ADMIN', 'SECRETARY')
   @ApiOperation({ summary: 'Danh sách xếp hạng sau bảo vệ (Giai đoạn 7)' })
   async getPostDefense(@Request() req, @Query() query: QueryPostDefenseDto) {
-    return this.scoringService.getPostDefenseList(this.userId(req), req.user.role, query);
+    return this.scoringService.getPostDefenseList(
+      this.userId(req),
+      req.user.role,
+      query,
+    );
   }
 
   @Post('post-defense/rank')
@@ -253,7 +295,9 @@ export class ScoringController {
 
   @Post('revisions/me')
   @Roles('STUDENT')
-  @ApiOperation({ summary: 'Sinh viên nộp hồ sơ chỉnh sửa theo nhận xét hội đồng' })
+  @ApiOperation({
+    summary: 'Sinh viên nộp hồ sơ chỉnh sửa theo nhận xét hội đồng',
+  })
   async submitRevision(@Request() req, @Body() dto: SubmitRevisionDto) {
     return this.scoringService.submitRevision(this.userId(req), dto);
   }
@@ -263,8 +307,16 @@ export class ScoringController {
   @ApiOperation({ summary: 'Get all scores (admin)' })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
-  @ApiQuery({ name: 'scoringType', enum: ['GVHD', 'COMMITTEE'], required: false })
-  @ApiQuery({ name: 'status', enum: ['PENDING', 'IN_PROGRESS', 'SUBMITTED', 'FAILED', 'PASSED'], required: false })
+  @ApiQuery({
+    name: 'scoringType',
+    enum: ['GVHD', 'COMMITTEE'],
+    required: false,
+  })
+  @ApiQuery({
+    name: 'status',
+    enum: ['PENDING', 'IN_PROGRESS', 'SUBMITTED', 'FAILED', 'PASSED'],
+    required: false,
+  })
   @ApiQuery({ name: 'teacherId', required: false })
   @ApiQuery({ name: 'projectId', required: false })
   async getAllScores(@Query() query: QueryScoresDto) {
@@ -309,10 +361,7 @@ export class ScoringController {
   @Put(':id')
   @Roles('ADMIN', 'SECRETARY', 'TEACHER')
   @ApiOperation({ summary: 'Update a score' })
-  async updateScore(
-    @Param('id') id: string,
-    @Body() dto: UpdateScoreDto,
-  ) {
+  async updateScore(@Param('id') id: string, @Body() dto: UpdateScoreDto) {
     return this.scoringService.updateScore(parseInt(id), 0, dto);
   }
 
@@ -327,11 +376,16 @@ export class ScoringController {
 
   @Post('assign/:sessionProjectId')
   @Roles('ADMIN', 'SECRETARY')
-  @ApiOperation({ summary: 'Assign scores to committee members for a defense session' })
+  @ApiOperation({
+    summary: 'Assign scores to committee members for a defense session',
+  })
   async assignScoresToCommittee(
     @Param('sessionProjectId') sessionProjectId: string,
     @Body('committeeId') committeeId: number,
   ) {
-    return this.scoringService.assignScoresToCommittee(parseInt(sessionProjectId), committeeId);
+    return this.scoringService.assignScoresToCommittee(
+      parseInt(sessionProjectId),
+      committeeId,
+    );
   }
 }

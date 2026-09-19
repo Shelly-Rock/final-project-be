@@ -112,7 +112,7 @@ export class AdminConfigService {
             max_topic_limit: dto.maxTopicLimit,
             max_students_per_topic: dto.maxStudentsPerTopic,
             alerts_enabled: dto.alertsEnabled,
-            alert_offsets_days: dto.alertOffsetsDays as Prisma.InputJsonValue,
+            alert_offsets_days: dto.alertOffsetsDays,
             updated_by_user_id: actorUserId,
           },
         });
@@ -172,8 +172,8 @@ export class AdminConfigService {
           where: { id: dto.periodId },
           data: {
             default_quota: dto.defaultTopicLimit,
-            teacher_deadline: topicCreation!.deadlineAt,
-            student_deadline: studentRegistration!.deadlineAt,
+            teacher_deadline: topicCreation.deadlineAt,
+            student_deadline: studentRegistration.deadlineAt,
             updated_at: new Date(),
           },
         });
@@ -199,7 +199,9 @@ export class AdminConfigService {
   }
 
   async listTeacherOverrides(query: ListTeacherOverridesQueryDto) {
-    const config = await this.deadlinePolicy.ensureGovernanceConfig(query.periodId);
+    const config = await this.deadlinePolicy.ensureGovernanceConfig(
+      query.periodId,
+    );
     const page = query.page || 1;
     const limit = query.limit || 20;
     const search = query.search?.trim();
@@ -258,7 +260,9 @@ export class AdminConfigService {
         ])
       : [[], []];
 
-    const quotaByTeacher = new Map(quotas.map((quota) => [quota.teacher_id, quota]));
+    const quotaByTeacher = new Map(
+      quotas.map((quota) => [quota.teacher_id, quota]),
+    );
     const countByTeacher = new Map(
       topicCounts.map((item) => [item.teacher_id, item._count._all]),
     );
@@ -267,7 +271,8 @@ export class AdminConfigService {
       items: teachers.map((teacher) => {
         const quota = quotaByTeacher.get(teacher.id);
         const submittedTopics = countByTeacher.get(teacher.id) ?? 0;
-        const assignedQuota = quota?.assigned_quota ?? config.default_topic_limit;
+        const assignedQuota =
+          quota?.assigned_quota ?? config.default_topic_limit;
         return {
           ...teacher,
           assignedQuota,
@@ -297,7 +302,9 @@ export class AdminConfigService {
     dto: UpsertTeacherOverridesDto,
     _actorUserId: number,
   ) {
-    const config = await this.deadlinePolicy.ensureGovernanceConfig(dto.periodId);
+    const config = await this.deadlinePolicy.ensureGovernanceConfig(
+      dto.periodId,
+    );
     if (dto.assignedQuota > config.max_topic_limit) {
       throw new BadRequestException(
         `Vượt quá trần chỉ tiêu cho phép của đợt (${config.max_topic_limit}).`,
@@ -389,7 +396,9 @@ export class AdminConfigService {
       }),
     ]);
     if (!teacher) {
-      throw new NotFoundException(`Không tìm thấy giảng viên có id ${teacherId}.`);
+      throw new NotFoundException(
+        `Không tìm thấy giảng viên có id ${teacherId}.`,
+      );
     }
 
     const submittedTopics = await this.prisma.topics.count({
@@ -509,14 +518,12 @@ export class AdminConfigService {
 
     for (const type of Object.values(DeadlineType)) {
       if (!byType.has(type)) {
-        throw new BadRequestException(
-          `Thiếu cấu hình deadline ${type}.`,
-        );
+        throw new BadRequestException(`Thiếu cấu hình deadline ${type}.`);
       }
     }
 
     const dateFor = (type: DeadlineType): Date => {
-      const deadline = byType.get(type)!.find((item) => item.seq === 1);
+      const deadline = byType.get(type).find((item) => item.seq === 1);
       if (!deadline) {
         throw new BadRequestException(`Deadline ${type} phải có seq = 1.`);
       }
@@ -535,7 +542,7 @@ export class AdminConfigService {
 
     const approvalAt = dateFor(DeadlineType.TEACHER_APPROVAL).getTime();
     const finalAt = dateFor(DeadlineType.FINAL_SUBMISSION).getTime();
-    const reportMilestones = byType.get(DeadlineType.PERIODIC_REPORT)!;
+    const reportMilestones = byType.get(DeadlineType.PERIODIC_REPORT);
     const seqs = [...reportMilestones]
       .sort((a, b) => a.seq - b.seq)
       .map((item) => item.seq);

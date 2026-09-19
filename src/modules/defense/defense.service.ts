@@ -25,7 +25,11 @@ export class DefenseService {
   constructor(private prisma: PrismaService) {}
 
   // Calculate end time based on start time and number of projects
-  private calculateEndTime(startTime: string, projectCount: number, durationMinutes: number): string {
+  private calculateEndTime(
+    startTime: string,
+    projectCount: number,
+    durationMinutes: number,
+  ): string {
     const [hours, minutes] = startTime.split(':').map(Number);
     const totalMinutes = hours * 60 + minutes + projectCount * durationMinutes;
     const endHours = Math.floor(totalMinutes / 60);
@@ -34,22 +38,31 @@ export class DefenseService {
   }
 
   // Calculate scheduled time for each project
-  private calculateProjectTimes(startTime: string, projectCount: number, durationMinutes: number): string[] {
+  private calculateProjectTimes(
+    startTime: string,
+    projectCount: number,
+    durationMinutes: number,
+  ): string[] {
     const times: string[] = [];
     const [hours, minutes] = startTime.split(':').map(Number);
-    
+
     for (let i = 0; i < projectCount; i++) {
       const totalMinutes = hours * 60 + minutes + i * durationMinutes;
       const projHours = Math.floor(totalMinutes / 60);
       const projMinutes = totalMinutes % 60;
-      times.push(`${projHours.toString().padStart(2, '0')}:${projMinutes.toString().padStart(2, '0')}`);
+      times.push(
+        `${projHours.toString().padStart(2, '0')}:${projMinutes.toString().padStart(2, '0')}`,
+      );
     }
-    
+
     return times;
   }
 
   // Validate that no teacher in committee is supervising assigned projects
-  private async validateProjectAssignments(committeeId: number, projectIds: number[]) {
+  private async validateProjectAssignments(
+    committeeId: number,
+    projectIds: number[],
+  ) {
     const committee = await this.prisma.defense_committees.findFirst({
       where: { id: committeeId },
       include: {
@@ -68,7 +81,9 @@ export class DefenseService {
     });
 
     // Get all internal committee members' teacher IDs
-    const excludedTeacherIds = committee.committee_members.map((m) => m.teacher_id);
+    const excludedTeacherIds = committee.committee_members.map(
+      (m) => m.teacher_id,
+    );
 
     for (const project of projects) {
       // Check if any excluded teacher is the supervisor
@@ -98,7 +113,10 @@ export class DefenseService {
     // Validate project assignments if provided
     let projects: any[] = [];
     if (dto.project_ids && dto.project_ids.length > 0) {
-      projects = await this.validateProjectAssignments(dto.committee_id, dto.project_ids);
+      projects = await this.validateProjectAssignments(
+        dto.committee_id,
+        dto.project_ids,
+      );
     }
 
     // Create session
@@ -133,14 +151,22 @@ export class DefenseService {
       });
 
       // Tự động tạo phiếu chấm cho toàn bộ thành viên Hội đồng
-      await this.autoCreateScoreSheets(session.id, dto.committee_id, dto.project_ids);
+      await this.autoCreateScoreSheets(
+        session.id,
+        dto.committee_id,
+        dto.project_ids,
+      );
     }
 
     return this.getDefenseSessionById(session.id);
   }
 
   // Tự động tạo phiếu chấm độc lập cho từng thành viên hội đồng khi xếp lịch bảo vệ
-  private async autoCreateScoreSheets(sessionId: number, committeeId: number, projectIds: number[]) {
+  private async autoCreateScoreSheets(
+    sessionId: number,
+    committeeId: number,
+    projectIds: number[],
+  ) {
     const committee = await this.prisma.defense_committees.findUnique({
       where: { id: committeeId },
       include: {
@@ -237,13 +263,22 @@ export class DefenseService {
       id: p.id,
       projectCode: p.project_id,
       name: p.project_name,
-      studentName: p.student ? `${p.student.first_name} ${p.student.last_name}` : 'Unknown',
+      studentName: p.student
+        ? `${p.student.first_name} ${p.student.last_name}`
+        : 'Unknown',
       studentMssv: p.student?.student_id || 'Unknown',
     }));
   }
 
   async getDefenseSessions(query: DefenseSessionQueryDto) {
-    const { page = 1, limit = 20, committee_id, status, defense_date, room } = query;
+    const {
+      page = 1,
+      limit = 20,
+      committee_id,
+      status,
+      defense_date,
+      room,
+    } = query;
 
     const where: any = { deleted_at: null };
     if (committee_id) where.committee_id = committee_id;
@@ -299,10 +334,12 @@ export class DefenseService {
       where: { id: session.committee_id },
     });
 
-    const sessionProjects = await this.prisma.defense_session_projects.findMany({
-      where: { session_id: session.id },
-      orderBy: { order_index: 'asc' },
-    });
+    const sessionProjects = await this.prisma.defense_session_projects.findMany(
+      {
+        where: { session_id: session.id },
+        orderBy: { order_index: 'asc' },
+      },
+    );
 
     const projects = await Promise.all(
       sessionProjects.map(async (sp) => {
@@ -361,7 +398,9 @@ export class DefenseService {
     }
 
     if (session.status === DefenseSessionStatus.COMPLETED) {
-      throw new BadRequestException('Không thể cập nhật phiên bảo vệ đã hoàn thành');
+      throw new BadRequestException(
+        'Không thể cập nhật phiên bảo vệ đã hoàn thành',
+      );
     }
 
     const updated = await this.prisma.defense_sessions.update({
@@ -377,10 +416,11 @@ export class DefenseService {
 
     // Recalculate project times if start_time changed
     if (dto.start_time) {
-      const sessionProjects = await this.prisma.defense_session_projects.findMany({
-        where: { session_id: id },
-        orderBy: { order_index: 'asc' },
-      });
+      const sessionProjects =
+        await this.prisma.defense_session_projects.findMany({
+          where: { session_id: id },
+          orderBy: { order_index: 'asc' },
+        });
 
       const times = this.calculateProjectTimes(
         dto.start_time,
@@ -409,7 +449,10 @@ export class DefenseService {
     }
 
     // Validate project assignments
-    await this.validateProjectAssignments(session.committee_id, dto.project_ids);
+    await this.validateProjectAssignments(
+      session.committee_id,
+      dto.project_ids,
+    );
 
     // Get current max order index
     const lastProject = await this.prisma.defense_session_projects.findFirst({
@@ -446,12 +489,14 @@ export class DefenseService {
   }
 
   async removeProjectFromSession(id: number, projectId: number) {
-    const sessionProject = await this.prisma.defense_session_projects.findFirst({
-      where: {
-        session_id: id,
-        project_id: projectId,
+    const sessionProject = await this.prisma.defense_session_projects.findFirst(
+      {
+        where: {
+          session_id: id,
+          project_id: projectId,
+        },
       },
-    });
+    );
 
     if (!sessionProject) {
       throw new NotFoundException('Đề tài không có trong phiên bảo vệ này');
@@ -471,15 +516,18 @@ export class DefenseService {
     });
 
     // Reorder remaining projects
-    const remainingProjects = await this.prisma.defense_session_projects.findMany({
-      where: { session_id: id },
-      orderBy: { order_index: 'asc' },
-    });
+    const remainingProjects =
+      await this.prisma.defense_session_projects.findMany({
+        where: { session_id: id },
+        orderBy: { order_index: 'asc' },
+      });
 
     const times = this.calculateProjectTimes(
-      (await this.prisma.defense_sessions.findFirst({ where: { id } }))!.start_time,
+      (await this.prisma.defense_sessions.findFirst({ where: { id } }))
+        .start_time,
       remainingProjects.length,
-      (await this.prisma.defense_sessions.findFirst({ where: { id } }))!.duration_minutes,
+      (await this.prisma.defense_sessions.findFirst({ where: { id } }))
+        .duration_minutes,
     );
 
     for (let i = 0; i < remainingProjects.length; i++) {
@@ -496,9 +544,11 @@ export class DefenseService {
   }
 
   async scoreProject(sessionProjectId: number, dto: ScoreProjectDto) {
-    const sessionProject = await this.prisma.defense_session_projects.findFirst({
-      where: { id: sessionProjectId },
-    });
+    const sessionProject = await this.prisma.defense_session_projects.findFirst(
+      {
+        where: { id: sessionProjectId },
+      },
+    );
 
     if (!sessionProject) {
       throw new NotFoundException('Đề tài bảo vệ không tồn tại');
@@ -553,9 +603,11 @@ export class DefenseService {
     }
 
     // Mark all projects as defended
-    const sessionProjects = await this.prisma.defense_session_projects.findMany({
-      where: { session_id: id },
-    });
+    const sessionProjects = await this.prisma.defense_session_projects.findMany(
+      {
+        where: { session_id: id },
+      },
+    );
 
     for (const sp of sessionProjects) {
       // Calculate average score
@@ -564,7 +616,8 @@ export class DefenseService {
       });
 
       if (scores.length > 0) {
-        const avgScore = scores.reduce((sum, s) => sum + s.score, 0) / scores.length;
+        const avgScore =
+          scores.reduce((sum, s) => sum + s.score, 0) / scores.length;
         await this.prisma.defense_session_projects.update({
           where: { id: sp.id },
           data: {
@@ -591,9 +644,11 @@ export class DefenseService {
     }
 
     // Check for existing scores
-    const sessionProjects = await this.prisma.defense_session_projects.findMany({
-      where: { session_id: id },
-    });
+    const sessionProjects = await this.prisma.defense_session_projects.findMany(
+      {
+        where: { session_id: id },
+      },
+    );
 
     for (const sp of sessionProjects) {
       const scores = await this.prisma.defense_scores.findMany({
@@ -620,7 +675,7 @@ export class DefenseService {
 
   async exportScheduleWord(sessionId: number) {
     const session = await this.getDefenseSessionById(sessionId);
-    
+
     // Generate Word document content (in real scenario, use a library like docx)
     // For now, return structured data that frontend can use to generate Word
     return {
@@ -647,10 +702,17 @@ export class DefenseService {
     const data = await this.exportScheduleWord(sessionId);
 
     // Read the template
-    const templatePath = path.join(process.cwd(), 'src', 'templates', 'schedule_template.docx');
-    
+    const templatePath = path.join(
+      process.cwd(),
+      'src',
+      'templates',
+      'schedule_template.docx',
+    );
+
     if (!fs.existsSync(templatePath)) {
-      throw new NotFoundException('Không tìm thấy file mẫu schedule_template.docx trong thư mục src/templates. Vui lòng thiết kế file mẫu và đặt vào hệ thống.');
+      throw new NotFoundException(
+        'Không tìm thấy file mẫu schedule_template.docx trong thư mục src/templates. Vui lòng thiết kế file mẫu và đặt vào hệ thống.',
+      );
     }
 
     const content = fs.readFileSync(templatePath, 'binary');
@@ -688,14 +750,17 @@ export class DefenseService {
       where: { status: DefenseSessionStatus.CANCELLED, deleted_at: null },
     });
 
-    const sessionProjects = await this.prisma.defense_session_projects.findMany({
-      where: { defended_at: { not: null } },
-    });
+    const sessionProjects = await this.prisma.defense_session_projects.findMany(
+      {
+        where: { defended_at: { not: null } },
+      },
+    );
 
     const scoresWithValue = scores.filter((s) => s.score !== null);
     const avgScore =
       scoresWithValue.length > 0
-        ? scoresWithValue.reduce((sum, s) => sum + s.score, 0) / scoresWithValue.length
+        ? scoresWithValue.reduce((sum, s) => sum + s.score, 0) /
+          scoresWithValue.length
         : null;
 
     return {

@@ -12,11 +12,13 @@ export class SubmissionCronService {
 
   @Cron(CronExpression.EVERY_30_MINUTES)
   async syncDriveSubmissions() {
-    this.logger.log('Bắt đầu chạy Cronjob đồng bộ file nộp bài từ Google Drive...');
+    this.logger.log(
+      'Bắt đầu chạy Cronjob đồng bộ file nộp bài từ Google Drive...',
+    );
     try {
       const auth = new google.auth.OAuth2(
         process.env.GOOGLE_CLIENT_ID,
-        process.env.GOOGLE_CLIENT_SECRET
+        process.env.GOOGLE_CLIENT_SECRET,
       );
       auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
 
@@ -24,7 +26,9 @@ export class SubmissionCronService {
 
       const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
       if (!folderId) {
-        this.logger.warn('GOOGLE_DRIVE_FOLDER_ID chưa được cấu hình. Bỏ qua cronjob.');
+        this.logger.warn(
+          'GOOGLE_DRIVE_FOLDER_ID chưa được cấu hình. Bỏ qua cronjob.',
+        );
         return;
       }
 
@@ -43,7 +47,9 @@ export class SubmissionCronService {
         return;
       }
 
-      this.logger.log(`Tìm thấy ${files.length} file mới. Đang kiểm tra đối chiếu DB...`);
+      this.logger.log(
+        `Tìm thấy ${files.length} file mới. Đang kiểm tra đối chiếu DB...`,
+      );
 
       for (const file of files) {
         const fileName = file.name || '';
@@ -61,15 +67,17 @@ export class SubmissionCronService {
 
         if (!project || !project.student_id) continue;
 
-        const existingSubmission = await this.prisma.final_submissions.findFirst({
-          where: { topic_id: project.topic_id, deleted_at: null },
-        });
+        const existingSubmission =
+          await this.prisma.final_submissions.findFirst({
+            where: { topic_id: project.topic_id, deleted_at: null },
+          });
 
         // Nếu file có trên Drive nhưng DB chưa lưu (do FE gọi confirmDriveUpload thất bại/rớt mạng)
         if (!existingSubmission) {
           let fileType = SubmissionType.WORD;
           if (extension === 'PDF') fileType = SubmissionType.PDF;
-          else if (extension === 'PPTX' || extension === 'PPT') fileType = SubmissionType.POWERPOINT;
+          else if (extension === 'PPTX' || extension === 'PPT')
+            fileType = SubmissionType.POWERPOINT;
 
           await this.prisma.final_submissions.create({
             data: {
@@ -85,7 +93,9 @@ export class SubmissionCronService {
             },
           });
 
-          this.logger.log(`Đã đồng bộ bổ sung file cho đề tài ${projectCode} (Drive File ID: ${file.id})`);
+          this.logger.log(
+            `Đã đồng bộ bổ sung file cho đề tài ${projectCode} (Drive File ID: ${file.id})`,
+          );
         }
       }
     } catch (error) {
@@ -93,5 +103,3 @@ export class SubmissionCronService {
     }
   }
 }
-
-

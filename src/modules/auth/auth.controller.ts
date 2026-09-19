@@ -60,7 +60,9 @@ export class AuthController {
   @ApiBody({ type: LoginReqDTO })
   @ApiOkResponse({ type: LoginRespDTO, description: 'Login successful' })
   @ApiUnauthorizedResponse({ description: 'Invalid credentials' })
-  @ApiForbiddenResponse({ description: 'Email not verified or must change password' })
+  @ApiForbiddenResponse({
+    description: 'Email not verified or must change password',
+  })
   async login(@Body() dto: LoginReqDTO): Promise<LoginRespDTO> {
     return this.authService.login(dto);
   }
@@ -70,10 +72,17 @@ export class AuthController {
   @Roles('ADMIN', 'SECRETARY')
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Register a new student account (Admin/Secretary only)' })
+  @ApiOperation({
+    summary: 'Register a new student account (Admin/Secretary only)',
+  })
   @ApiBody({ type: RegisterReqDTO })
-  @ApiOkResponse({ type: RegisterRespDTO, description: 'Account created, verification email sent' })
-  @ApiBadRequestResponse({ description: 'Validation error or user already exists' })
+  @ApiOkResponse({
+    type: RegisterRespDTO,
+    description: 'Account created, verification email sent',
+  })
+  @ApiBadRequestResponse({
+    description: 'Validation error or user already exists',
+  })
   @ApiForbiddenResponse({ description: 'Requires ADMIN or SECRETARY role' })
   async register(@Body() dto: RegisterReqDTO): Promise<RegisterRespDTO> {
     return this.authService.register(dto);
@@ -84,9 +93,16 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Verify email with token from email link' })
   @ApiBody({ type: VerifyEmailReqDTO })
-  @ApiOkResponse({ type: VerifyEmailRespDTO, description: 'Email verified successfully' })
-  @ApiBadRequestResponse({ description: 'Invalid, expired or already used token' })
-  async verifyEmail(@Body() dto: VerifyEmailReqDTO): Promise<VerifyEmailRespDTO> {
+  @ApiOkResponse({
+    type: VerifyEmailRespDTO,
+    description: 'Email verified successfully',
+  })
+  @ApiBadRequestResponse({
+    description: 'Invalid, expired or already used token',
+  })
+  async verifyEmail(
+    @Body() dto: VerifyEmailReqDTO,
+  ): Promise<VerifyEmailRespDTO> {
     return this.authService.verifyEmail(dto);
   }
 
@@ -95,9 +111,14 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Request password reset link via email' })
   @ApiBody({ type: ForgotPasswordReqDTO })
-  @ApiOkResponse({ type: ForgotPasswordRespDTO, description: 'Password reset email sent' })
+  @ApiOkResponse({
+    type: ForgotPasswordRespDTO,
+    description: 'Password reset email sent',
+  })
   @ApiBadRequestResponse({ description: 'Invalid email' })
-  async forgotPassword(@Body() dto: ForgotPasswordReqDTO): Promise<ForgotPasswordRespDTO> {
+  async forgotPassword(
+    @Body() dto: ForgotPasswordReqDTO,
+  ): Promise<ForgotPasswordRespDTO> {
     return this.authService.forgotPassword(dto);
   }
 
@@ -106,18 +127,28 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Reset password with token from email' })
   @ApiBody({ type: ResetPasswordReqDTO })
-  @ApiOkResponse({ type: ResetPasswordRespDTO, description: 'Password reset successfully' })
+  @ApiOkResponse({
+    type: ResetPasswordRespDTO,
+    description: 'Password reset successfully',
+  })
   @ApiBadRequestResponse({ description: 'Invalid or expired token' })
-  async resetPassword(@Body() dto: ResetPasswordReqDTO): Promise<ResetPasswordRespDTO> {
+  async resetPassword(
+    @Body() dto: ResetPasswordReqDTO,
+  ): Promise<ResetPasswordRespDTO> {
     return this.authService.resetPassword(dto);
   }
 
   @Public()
   @Post('change-password')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Change password after email verification (no login required)' })
+  @ApiOperation({
+    summary: 'Change password after email verification (no login required)',
+  })
   @ApiBody({ type: ChangePasswordReqDTO })
-  @ApiOkResponse({ type: ChangePasswordRespDTO, description: 'Password changed successfully' })
+  @ApiOkResponse({
+    type: ChangePasswordRespDTO,
+    description: 'Password changed successfully',
+  })
   @ApiForbiddenResponse({ description: 'Email must be verified first' })
   @ApiNotFoundResponse({ description: 'User not found' })
   async changePassword(
@@ -132,7 +163,10 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Change password for logged in user' })
   @ApiBody({ type: ChangePasswordMeReqDTO })
-  @ApiOkResponse({ type: ChangePasswordRespDTO, description: 'Password changed successfully' })
+  @ApiOkResponse({
+    type: ChangePasswordRespDTO,
+    description: 'Password changed successfully',
+  })
   @ApiUnauthorizedResponse({ description: 'Current password is incorrect' })
   @ApiNotFoundResponse({ description: 'User not found' })
   async changePasswordMe(
@@ -147,9 +181,14 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Refresh access token using refresh token' })
   @ApiBody({ type: RefreshTokenReqDTO })
-  @ApiOkResponse({ type: RefreshTokenRespDTO, description: 'Token refreshed successfully' })
+  @ApiOkResponse({
+    type: RefreshTokenRespDTO,
+    description: 'Token refreshed successfully',
+  })
   @ApiUnauthorizedResponse({ description: 'Invalid refresh token' })
-  async refreshToken(@Body() dto: RefreshTokenReqDTO): Promise<RefreshTokenRespDTO> {
+  async refreshToken(
+    @Body() dto: RefreshTokenReqDTO,
+  ): Promise<RefreshTokenRespDTO> {
     return this.authService.refreshToken(dto);
   }
 
@@ -158,7 +197,10 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Resend verification email' })
   @ApiBody({ type: ResendVerificationReqDTO })
-  @ApiOkResponse({ type: ResendVerificationRespDTO, description: 'Verification email sent' })
+  @ApiOkResponse({
+    type: ResendVerificationRespDTO,
+    description: 'Verification email sent',
+  })
   @ApiNotFoundResponse({ description: 'User not found' })
   @ApiBadRequestResponse({ description: 'Email already verified' })
   async resendVerification(
@@ -209,7 +251,9 @@ export class AuthController {
     type: SwitchRoleRespDTO,
     description: 'Role switched, new tokens issued',
   })
-  @ApiBadRequestResponse({ description: 'User does not have the requested role' })
+  @ApiBadRequestResponse({
+    description: 'User does not have the requested role',
+  })
   async switchRole(
     @CurrentUser() user: any,
     @Body() dto: SwitchRoleReqDTO,

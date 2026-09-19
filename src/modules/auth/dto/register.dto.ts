@@ -11,7 +11,10 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Gender } from '@prisma/client';
 
 export class RegisterReqDTO {
-  @ApiProperty({ example: 'user@gmail.com', description: 'Email for the account' })
+  @ApiProperty({
+    example: 'user@gmail.com',
+    description: 'Email for the account',
+  })
   @IsEmail()
   email: string;
 
@@ -36,7 +39,10 @@ export class RegisterReqDTO {
   @MaxLength(100)
   lastName: string;
 
-  @ApiProperty({ example: '2002-05-15', description: 'Date of birth (ISO string)' })
+  @ApiProperty({
+    example: '2002-05-15',
+    description: 'Date of birth (ISO string)',
+  })
   @IsString()
   dateOfBirth: string;
 
@@ -68,6 +74,8 @@ export class RegisterRespDTO {
   @ApiProperty({ example: true })
   success: boolean;
 
-  @ApiProperty({ example: 'Tài khoản đã được tạo. Vui lòng kiểm tra email để xác minh.' })
+  @ApiProperty({
+    example: 'Tài khoản đã được tạo. Vui lòng kiểm tra email để xác minh.',
+  })
   message: string;
 }

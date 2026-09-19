@@ -99,7 +99,10 @@ export class DeadlinePolicyService {
   }
 
   async assertApprovalOpen(periodId: number): Promise<DeadlineRow | null> {
-    return this.assertSingleDeadlineOpen(periodId, DeadlineType.TEACHER_APPROVAL);
+    return this.assertSingleDeadlineOpen(
+      periodId,
+      DeadlineType.TEACHER_APPROVAL,
+    );
   }
 
   /**
@@ -134,7 +137,10 @@ export class DeadlinePolicyService {
   async assertFinalSubmissionOpen(
     periodId: number,
   ): Promise<DeadlineRow | null> {
-    return this.assertSingleDeadlineOpen(periodId, DeadlineType.FINAL_SUBMISSION);
+    return this.assertSingleDeadlineOpen(
+      periodId,
+      DeadlineType.FINAL_SUBMISSION,
+    );
   }
 
   async assertMaxStudentsAllowed(
@@ -143,7 +149,9 @@ export class DeadlinePolicyService {
   ): Promise<void> {
     const config = await this.ensureGovernanceConfig(periodId);
     if (!Number.isInteger(maxStudents) || maxStudents < 1) {
-      throw new BadRequestException('Sĩ số tối đa của đề tài phải từ 1 trở lên.');
+      throw new BadRequestException(
+        'Sĩ số tối đa của đề tài phải từ 1 trở lên.',
+      );
     }
 
     if (maxStudents > config.max_students_per_topic) {
@@ -166,7 +174,9 @@ export class DeadlinePolicyService {
     ]);
 
     if (!teacher) {
-      throw new NotFoundException(`Không tìm thấy giảng viên có id ${teacherId}`);
+      throw new NotFoundException(
+        `Không tìm thấy giảng viên có id ${teacherId}`,
+      );
     }
 
     const [override, usedTopics] = await Promise.all([
@@ -188,7 +198,8 @@ export class DeadlinePolicyService {
       }),
     ]);
 
-    const assignedQuota = override?.assigned_quota ?? config.default_topic_limit;
+    const assignedQuota =
+      override?.assigned_quota ?? config.default_topic_limit;
     return {
       teacherId,
       assignedQuota,

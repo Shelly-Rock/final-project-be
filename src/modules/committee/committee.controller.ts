@@ -11,7 +11,11 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { CommitteeService } from './committee.service';
-import { CreateCommitteeDto, UpdateCommitteeDto, CommitteeQueryDto } from './committee.dto';
+import {
+  CreateCommitteeDto,
+  UpdateCommitteeDto,
+  CommitteeQueryDto,
+} from './committee.dto';
 import { JwtAuthGuard } from '@/core/auth/guards/jwtAuth.guard';
 
 @Controller('committees')

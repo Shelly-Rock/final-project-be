@@ -348,3 +348,11 @@ export class TopicAvailableQueryDto {
   @Max(100)
   limit = 20;
 }
+
+export class RegisterTopicDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  studentMessage?: string;
+}

@@ -4,11 +4,7 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
-import {
-  AuditAction,
-  AuditEntityType,
-  Prisma,
-} from '@prisma/client';
+import { AuditAction, AuditEntityType, Prisma } from '@prisma/client';
 import { PrismaService } from '@/core/database/prisma/prisma.service';
 import { AuditService } from '@/modules/audit/audit.service';
 import { CreateRoleDto, UpdateRoleDto, RoleResponseDto } from './dto';
@@ -225,10 +221,7 @@ export class RoleService {
     return { success: true, message: `Đã xóa mềm role '${role.name}'` };
   }
 
-  async restore(
-    id: number,
-    actorUserId: number,
-  ): Promise<RoleResponseDto> {
+  async restore(id: number, actorUserId: number): Promise<RoleResponseDto> {
     const role = await this.prisma.role.findUnique({
       where: { id },
     });
@@ -252,7 +245,11 @@ export class RoleService {
       action: AuditAction.UPDATE,
       entity_type: AuditEntityType.ROLE,
       entity_id: id,
-      before_data: { id: role.id, name: role.name, deleted_at: role.deleted_at.toISOString() },
+      before_data: {
+        id: role.id,
+        name: role.name,
+        deleted_at: role.deleted_at.toISOString(),
+      },
       after_data: this.snapshot(restoredRole),
       reason: `Khôi phục role '${role.name}'.`,
     });
@@ -305,12 +302,14 @@ export class RoleService {
       action: AuditAction.ASSIGN,
       entity_type: AuditEntityType.ROLE,
       entity_id: roleId,
-      before_data: { permission_ids: role.permissions.map(({ permission }) => permission.id) },
+      before_data: {
+        permission_ids: role.permissions.map(({ permission }) => permission.id),
+      },
       after_data: { permission_ids: uniquePermissionIds },
       reason: `Gán permissions cho role '${role.name}'.`,
     });
 
-    return this.toResponse(updatedRole as RoleWithPermissions);
+    return this.toResponse(updatedRole);
   }
 
   async getPermissions(roleId: number) {

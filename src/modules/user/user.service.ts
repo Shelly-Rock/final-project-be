@@ -1,4 +1,10 @@
-import { Injectable, NotFoundException, ConflictException, BadRequestException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+  Logger,
+} from '@nestjs/common';
 import { PrismaService } from '@core/database/prisma/prisma.service';
 import { AuditService } from '@/modules/audit/audit.service';
 import { AuditAction, AuditEntityType } from '@prisma/client';
@@ -16,13 +22,20 @@ export class UserService {
     private readonly audit: AuditService,
   ) {}
 
-  async create(dto: CreateUserReqDTO, actorUserId: number): Promise<UserRespDTO> {
-    const existingUsername = await this.prisma.user.findUnique({ where: { username: dto.username } });
+  async create(
+    dto: CreateUserReqDTO,
+    actorUserId: number,
+  ): Promise<UserRespDTO> {
+    const existingUsername = await this.prisma.user.findUnique({
+      where: { username: dto.username },
+    });
     if (existingUsername) {
       throw new ConflictException(`Username "${dto.username}" đã tồn tại.`);
     }
 
-    const existingEmail = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    const existingEmail = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
     if (existingEmail) {
       throw new ConflictException(`Email "${dto.email}" đã tồn tại.`);
     }
@@ -40,7 +53,9 @@ export class UserService {
         },
         include: {
           user_roles: {
-            include: { role: { select: { id: true, name: true, display_name: true } } },
+            include: {
+              role: { select: { id: true, name: true, display_name: true } },
+            },
           },
         },
       });
@@ -48,7 +63,10 @@ export class UserService {
       if (dto.role_ids && dto.role_ids.length > 0) {
         const uniqueRoleIds = Array.from(new Set(dto.role_ids));
         await tx.userRole.createMany({
-          data: uniqueRoleIds.map((role_id) => ({ user_id: created.id, role_id })),
+          data: uniqueRoleIds.map((role_id) => ({
+            user_id: created.id,
+            role_id,
+          })),
           skipDuplicates: true,
         });
       }
@@ -57,7 +75,9 @@ export class UserService {
         where: { id: created.id },
         include: {
           user_roles: {
-            include: { role: { select: { id: true, name: true, display_name: true } } },
+            include: {
+              role: { select: { id: true, name: true, display_name: true } },
+            },
           },
         },
       });
@@ -76,12 +96,18 @@ export class UserService {
     return this.toResponse(user);
   }
 
-  async update(id: number, dto: UpdateUserReqDTO, actorUserId: number): Promise<UserRespDTO> {
+  async update(
+    id: number,
+    dto: UpdateUserReqDTO,
+    actorUserId: number,
+  ): Promise<UserRespDTO> {
     const user = await this.prisma.user.findUnique({
       where: { id },
       include: {
         user_roles: {
-          include: { role: { select: { id: true, name: true, display_name: true } } },
+          include: {
+            role: { select: { id: true, name: true, display_name: true } },
+          },
         },
       },
     });
@@ -91,9 +117,13 @@ export class UserService {
     }
 
     if (dto.email && dto.email !== user.email) {
-      const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
+      const existing = await this.prisma.user.findUnique({
+        where: { email: dto.email },
+      });
       if (existing && existing.id !== id) {
-        throw new ConflictException(`Email "${dto.email}" đã được sử dụng bởi user khác.`);
+        throw new ConflictException(
+          `Email "${dto.email}" đã được sử dụng bởi user khác.`,
+        );
       }
     }
 
@@ -103,7 +133,8 @@ export class UserService {
       const updateData: any = {};
       if (dto.email !== undefined) updateData.email = dto.email;
       if (dto.is_active !== undefined) updateData.is_active = dto.is_active;
-      if (dto.must_change_password !== undefined) updateData.must_change_password = dto.must_change_password;
+      if (dto.must_change_password !== undefined)
+        updateData.must_change_password = dto.must_change_password;
       if (dto.password) {
         updateData.password_hash = await bcrypt.hash(dto.password, 10);
       }
@@ -113,7 +144,9 @@ export class UserService {
         data: updateData,
         include: {
           user_roles: {
-            include: { role: { select: { id: true, name: true, display_name: true } } },
+            include: {
+              role: { select: { id: true, name: true, display_name: true } },
+            },
           },
         },
       });
@@ -133,7 +166,9 @@ export class UserService {
         where: { id },
         include: {
           user_roles: {
-            include: { role: { select: { id: true, name: true, display_name: true } } },
+            include: {
+              role: { select: { id: true, name: true, display_name: true } },
+            },
           },
         },
       });
@@ -182,7 +217,9 @@ export class UserService {
       where: { id },
       include: {
         user_roles: {
-          include: { role: { select: { id: true, name: true, display_name: true } } },
+          include: {
+            role: { select: { id: true, name: true, display_name: true } },
+          },
         },
       },
     });
@@ -200,7 +237,9 @@ export class UserService {
         data: { deleted_at: null },
         include: {
           user_roles: {
-            include: { role: { select: { id: true, name: true, display_name: true } } },
+            include: {
+              role: { select: { id: true, name: true, display_name: true } },
+            },
           },
         },
       });
@@ -230,7 +269,9 @@ export class UserService {
         where,
         include: {
           user_roles: {
-            include: { role: { select: { id: true, name: true, display_name: true } } },
+            include: {
+              role: { select: { id: true, name: true, display_name: true } },
+            },
           },
         },
         skip,
@@ -254,7 +295,9 @@ export class UserService {
       where: { id },
       include: {
         user_roles: {
-          include: { role: { select: { id: true, name: true, display_name: true } } },
+          include: {
+            role: { select: { id: true, name: true, display_name: true } },
+          },
         },
       },
     });
@@ -289,11 +332,12 @@ export class UserService {
       created_at: user.created_at.toISOString(),
       updated_at: user.updated_at.toISOString(),
       deleted_at: user.deleted_at?.toISOString() ?? null,
-      roles: user.user_roles?.map((ur: any) => ({
-        role_id: ur.role.id,
-        role_name: ur.role.name,
-        role_display_name: ur.role.display_name,
-      })) ?? [],
+      roles:
+        user.user_roles?.map((ur: any) => ({
+          role_id: ur.role.id,
+          role_name: ur.role.name,
+          role_display_name: ur.role.display_name,
+        })) ?? [],
     };
   }
 }

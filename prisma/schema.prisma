@@ -59,17 +59,16 @@ model User {
   username                   String                      @unique
   id                         Int                         @id @default(autoincrement())
   must_change_password       Boolean                     @default(true)
+  audit_logs                 audit_logs[]
   email_verification_tokens  email_verification_tokens[]
+  updated_governance_configs period_governance_configs[] @relation("GovernanceConfigUpdatedBy")
+  assigned_projects          Project[]                   @relation("ProjectAssignedBy")
+  decided_projects           Project[]                   @relation("ProjectDecidedBy")
   secretary                  Secretary?
   student                    Student?
   teacher                    Teacher?
-  user_roles                 UserRole[]
-  // Quan hệ ngược cho mảng quản trị đề tài (actor luôn lấy từ JWT, không nhận từ body).
   topic_audits               topic_audits[]
-  audit_logs                 audit_logs[]
-  assigned_projects          Project[]                   @relation("ProjectAssignedBy")
-  decided_projects           Project[]                   @relation("ProjectDecidedBy")
-  updated_governance_configs period_governance_configs[] @relation("GovernanceConfigUpdatedBy")
+  user_roles                 UserRole[]
 
   @@map("users")
 }
@@ -77,8 +76,8 @@ model User {
 model UserRole {
   user_id Int
   role_id Int
-  user    User @relation(fields: [user_id], references: [id], onDelete: Cascade)
   role    Role @relation(fields: [role_id], references: [id])
+  user    User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@id([user_id, role_id])
   @@index([role_id])
@@ -107,8 +106,8 @@ model Student {
   independent_scores independent_scores[]
   project            Project?
   scoring_results    scoring_results[]
-  thesis_revisions   thesis_revisions[]
   user               User?                @relation(fields: [user_id], references: [id])
+  thesis_revisions   thesis_revisions[]
 
   @@index([student_id])
   @@index([class_name])
@@ -131,9 +130,9 @@ model Department {
   faculty_id       String             @db.VarChar(50)
   created_at       DateTime           @default(now())
   faculty          Faculty            @relation(fields: [faculty_id], references: [id])
-  teachers         Teacher[]
-  secretary        Secretary?
   report_templates report_templates[]
+  secretary        Secretary?
+  teachers         Teacher[]
 
   @@map("departments")
 }
@@ -180,8 +179,8 @@ model Secretary {
   created_at    DateTime    @default(now())
   updated_at    DateTime    @updatedAt
   deleted_at    DateTime?
-  user          User        @relation(fields: [user_id], references: [id])
   department    Department? @relation(fields: [department_id], references: [id])
+  user          User        @relation(fields: [user_id], references: [id])
 
   @@map("secretaries")
 }
@@ -196,8 +195,6 @@ model Project {
   created_at               DateTime                   @default(now())
   updated_at               DateTime                   @updatedAt
   deleted_at               DateTime?
-  // Một đề tài có thể phục vụ nhiều sinh viên: topic_id KHÔNG còn unique.
-  // Mỗi sinh viên vẫn chỉ có một Project (student_id @unique).
   topic_id                 Int?
   status                   ProjectStatus              @default(APPROVED)
   deadline_id              Int?
@@ -208,19 +205,18 @@ model Project {
   moderator_note           String?
   is_leader                Boolean                    @default(false)
   assigned_task            String?
+  student_message          String?
   defense_session_projects defense_session_projects[]
   independent_scores       independent_scores[]
-  thesis_revisions         thesis_revisions[]
+  assigned_by              User?                      @relation("ProjectAssignedBy", fields: [assigned_by_user_id], references: [id])
+  deadline                 period_deadlines?          @relation(fields: [deadline_id], references: [id])
+  decided_by               User?                      @relation("ProjectDecidedBy", fields: [decided_by_user_id], references: [id])
   student                  Student                    @relation(fields: [student_id], references: [id])
   teacher                  Teacher                    @relation(fields: [teacher_id], references: [id])
   topics                   topics?                    @relation(fields: [topic_id], references: [id])
   scoring_results          scoring_results?
-  deadline                 period_deadlines?          @relation(fields: [deadline_id], references: [id])
-  assigned_by              User?                      @relation("ProjectAssignedBy", fields: [assigned_by_user_id], references: [id])
-  decided_by               User?                      @relation("ProjectDecidedBy", fields: [decided_by_user_id], references: [id])
+  thesis_revisions         thesis_revisions[]
 
-  // Nhiều sinh viên cùng một đề tài (topic_id không còn unique) nhưng không
-  // được đăng ký lặp lại chính đề tài đó.
   @@unique([topic_id, student_id])
   @@index([teacher_id])
   @@index([topic_id])
@@ -361,8 +357,8 @@ model final_submissions {
   created_at              DateTime         @default(now())
   updated_at              DateTime         @updatedAt
   deleted_at              DateTime?
-  topics                  topics           @relation(fields: [topic_id], references: [id])
   student                 Student          @relation(fields: [submitted_by_student_id], references: [id])
+  topics                  topics           @relation(fields: [topic_id], references: [id])
 
   @@index([topic_id])
 }
@@ -474,8 +470,8 @@ model progress_reports {
   created_at           DateTime              @default(now())
   updated_at           DateTime
   deleted_at           DateTime?
+  deadline             period_deadlines?     @relation(fields: [deadline_id], references: [id])
   registration_periods registration_periods? @relation(fields: [period_id], references: [id])
-  deadline             period_deadlines?     @relation(fields: [deadline_id], references: [id], onDelete: SetNull)
 
   @@unique([student_id, deadline_id])
   @@index([period_id])
@@ -490,7 +486,6 @@ model registration_periods {
   semester                  String                     @db.VarChar(10)
   school_year               String                     @db.VarChar(20)
   start_date                DateTime                   @db.Date
-  // Giữ hai cột này để tương thích API cũ; period_deadlines mới là nguồn chính.
   teacher_deadline          DateTime
   student_deadline          DateTime
   default_quota             Int
@@ -499,31 +494,30 @@ model registration_periods {
   department_student_limits Json?
   created_at                DateTime                   @default(now())
   updated_at                DateTime
-  progress_reports          progress_reports[]
-  teacher_quotas            teacher_quotas[]
-  topics                    topics[]
   governance_config         period_governance_configs?
-  topic_code_sequences      topic_code_sequences[]
+  progress_reports          progress_reports[]
   report_templates          report_templates[]
+  teacher_quotas            teacher_quotas[]
+  topic_code_sequences      topic_code_sequences[]
+  topics                    topics[]
 }
 
 model report_templates {
-  id             Int                   @id @default(autoincrement())
-  name           String
-  description    String?
-  type           TemplateType
-  milestone_type MilestoneType         @default(PROGRESS_REPORT)
-  file_url       String
-  file_name      String
-  file_size      Int
-  department_id  String?               @db.VarChar(50)
-  period_id      Int?
-  is_cloned      Boolean               @default(false)
-  created_at     DateTime              @default(now())
-  updated_at     DateTime
-  deleted_at     DateTime?
-  department     Department?           @relation(fields: [department_id], references: [id])
-  period         registration_periods? @relation(fields: [period_id], references: [id])
+  id            Int                   @id @default(autoincrement())
+  name          String
+  description   String?
+  file_url      String
+  file_name     String
+  file_size     Int
+  department_id String?               @db.VarChar(50)
+  period_id     Int?
+  is_cloned     Boolean               @default(false)
+  created_at    DateTime              @default(now())
+  updated_at    DateTime
+  deleted_at    DateTime?
+  deadlines     period_deadlines[]
+  department    Department?           @relation(fields: [department_id], references: [id])
+  period        registration_periods? @relation(fields: [period_id], references: [id])
 
   @@index([department_id])
   @@index([period_id])
@@ -541,13 +535,11 @@ model scoring_results {
   is_final_passed     Boolean   @default(false)
   final_status        String?
   score_sheet_url     String?
-  // Giai đoạn 6: tính trọng số + điểm thưởng + công bố bảng điểm
   bonus_score         Float     @default(0)
   bonus_note          String?
   bonus_by_teacher_id Int?
   is_published        Boolean   @default(false)
   published_at        DateTime?
-  // Giai đoạn 7: hạn chỉnh sửa hồ sơ + xếp hạng
   revision_deadline   DateTime?
   rank                Int?
   rank_override       Int?
@@ -625,8 +617,8 @@ model topics {
   name                 String               @db.VarChar(255)
   english_name         String?              @db.VarChar(255)
   description          String
-  objectives           String?              @db.Text
-  technologies         String?              @db.Text
+  objectives           String?
+  technologies         String?
   max_students         Int
   registered_students  Int                  @default(0)
   status               TopicStatus          @default(PENDING)
@@ -638,9 +630,9 @@ model topics {
   created_at           DateTime             @default(now())
   updated_at           DateTime
   exception_requests   exception_requests[]
+  final_submissions    final_submissions?
   projects             Project[]
   audits               topic_audits[]
-  final_submissions    final_submissions?
   registration_periods registration_periods @relation(fields: [period_id], references: [id], onDelete: Cascade)
   teachers             Teacher              @relation(fields: [teacher_id], references: [id])
 
@@ -655,15 +647,14 @@ model period_governance_configs {
   max_topic_limit        Int                  @default(10)
   max_students_per_topic Int                  @default(3)
   alerts_enabled         Boolean              @default(true)
-  alert_offsets_days     Json                 @default("[3,1,0]")
+  alert_offsets_days     Json                 @default("[3, 1, 0]")
   last_alert_run_at      DateTime?
   updated_by_user_id     Int?
   created_at             DateTime             @default(now())
   updated_at             DateTime             @updatedAt
-  period                 registration_periods @relation(fields: [period_id], references: [id], onDelete: Cascade)
-  updated_by             User?                @relation("GovernanceConfigUpdatedBy", fields: [updated_by_user_id], references: [id], onDelete: SetNull)
-  // Deadline dùng period_id làm FK trực tiếp đến period_id unique của config.
   deadlines              period_deadlines[]   @relation("GovernanceConfigDeadlines")
+  period                 registration_periods @relation(fields: [period_id], references: [id], onDelete: Cascade)
+  updated_by             User?                @relation("GovernanceConfigUpdatedBy", fields: [updated_by_user_id], references: [id])
 
   @@map("period_governance_configs")
 }
@@ -678,10 +669,12 @@ model period_deadlines {
   enabled          Boolean                   @default(true)
   created_at       DateTime                  @default(now())
   updated_at       DateTime                  @updatedAt
-  config           period_governance_configs @relation("GovernanceConfigDeadlines", fields: [period_id], references: [period_id], onDelete: Cascade)
+  template_id      Int?
   alerts           deadline_alert_logs[]
-  projects         Project[]
+  config           period_governance_configs @relation("GovernanceConfigDeadlines", fields: [period_id], references: [period_id], onDelete: Cascade)
+  template         report_templates?         @relation(fields: [template_id], references: [id])
   progress_reports progress_reports[]
+  projects         Project[]
 
   @@unique([period_id, type, seq])
   @@index([deadline_at])
@@ -717,8 +710,8 @@ model topic_audits {
   reason        String
   actor_user_id Int
   created_at    DateTime         @default(now())
+  actor         User             @relation(fields: [actor_user_id], references: [id])
   topic         topics           @relation(fields: [topic_id], references: [id], onDelete: Cascade)
-  actor         User             @relation(fields: [actor_user_id], references: [id], onDelete: Restrict)
 
   @@index([topic_id, created_at])
   @@index([actor_user_id])
@@ -735,7 +728,7 @@ model audit_logs {
   after_data    Json?
   reason        String?
   created_at    DateTime        @default(now())
-  actor         User            @relation(fields: [actor_user_id], references: [id], onDelete: Restrict)
+  actor         User            @relation(fields: [actor_user_id], references: [id])
 
   @@index([entity_type, entity_id, created_at])
   @@index([actor_user_id])
@@ -814,11 +807,10 @@ enum RegistrationPeriodStatus {
 }
 
 enum ReportStatus {
-  PENDING_TEACHER // SV mới nộp, chờ GV duyệt
-  REVISION_REQUESTED // GV từ chối, yêu cầu SV sửa lại
-  APPROVED_BY_TEACHER // GV đã duyệt, chờ Thư ký lưu trữ
-  ARCHIVED // Thư ký đã lưu trữ (hoàn tất)
-  // Giữ các trạng thái cũ để không breaking existing reports
+  PENDING_TEACHER
+  REVISION_REQUESTED
+  APPROVED_BY_TEACHER
+  ARCHIVED
   PENDING
   APPROVED
   REJECTED
@@ -917,20 +909,6 @@ enum SubmissionType {
 enum TeacherQuotaStatus {
   SUFFICIENT
   INSUFFICIENT
-}
-
-enum TemplateType {
-  MONTHLY_REPORT
-  MIDTERM_REPORT
-  FINAL_REPORT
-  PROPOSAL
-  PRESENTATION
-}
-
-enum MilestoneType {
-  TOPIC_REGISTRATION // Giai đoạn 1: Đăng ký đề tài
-  PROGRESS_REPORT // Giai đoạn 2: Báo cáo tiến độ định kỳ
-  EXCEPTION_REQUEST // Giai đoạn 3: Biểu mẫu ngoại lệ (gia hạn, hủy đề tài...)
 }
 
 enum TopicStatus {

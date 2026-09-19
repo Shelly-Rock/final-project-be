@@ -25,6 +25,7 @@ import {
   UpdateStudentProgressDto,
   StudentProgressQueryDto,
   NotificationQueryDto,
+  TimelineQueryDto,
 } from './progress-tracking.dto';
 import { CreateNotificationDto } from '@/modules/notification/dto';
 import { JwtAuthGuard } from '@/core/auth/guards/jwtAuth.guard';
@@ -45,20 +46,18 @@ export class ProgressTrackingController {
   // teacher_id lấy từ JWT (resolve sang hồ sơ Teacher), không nhận từ body.
   @Post('templates')
   @Roles('SECRETARY', 'ADMIN') // Teachers shouldn't upload templates anymore based on new flow
-  createTemplate(
-    @CurrentUser() user: JwtUser,
-    @Body() dto: CreateTemplateDto,
-  ) {
+  createTemplate(@CurrentUser() user: JwtUser, @Body() dto: CreateTemplateDto) {
     return this.service.createTemplateForActor(user, dto);
   }
 
   @Post('templates/clone')
   @Roles('SECRETARY', 'ADMIN')
-  cloneTemplates(
-    @CurrentUser() user: JwtUser,
-    @Body() dto: CloneTemplateDto,
-  ) {
-    return this.service.cloneTemplates(user, dto.from_period_id, dto.to_period_id);
+  cloneTemplates(@CurrentUser() user: JwtUser, @Body() dto: CloneTemplateDto) {
+    return this.service.cloneTemplates(
+      user,
+      dto.from_period_id,
+      dto.to_period_id,
+    );
   }
 
   @Get('templates')
@@ -82,16 +81,13 @@ export class ProgressTrackingController {
   // student_id lấy từ JWT (resolve sang hồ sơ Student), không nhận từ body.
   @Post('reports')
   @Roles('STUDENT')
-  createReport(
-    @CurrentUser() user: JwtUser,
-    @Body() dto: CreateReportDto,
-  ) {
+  createReport(@CurrentUser() user: JwtUser, @Body() dto: CreateReportDto) {
     return this.service.createReportForActor(user, dto);
   }
 
   @Get('reports')
-  getReports(@Query() query: ReportQueryDto) {
-    return this.service.getReports(query);
+  getReports(@CurrentUser() user: JwtUser, @Query() query: ReportQueryDto) {
+    return this.service.getReports(query, user);
   }
 
   @Get('reports/:id')
@@ -122,9 +118,18 @@ export class ProgressTrackingController {
 
   // ========== Student Progress Endpoints ==========
 
+  @Get('students/my-progress')
+  @Roles('STUDENT')
+  async getMyProgress(@CurrentUser('sub') userId: number) {
+    return this.service.getMyProgress(userId);
+  }
+
   @Get('students/progress')
-  getStudentProgress(@Query() query: StudentProgressQueryDto) {
-    return this.service.getStudentProgress(query);
+  getStudentProgress(
+    @CurrentUser() user: JwtUser,
+    @Query() query: StudentProgressQueryDto,
+  ) {
+    return this.service.getStudentProgress(query, user);
   }
 
   @Get('students/progress/:studentId')
@@ -142,8 +147,17 @@ export class ProgressTrackingController {
   }
 
   @Get('students/:studentId/progress')
-  getOrCreateStudentProgress(@Param('studentId', ParseIntPipe) studentId: number) {
+  getOrCreateStudentProgress(
+    @Param('studentId', ParseIntPipe) studentId: number,
+  ) {
     return this.service.getOrCreateStudentProgress(studentId);
+  }
+
+  // ========== Timeline Endpoints ==========
+
+  @Get('timeline')
+  getTimeline(@CurrentUser() user: JwtUser, @Query() query: TimelineQueryDto) {
+    return this.service.getTimelineForActor(user, query);
   }
 
   // ========== Notification Endpoints ==========
@@ -182,18 +196,18 @@ export class ProgressTrackingController {
   // ========== Stats Endpoints ==========
 
   @Get('stats')
-  getStats() {
-    return this.service.getStats();
+  getStats(@CurrentUser() user: JwtUser) {
+    return this.service.getStats(user);
   }
 
   @Get('stats/ban-warnings')
-  getBanWarnings() {
-    return this.service.getBanWarnings();
+  getBanWarnings(@CurrentUser() user: JwtUser) {
+    return this.service.getBanWarnings(user);
   }
 
   @Get('stats/banned-students')
-  getBannedStudents() {
-    return this.service.getBannedStudents();
+  getBannedStudents(@CurrentUser() user: JwtUser) {
+    return this.service.getBannedStudents(user);
   }
 
   // ========== Admin Actions ==========

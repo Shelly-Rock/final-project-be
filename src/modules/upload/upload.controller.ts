@@ -1,4 +1,11 @@
-import { Controller, Post, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
+  Param,
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UploadService } from './upload.service';
 import { ApiTags, ApiOperation, ApiConsumes, ApiBody } from '@nestjs/swagger';
@@ -16,16 +23,11 @@ export class UploadController {
   @ApiBody({
     schema: {
       type: 'object',
-      properties: {
-        file: {
-          type: 'string',
-          format: 'binary',
-        },
-      },
+      properties: { file: { type: 'string', format: 'binary' } },
     },
   })
   @UseInterceptors(FileInterceptor('file'))
-  async uploadFile(@UploadedFile() file: Express.Multer.File) {
+  async uploadFileDefault(@UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('File is required');
     const result = await this.uploadService.uploadFileToCloudinary(file);
     return {
@@ -34,5 +36,28 @@ export class UploadController {
       fileSize: file.size,
     };
   }
-}
 
+  @Public()
+  @Post(':type')
+  @ApiOperation({ summary: 'Upload file to Cloudinary with type' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { file: { type: 'string', format: 'binary' } },
+    },
+  })
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadFileWithType(
+    @UploadedFile() file: Express.Multer.File,
+    @Param('type') type: string,
+  ) {
+    if (!file) throw new BadRequestException('File is required');
+    const result = await this.uploadService.uploadFileToCloudinary(file, type);
+    return {
+      url: result.secure_url,
+      fileName: file.originalname,
+      fileSize: file.size,
+    };
+  }
+}

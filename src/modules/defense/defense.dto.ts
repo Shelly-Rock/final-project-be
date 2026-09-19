@@ -1,6 +1,16 @@
 // Defense Session DTOs
 import { Type } from 'class-transformer';
-import { IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, Min, Max, IsArray, IsDateString } from 'class-validator';
+import {
+  IsEnum,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Min,
+  Max,
+  IsArray,
+  IsDateString,
+} from 'class-validator';
 
 export enum DefenseSessionStatus {
   SCHEDULED = 'SCHEDULED',

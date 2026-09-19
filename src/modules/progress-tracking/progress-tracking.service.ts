@@ -21,6 +21,7 @@ import {
   UpdateStudentProgressDto,
   StudentProgressQueryDto,
   NotificationQueryDto,
+  TimelineQueryDto,
   BanWarningDto,
 } from './progress-tracking.dto';
 import { CreateNotificationDto } from '@/modules/notification/dto';
@@ -38,10 +39,18 @@ export class ProgressTrackingService {
   private async resolveTeacherByUserId(userId: number) {
     const teacher = await this.prisma.teacher.findFirst({
       where: { user_id: userId, deleted_at: null },
-      select: { id: true, user_id: true, teacher_id: true, name: true, department_id: true },
+      select: {
+        id: true,
+        user_id: true,
+        teacher_id: true,
+        name: true,
+        department_id: true,
+      },
     });
     if (!teacher) {
-      throw new ForbiddenException('Tài khoản của bạn chưa được gắn với hồ sơ giảng viên.');
+      throw new ForbiddenException(
+        'Tài khoản của bạn chưa được gắn với hồ sơ giảng viên.',
+      );
     }
     return teacher;
   }
@@ -51,8 +60,11 @@ export class ProgressTrackingService {
       where: { user_id: userId, deleted_at: null },
       select: { id: true, user_id: true, student_id: true, class_name: true },
     });
+
     if (!student) {
-      throw new ForbiddenException('Tài khoản của bạn chưa được gắn với hồ sơ sinh viên.');
+      throw new ForbiddenException(
+        'Tài khoản của bạn chưa được gắn với hồ sơ sinh viên. Vui lòng liên hệ Thư ký để được hỗ trợ.',
+      );
     }
     return student;
   }
@@ -63,7 +75,9 @@ export class ProgressTrackingService {
       select: { id: true, user_id: true, department_id: true },
     });
     if (!secretary) {
-      throw new ForbiddenException('Tài khoản của bạn chưa được gắn với hồ sơ thư ký.');
+      throw new ForbiddenException(
+        'Tài khoản của bạn chưa được gắn với hồ sơ thư ký.',
+      );
     }
     return secretary;
   }
@@ -76,7 +90,11 @@ export class ProgressTrackingService {
     return this.createTemplate(secretary.department_id, dto);
   }
 
-  async cloneTemplates(user: JwtUser, fromPeriodId: number, toPeriodId: number) {
+  async cloneTemplates(
+    user: JwtUser,
+    fromPeriodId: number,
+    toPeriodId: number,
+  ) {
     const secretary = await this.resolveSecretaryByUserId(user.sub);
     if (!secretary.department_id) {
       throw new BadRequestException('Thư ký chưa được phân bổ về ngành nào.');
@@ -91,14 +109,15 @@ export class ProgressTrackingService {
     });
 
     if (!templatesToClone.length) {
-      throw new BadRequestException('Không tìm thấy mẫu nào trong đợt cũ để sao chép.');
+      throw new BadRequestException(
+        'Không tìm thấy mẫu nào trong đợt cũ để sao chép.',
+      );
     }
 
     const newTemplates = templatesToClone.map((t: any) => ({
       name: t.name,
       description: t.description,
-      type: t.type,
-      milestone_type: t.milestone_type,
+
       file_url: t.file_url,
       file_name: t.file_name,
       file_size: t.file_size,
@@ -121,7 +140,11 @@ export class ProgressTrackingService {
     return this.createReport(student.id, dto);
   }
 
-  async reviewReportForActor(user: JwtUser, reportId: number, dto: ReviewReportDto) {
+  async reviewReportForActor(
+    user: JwtUser,
+    reportId: number,
+    dto: ReviewReportDto,
+  ) {
     const teacher = await this.resolveTeacherByUserId(user.sub);
     return this.reviewReport(reportId, teacher.id, dto, user.sub);
   }
@@ -191,23 +214,45 @@ export class ProgressTrackingService {
   // ========== Template Methods ==========
 
   async createTemplate(departmentId: string, dto: CreateTemplateDto) {
-    return this.prisma.report_templates.create({
+    const { deadline_ids, ...templateData } = dto;
+
+    const newTemplate = await this.prisma.report_templates.create({
       data: {
-        ...dto,
+        ...templateData,
         department_id: departmentId,
         updated_at: new Date(),
-      } as any, // Cast to any to bypass TS error on new schema fields if client not regenerated yet
+      } as any,
     });
+
+    if (deadline_ids && deadline_ids.length > 0) {
+      await this.prisma.period_deadlines.updateMany({
+        where: { id: { in: deadline_ids } },
+        data: { template_id: newTemplate.id } as any,
+      });
+    }
+
+    return newTemplate;
   }
 
   async getTemplates(query: TemplateQueryDto) {
-    const { page = 1, limit = 20, type, department_id, period_id, milestone_type } = query;
+    const {
+      page = 1,
+      limit = 20,
+      department_id,
+      period_id,
+      is_exception,
+    } = query;
 
     const where: any = { deleted_at: null };
-    if (type) where.type = type;
     if (department_id) where.department_id = department_id;
     if (period_id) where.period_id = period_id;
-    if (milestone_type) where.milestone_type = milestone_type;
+    if (is_exception !== undefined) {
+      if (is_exception) {
+        where.deadlines = { none: {} };
+      } else {
+        where.deadlines = { some: {} };
+      }
+    }
 
     const skip = (page - 1) * limit;
 
@@ -249,43 +294,70 @@ export class ProgressTrackingService {
   // ========== Report Methods ==========
 
   async createReport(studentId: number, dto: CreateReportDto) {
-    // Check if report for this month/year already exists
-    const existingReport = await this.prisma.progress_reports.findFirst({
-      where: {
-        student_id: studentId,
-        month: dto.month,
-        year: dto.year,
-        deleted_at: null,
-      },
-    });
-
-    if (existingReport) {
-      throw new BadRequestException('Report for this month already submitted');
-    }
+    const now = new Date();
+    const finalMonth = dto.month || now.getMonth() + 1;
+    const finalYear = dto.year || now.getFullYear();
+    const finalContent = dto.content || '';
 
     // Get project info for teacher_id + period (for deadline gate)
-    const project = await this.prisma.project.findUnique({
+    const project = (await this.prisma.project.findUnique({
       where: { student_id: studentId },
       include: { topics: { select: { period_id: true } } },
-    }) as any;
+    })) as any;
 
     if (!project) {
       throw new BadRequestException('Student has no project');
     }
 
+    // if it has a deadline_id, verify it belongs to the period and is enabled
+    if (dto.deadline_id) {
+      const deadline = await this.prisma.period_deadlines.findUnique({
+        where: { id: dto.deadline_id },
+      });
+      if (
+        !deadline ||
+        !deadline.enabled ||
+        deadline.period_id !== project.topics?.period_id
+      ) {
+        throw new BadRequestException(
+          'Mốc thời gian không hợp lệ hoặc đã bị khóa.',
+        );
+      }
+    }
+
     // Enforce PERIODIC_REPORT deadline when the project is linked to a period
-    let reportDeadlineId: number | null = null;
-    let reportPeriodId: number | null = null;
     const periodId: number | null = project.topics?.period_id ?? null;
-    if (periodId) {
+    let reportDeadlineId: number | null = dto.deadline_id || null;
+    let reportPeriodId: number | null = dto.period_id || periodId;
+
+    if (!reportDeadlineId && periodId) {
       const openDeadline = await this.deadlinePolicy.assertReportOpen(periodId);
       reportDeadlineId = openDeadline?.id ?? null;
       reportPeriodId = periodId;
     }
 
+    // Check unique submission for this deadline if deadline_id is provided
+    if (reportDeadlineId) {
+      const existingForDeadline = await this.prisma.progress_reports.findFirst({
+        where: {
+          student_id: studentId,
+          deadline_id: reportDeadlineId,
+          deleted_at: null,
+        },
+      });
+      if (existingForDeadline) {
+        throw new BadRequestException(
+          'Bạn đã nộp báo cáo cho mốc thời gian này rồi.',
+        );
+      }
+    }
+
     const report = await this.prisma.progress_reports.create({
       data: {
         ...dto,
+        month: finalMonth,
+        year: finalYear,
+        content: finalContent,
         student_id: studentId,
         teacher_id: project.teacher_id,
         period_id: reportPeriodId,
@@ -300,8 +372,8 @@ export class ProgressTrackingService {
     // Send notification to teacher
     await this.createNotification({
       type: NotificationType.REPORT_SUBMITTED,
-      title: 'Sinh viên nộp báo cáo',
-      message: `Sinh viên đã nộp báo cáo tháng ${dto.month}/${dto.year}`,
+      title: 'Sinh viên nộp báo cáo / đơn từ',
+      message: `Sinh viên đã nộp: ${dto.title}`,
       sender_id: studentId,
       recipient_id: project.teacher_id,
       related_student_id: studentId,
@@ -311,13 +383,21 @@ export class ProgressTrackingService {
     return report;
   }
 
-  async getReports(query: ReportQueryDto) {
+  async getReports(query: ReportQueryDto, user?: JwtUser) {
     const { page = 1, limit = 20, status, student_id, teacher_id } = query;
 
     const where: any = { deleted_at: null };
     if (status) where.status = status;
     if (student_id) where.student_id = student_id;
-    if (teacher_id) where.teacher_id = teacher_id;
+
+    // If caller is teacher, enforce their profile ID
+    const role = (user?.role || '').toUpperCase();
+    if (role === 'TEACHER' && user?.sub) {
+      const teacher = await this.resolveTeacherByUserId(user.sub);
+      where.teacher_id = teacher.id;
+    } else if (teacher_id) {
+      where.teacher_id = teacher_id;
+    }
 
     const skip = (page - 1) * limit;
 
@@ -335,7 +415,12 @@ export class ProgressTrackingService {
       data.map(async (report: any) => {
         const student = await this.prisma.student.findUnique({
           where: { id: report.student_id },
-          select: { first_name: true, middle_name: true, last_name: true, student_id: true },
+          select: {
+            first_name: true,
+            middle_name: true,
+            last_name: true,
+            student_id: true,
+          },
         });
         const teacher = await this.prisma.teacher.findUnique({
           where: { id: report.teacher_id },
@@ -343,7 +428,9 @@ export class ProgressTrackingService {
         });
         return {
           ...report,
-          student_name: student ? `${student.first_name} ${student.middle_name} ${student.last_name}` : '',
+          student_name: student
+            ? `${student.first_name} ${student.middle_name} ${student.last_name}`
+            : '',
           studentMssv: student?.student_id,
           teacher_name: teacher?.name,
         };
@@ -360,15 +447,20 @@ export class ProgressTrackingService {
   }
 
   async getReportById(id: number) {
-    const report = await this.prisma.progress_reports.findFirst({
+    const report = (await this.prisma.progress_reports.findFirst({
       where: { id, deleted_at: null },
-    }) as any;
+    })) as any;
     if (!report) throw new NotFoundException('Report not found');
 
     // Get student and teacher info
     const student = await this.prisma.student.findUnique({
       where: { id: report.student_id },
-      select: { first_name: true, middle_name: true, last_name: true, student_id: true },
+      select: {
+        first_name: true,
+        middle_name: true,
+        last_name: true,
+        student_id: true,
+      },
     });
     const teacher = await this.prisma.teacher.findUnique({
       where: { id: report.teacher_id },
@@ -377,12 +469,19 @@ export class ProgressTrackingService {
 
     return {
       ...report,
-      student_name: student ? `${student.first_name} ${student.middle_name} ${student.last_name}` : '',
+      student_name: student
+        ? `${student.first_name} ${student.middle_name} ${student.last_name}`
+        : '',
       teacher_name: teacher?.name,
     };
   }
 
-  async reviewReport(reportId: number, reviewerId: number, dto: ReviewReportDto, actorUserId: number) {
+  async reviewReport(
+    reportId: number,
+    reviewerId: number,
+    dto: ReviewReportDto,
+    actorUserId: number,
+  ) {
     const report = await this.prisma.progress_reports.findFirst({
       where: { id: reportId },
     });
@@ -430,7 +529,9 @@ export class ProgressTrackingService {
       entity_id: reportId,
       before_data: beforeData,
       after_data: afterData,
-      reason: dto.feedback ? `Review: ${dto.feedback.substring(0, 100)}` : 'Report reviewed',
+      reason: dto.feedback
+        ? `Review: ${dto.feedback.substring(0, 100)}`
+        : 'Report reviewed',
     });
 
     // Send notification to student
@@ -438,12 +539,15 @@ export class ProgressTrackingService {
       newStatus === ReportStatus.APPROVED_BY_TEACHER
         ? NotificationType.REPORT_APPROVED
         : newStatus === ReportStatus.REVISION_REQUESTED
-        ? NotificationType.REPORT_REJECTED
-        : NotificationType.STATUS_CHANGED;
+          ? NotificationType.REPORT_REJECTED
+          : NotificationType.STATUS_CHANGED;
 
     await this.createNotification({
       type: notificationType,
-      title: newStatus === ReportStatus.APPROVED_BY_TEACHER ? 'Báo cáo được duyệt' : 'Báo cáo bị từ chối',
+      title:
+        newStatus === ReportStatus.APPROVED_BY_TEACHER
+          ? 'Báo cáo được duyệt'
+          : 'Báo cáo bị từ chối',
       message: `Báo cáo "${report.title}" đã được duyệt với điểm: ${dto.score ?? 'N/A'}. ${
         dto.feedback ? `Phản hồi: ${dto.feedback}` : ''
       }`,
@@ -456,14 +560,20 @@ export class ProgressTrackingService {
     return updatedReport;
   }
 
-  async archiveReport(reportId: number, secretaryId: number, actorUserId: number) {
+  async archiveReport(
+    reportId: number,
+    secretaryId: number,
+    actorUserId: number,
+  ) {
     const report = await this.prisma.progress_reports.findFirst({
       where: { id: reportId },
     });
 
     if (!report) throw new NotFoundException('Report not found');
     if (report.status !== ReportStatus.APPROVED_BY_TEACHER) {
-      throw new BadRequestException('Chỉ có thể lưu trữ báo cáo đã được giảng viên duyệt.');
+      throw new BadRequestException(
+        'Chỉ có thể lưu trữ báo cáo đã được giảng viên duyệt.',
+      );
     }
 
     const beforeData = {
@@ -502,12 +612,36 @@ export class ProgressTrackingService {
 
   // ========== Student Progress Methods ==========
 
-  async getStudentProgress(query: StudentProgressQueryDto) {
+  async getStudentProgress(query: StudentProgressQueryDto, user?: JwtUser) {
     const { page = 1, limit = 20, status, is_banned, teacher_id } = query;
 
     const where: any = {};
     if (status) where.status = status;
     if (is_banned !== undefined) where.is_banned = is_banned;
+
+    let targetTeacherId = teacher_id;
+    const role = (user?.role || '').toUpperCase();
+    if (role === 'TEACHER' && user?.sub) {
+      const teacher = await this.resolveTeacherByUserId(user.sub);
+      targetTeacherId = teacher.id;
+    }
+
+    if (targetTeacherId) {
+      const projects = await this.prisma.project.findMany({
+        where: {
+          teacher_id: targetTeacherId,
+          status: 'APPROVED',
+          deleted_at: null,
+        },
+        select: { id: true, student_id: true },
+      });
+      const studentIds = [
+        ...new Set(projects.map((project) => project.student_id)),
+      ];
+      where.student_id = { in: studentIds };
+    }
+
+    where.deleted_at = null;
 
     const skip = (page - 1) * limit;
 
@@ -525,17 +659,33 @@ export class ProgressTrackingService {
       (data as any[]).map(async (item: any) => {
         const student = await this.prisma.student.findUnique({
           where: { id: item.student_id },
-          select: { first_name: true, middle_name: true, last_name: true, student_id: true, class_name: true },
+          select: {
+            first_name: true,
+            middle_name: true,
+            last_name: true,
+            student_id: true,
+            class_name: true,
+          },
         });
         const project = await this.prisma.project.findFirst({
-          where: { student_id: item.student_id },
+          where: {
+            student_id: item.student_id,
+            ...(targetTeacherId ? { teacher_id: targetTeacherId } : {}),
+            status: 'APPROVED',
+            deleted_at: null,
+          },
         });
         const teacher = project
-          ? await this.prisma.teacher.findUnique({ where: { id: project.teacher_id }, select: { name: true } })
+          ? await this.prisma.teacher.findUnique({
+              where: { id: project.teacher_id },
+              select: { name: true },
+            })
           : null;
         return {
           ...item,
-          student_name: student ? `${student.first_name} ${student.middle_name} ${student.last_name}` : '',
+          student_name: student
+            ? `${student.first_name} ${student.middle_name} ${student.last_name}`
+            : '',
           student_mssv: student?.student_id,
           topic_name: project?.project_name,
           teacher_name: teacher?.name,
@@ -552,26 +702,42 @@ export class ProgressTrackingService {
     };
   }
 
+  async getMyProgress(userId: number) {
+    const student = await this.resolveStudentByUserId(userId);
+    return this.getStudentProgressById(student.id);
+  }
+
   async getStudentProgressById(studentId: number) {
-    const progress = await this.prisma.student_progress.findFirst({
+    const progress = (await this.prisma.student_progress.findFirst({
       where: { student_id: studentId },
-    }) as any;
+    })) as any;
     if (!progress) throw new NotFoundException('Student progress not found');
 
     // Get student info
     const student = await this.prisma.student.findUnique({
       where: { id: studentId },
-      select: { first_name: true, middle_name: true, last_name: true, student_id: true, class_name: true },
+      select: {
+        first_name: true,
+        middle_name: true,
+        last_name: true,
+        student_id: true,
+        class_name: true,
+      },
     });
 
     return {
       ...progress,
-      student_name: student ? `${student.first_name} ${student.middle_name} ${student.last_name}` : '',
+      student_name: student
+        ? `${student.first_name} ${student.middle_name} ${student.last_name}`
+        : '',
       student_mssv: student?.student_id,
     };
   }
 
-  async updateStudentProgress(studentId: number, dto: UpdateStudentProgressDto) {
+  async updateStudentProgress(
+    studentId: number,
+    dto: UpdateStudentProgressDto,
+  ) {
     let progress = await this.prisma.student_progress.findFirst({
       where: { student_id: studentId },
     });
@@ -702,39 +868,108 @@ export class ProgressTrackingService {
 
   // ========== Stats Methods ==========
 
-  async getStats() {
-    const [total, onTrack, extended, topicChanged, banned, pending, approved, rejected] =
-      await Promise.all([
-        this.prisma.student_progress.count(),
-        this.prisma.student_progress.count({ where: { status: ProgressStatus.ON_TRACK } }),
-        this.prisma.student_progress.count({ where: { status: ProgressStatus.EXTENDED } }),
-        this.prisma.student_progress.count({ where: { status: ProgressStatus.TOPIC_CHANGED } }),
-        this.prisma.student_progress.count({ where: { is_banned: true } }),
-        this.prisma.progress_reports.count({ where: { status: ReportStatus.PENDING } }),
-        this.prisma.progress_reports.count({ where: { status: ReportStatus.APPROVED } }),
-        this.prisma.progress_reports.count({ where: { status: ReportStatus.REJECTED } }),
-      ]);
+  private async getTeacherStudentScope(user?: JwtUser) {
+    if ((user?.role || '').toUpperCase() !== 'TEACHER' || !user.sub) {
+      return undefined;
+    }
+
+    const teacher = await this.resolveTeacherByUserId(user.sub);
+    const projects = await this.prisma.project.findMany({
+      where: {
+        teacher_id: teacher.id,
+        status: 'APPROVED',
+        deleted_at: null,
+      },
+      select: { student_id: true },
+    });
+
+    return {
+      studentIds: [...new Set(projects.map((project) => project.student_id))],
+    };
+  }
+
+  async getStats(user?: JwtUser) {
+    const scope = await this.getTeacherStudentScope(user);
+    const studentWhere = {
+      deleted_at: null,
+      ...(scope ? { student_id: { in: scope.studentIds } } : {}),
+    };
+    const reportWhere = scope
+      ? {
+          status: {
+            in: [
+              ReportStatus.PENDING,
+              ReportStatus.APPROVED,
+              ReportStatus.REJECTED,
+            ],
+          },
+          student_id: { in: scope.studentIds },
+        }
+      : undefined;
+
+    const [
+      total,
+      onTrack,
+      extended,
+      topicChanged,
+      banned,
+      pending,
+      approved,
+      rejected,
+    ] = await Promise.all([
+      this.prisma.student_progress.count({ where: studentWhere }),
+      this.prisma.student_progress.count({
+        where: { ...studentWhere, status: ProgressStatus.ON_TRACK },
+      }),
+      this.prisma.student_progress.count({
+        where: { ...studentWhere, status: ProgressStatus.EXTENDED },
+      }),
+      this.prisma.student_progress.count({
+        where: { ...studentWhere, status: ProgressStatus.TOPIC_CHANGED },
+      }),
+      this.prisma.student_progress.count({
+        where: { ...studentWhere, is_banned: true },
+      }),
+      this.prisma.progress_reports.count({
+        where: reportWhere
+          ? { ...reportWhere, status: ReportStatus.PENDING }
+          : { status: ReportStatus.PENDING },
+      }),
+      this.prisma.progress_reports.count({
+        where: reportWhere
+          ? { ...reportWhere, status: ReportStatus.APPROVED }
+          : { status: ReportStatus.APPROVED },
+      }),
+      this.prisma.progress_reports.count({
+        where: reportWhere
+          ? { ...reportWhere, status: ReportStatus.REJECTED }
+          : { status: ReportStatus.REJECTED },
+      }),
+    ]);
 
     return {
       total_students: total,
       on_track: onTrack,
-      extended: extended,
+      extended,
       topic_changed: topicChanged,
-      banned: banned,
+      banned,
       pending_reports: pending,
       approved_reports: approved,
       rejected_reports: rejected,
     };
   }
 
-  async getBanWarnings(): Promise<BanWarningDto[]> {
+  async getBanWarnings(user?: JwtUser): Promise<BanWarningDto[]> {
+    const scope = await this.getTeacherStudentScope(user);
     const warnings: BanWarningDto[] = [];
 
     // Get students who haven't submitted reports recently
     const progressRecords = await this.prisma.student_progress.findMany({
       where: {
+        deleted_at: null,
         is_banned: false,
         status: 'ON_TRACK',
+        ...(scope ? { student_id: { in: scope.studentIds } } : {}),
       },
     });
 
@@ -756,7 +991,9 @@ export class ProgressTrackingService {
         if (daysUntilBan <= 7) {
           warnings.push({
             student_id: progress.student_id,
-            student_name: student ? `${student.first_name} ${student.middle_name} ${student.last_name}` : '',
+            student_name: student
+              ? `${student.first_name} ${student.middle_name} ${student.last_name}`
+              : '',
             days_until_ban: Math.max(0, daysUntilBan),
             reports_submitted: progress.total_reports_submitted,
             reports_required: progress.total_reports_required,
@@ -768,9 +1005,14 @@ export class ProgressTrackingService {
     return warnings;
   }
 
-  async getBannedStudents() {
+  async getBannedStudents(user?: JwtUser) {
+    const scope = await this.getTeacherStudentScope(user);
     const bannedRecords = await this.prisma.student_progress.findMany({
-      where: { is_banned: true },
+      where: {
+        deleted_at: null,
+        is_banned: true,
+        ...(scope ? { student_id: { in: scope.studentIds } } : {}),
+      },
     });
 
     // Enrich with student info
@@ -778,11 +1020,19 @@ export class ProgressTrackingService {
       (bannedRecords as any[]).map(async (record) => {
         const student = await this.prisma.student.findUnique({
           where: { id: record.student_id },
-          select: { first_name: true, middle_name: true, last_name: true, student_id: true, class_name: true },
+          select: {
+            first_name: true,
+            middle_name: true,
+            last_name: true,
+            student_id: true,
+            class_name: true,
+          },
         });
         return {
           ...record,
-          student_name: student ? `${student.first_name} ${student.middle_name} ${student.last_name}` : '',
+          student_name: student
+            ? `${student.first_name} ${student.middle_name} ${student.last_name}`
+            : '',
           student_mssv: student?.student_id,
         };
       }),
@@ -837,6 +1087,86 @@ export class ProgressTrackingService {
         total_reports_submitted: count,
         last_report_date: new Date(),
       },
+    });
+  }
+
+  // ========== Timeline Logic ==========
+
+  async getTimelineForActor(user: JwtUser, query: TimelineQueryDto) {
+    let studentId = query.student_id;
+    const role = (user.role || '').toUpperCase();
+
+    // Sinh viên chỉ xem timeline của mình
+    if (role === 'STUDENT') {
+      const student = await this.resolveStudentByUserId(user.sub);
+      studentId = student.id;
+    }
+
+    let periodId = query.period_id;
+    if (!periodId) {
+      // Tìm đợt đang active
+      const activePeriod = await this.prisma.registration_periods.findFirst({
+        where: { status: { in: ['OPEN', 'UPCOMING'] } },
+        orderBy: { start_date: 'desc' },
+      });
+      if (activePeriod) {
+        periodId = activePeriod.id;
+      } else {
+        const latest = await this.prisma.registration_periods.findFirst({
+          orderBy: { id: 'desc' },
+        });
+        periodId = latest?.id || 0;
+      }
+    }
+
+    return this.getTimeline(periodId, studentId);
+  }
+
+  async getTimeline(periodId: number, studentId?: number) {
+    const deadlines = await this.prisma.period_deadlines.findMany({
+      where: { period_id: periodId, enabled: true },
+      orderBy: { deadline_at: 'asc' },
+      include: { template: true },
+    });
+
+    let submissions = [];
+    if (studentId) {
+      submissions = await this.prisma.progress_reports.findMany({
+        where: { student_id: studentId, period_id: periodId, deleted_at: null },
+      });
+    }
+
+    return deadlines.map((deadline: any) => {
+      const submission = submissions.find((s) => s.deadline_id === deadline.id);
+
+      return {
+        id: deadline.id,
+        period_id: deadline.period_id,
+        type: deadline.type,
+        seq: deadline.seq,
+        label: deadline.label,
+        deadline_at: deadline.deadline_at,
+        template: deadline.template
+          ? {
+              id: deadline.template.id,
+              name: deadline.template.name,
+              file_url: deadline.template.file_url,
+              file_name: deadline.template.file_name,
+            }
+          : null,
+        submission: submission
+          ? {
+              id: submission.id,
+              title: submission.title,
+              status: submission.status,
+              file_url: submission.file_url,
+              file_name: submission.file_name,
+              score: submission.score,
+              feedback: submission.feedback,
+              submitted_at: submission.created_at,
+            }
+          : null,
+      };
     });
   }
 

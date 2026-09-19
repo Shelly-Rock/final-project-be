@@ -5,10 +5,7 @@ import { EmailModule } from '@/modules/email';
 import { CoreAuthModule } from '@/core/auth/auth.module';
 
 @Module({
-  imports: [
-    EmailModule,
-    CoreAuthModule,
-  ],
+  imports: [EmailModule, CoreAuthModule],
   controllers: [AuthController],
   providers: [AuthService],
   exports: [AuthService],

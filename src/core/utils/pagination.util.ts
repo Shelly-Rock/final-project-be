@@ -16,7 +16,13 @@ export class PaginationService {
       include?: any;
       select?: any;
     },
-  ): Promise<{ data: T[]; total: number; page: number; limit: number; totalPages: number }> {
+  ): Promise<{
+    data: T[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> {
     const page = options.page || 1;
     const limit = options.limit || 20;
     const skip = (page - 1) * limit;

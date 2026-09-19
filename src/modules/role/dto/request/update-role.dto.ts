@@ -1,13 +1,25 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsArray, IsInt, IsBoolean } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsArray,
+  IsInt,
+  IsBoolean,
+} from 'class-validator';
 
 export class UpdateRoleDto {
-  @ApiPropertyOptional({ example: 'Người kiểm duyệt', description: 'Tên hiển thị' })
+  @ApiPropertyOptional({
+    example: 'Người kiểm duyệt',
+    description: 'Tên hiển thị',
+  })
   @IsString()
   @IsOptional()
   display_name?: string;
 
-  @ApiPropertyOptional({ example: 'Quyền kiểm duyệt nội dung', description: 'Mô tả' })
+  @ApiPropertyOptional({
+    example: 'Quyền kiểm duyệt nội dung',
+    description: 'Mô tả',
+  })
   @IsString()
   @IsOptional()
   description?: string;
@@ -17,7 +29,10 @@ export class UpdateRoleDto {
   @IsOptional()
   priority?: number;
 
-  @ApiPropertyOptional({ example: [1, 2, 3], description: 'Mảng ID permissions' })
+  @ApiPropertyOptional({
+    example: [1, 2, 3],
+    description: 'Mảng ID permissions',
+  })
   @IsArray()
   @IsInt({ each: true })
   @IsOptional()

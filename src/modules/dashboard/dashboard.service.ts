@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@/core/database/prisma/prisma.service';
-import { ProjectStatus, ReportStatus, TeacherQuotaStatus } from '@prisma/client';
+import {
+  ProjectStatus,
+  ReportStatus,
+  TeacherQuotaStatus,
+} from '@prisma/client';
 
 @Injectable()
 export class DashboardService {
@@ -27,14 +31,28 @@ export class DashboardService {
       this.prisma.project.count({ where: { deleted_at: null } }),
       this.prisma.department.count(),
       this.prisma.topics.count(),
-      this.prisma.project.count({ where: { status: ProjectStatus.PENDING, deleted_at: null } }),
-      this.prisma.project.count({ where: { status: ProjectStatus.APPROVED, deleted_at: null } }),
-      this.prisma.project.count({ where: { status: ProjectStatus.REJECTED, deleted_at: null } }),
-      this.prisma.progress_reports.count({ where: { status: ReportStatus.PENDING, deleted_at: null } }),
-      this.prisma.progress_reports.count({ where: { status: ReportStatus.APPROVED, deleted_at: null } }),
-      this.prisma.progress_reports.count({ where: { status: ReportStatus.REJECTED, deleted_at: null } }),
+      this.prisma.project.count({
+        where: { status: ProjectStatus.PENDING, deleted_at: null },
+      }),
+      this.prisma.project.count({
+        where: { status: ProjectStatus.APPROVED, deleted_at: null },
+      }),
+      this.prisma.project.count({
+        where: { status: ProjectStatus.REJECTED, deleted_at: null },
+      }),
+      this.prisma.progress_reports.count({
+        where: { status: ReportStatus.PENDING, deleted_at: null },
+      }),
+      this.prisma.progress_reports.count({
+        where: { status: ReportStatus.APPROVED, deleted_at: null },
+      }),
+      this.prisma.progress_reports.count({
+        where: { status: ReportStatus.REJECTED, deleted_at: null },
+      }),
       this.prisma.topics.count(),
-      this.prisma.teacher_quotas.count({ where: { status: TeacherQuotaStatus.INSUFFICIENT } }),
+      this.prisma.teacher_quotas.count({
+        where: { status: TeacherQuotaStatus.INSUFFICIENT },
+      }),
     ]);
 
     const departmentStats = await this.getDepartmentStats();
@@ -221,7 +239,9 @@ export class DashboardService {
           id: dept.id,
           name: dept.name,
           faculty: dept.faculty?.name || 'N/A',
-          secretary: dept.secretary ? dept.secretary.user?.username : 'Chưa gán',
+          secretary: dept.secretary
+            ? dept.secretary.user?.username
+            : 'Chưa gán',
           teachers: dept.teachers.length,
           projects: projectCount,
           topics: topicCount,
@@ -403,7 +423,7 @@ export class DashboardService {
         }
 
         const deptStats = await this.getDepartmentStatsWithProjectCounts();
-        return deptStats.filter(d => d.department_id === departmentId);
+        return deptStats.filter((d) => d.department_id === departmentId);
       } catch (error) {
         console.error('Error in getDepartmentListScoped for SECRETARY:', error);
         // Return all departments on error as fallback
@@ -436,7 +456,7 @@ export class DashboardService {
       select: { id: true },
     });
 
-    const teacherIdList = teacherIds.map(t => t.id);
+    const teacherIdList = teacherIds.map((t) => t.id);
 
     const [pending, approved, rejected] = await Promise.all([
       this.prisma.project.count({
@@ -500,7 +520,7 @@ export class DashboardService {
       select: { id: true },
     });
 
-    const teacherIdList = teacherIds.map(t => t.id);
+    const teacherIdList = teacherIds.map((t) => t.id);
 
     const reports = await this.prisma.progress_reports.findMany({
       where: {
@@ -516,20 +536,21 @@ export class DashboardService {
 
     const summary = {
       total: reports.length,
-      pending: reports.filter(r => r.status === 'PENDING').length,
-      approved: reports.filter(r => r.status === 'APPROVED').length,
-      rejected: reports.filter(r => r.status === 'REJECTED').length,
+      pending: reports.filter((r) => r.status === 'PENDING').length,
+      approved: reports.filter((r) => r.status === 'APPROVED').length,
+      rejected: reports.filter((r) => r.status === 'REJECTED').length,
     };
 
     const grouped = new Map<string, Record<string, number>>();
 
-    reports.forEach(report => {
+    reports.forEach((report) => {
       const key = `${report.year}-${String(report.month).padStart(2, '0')}`;
       if (!grouped.has(key)) {
         grouped.set(key, { pending: 0, approved: 0, rejected: 0, total: 0 });
       }
-      const counts = grouped.get(key)!;
-      counts[report.status.toLowerCase()] = (counts[report.status.toLowerCase()] || 0) + 1;
+      const counts = grouped.get(key);
+      counts[report.status.toLowerCase()] =
+        (counts[report.status.toLowerCase()] || 0) + 1;
       counts.total += 1;
     });
 
@@ -538,8 +559,18 @@ export class DashboardService {
         const [year, month] = key.split('-');
         const monthNum = parseInt(month, 10);
         const monthNames = [
-          'Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6',
-          'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12',
+          'Tháng 1',
+          'Tháng 2',
+          'Tháng 3',
+          'Tháng 4',
+          'Tháng 5',
+          'Tháng 6',
+          'Tháng 7',
+          'Tháng 8',
+          'Tháng 9',
+          'Tháng 10',
+          'Tháng 11',
+          'Tháng 12',
         ];
         return {
           year: parseInt(year, 10),
@@ -588,7 +619,7 @@ export class DashboardService {
       throw new Error('Department not found');
     }
 
-    const teacherIds = dept.teachers.map(t => t.id);
+    const teacherIds = dept.teachers.map((t) => t.id);
 
     const [
       totalProjects,
@@ -625,13 +656,25 @@ export class DashboardService {
         where: { teacher_id: { in: teacherIds }, deleted_at: null },
       }),
       this.prisma.progress_reports.count({
-        where: { teacher_id: { in: teacherIds }, status: 'PENDING', deleted_at: null },
+        where: {
+          teacher_id: { in: teacherIds },
+          status: 'PENDING',
+          deleted_at: null,
+        },
       }),
       this.prisma.progress_reports.count({
-        where: { teacher_id: { in: teacherIds }, status: 'APPROVED', deleted_at: null },
+        where: {
+          teacher_id: { in: teacherIds },
+          status: 'APPROVED',
+          deleted_at: null,
+        },
       }),
       this.prisma.progress_reports.count({
-        where: { teacher_id: { in: teacherIds }, status: 'REJECTED', deleted_at: null },
+        where: {
+          teacher_id: { in: teacherIds },
+          status: 'REJECTED',
+          deleted_at: null,
+        },
       }),
     ]);
 
@@ -649,12 +692,12 @@ export class DashboardService {
 
     // Get teacher info separately
     const topicTeacherMap = new Map();
-    const uniqueTopicTeacherIds = [...new Set(topics.map(t => t.teacher_id))];
+    const uniqueTopicTeacherIds = [...new Set(topics.map((t) => t.teacher_id))];
     const topicTeachers = await this.prisma.teacher.findMany({
       where: { id: { in: uniqueTopicTeacherIds } },
       select: { id: true, name: true },
     });
-    topicTeachers.forEach(t => topicTeacherMap.set(t.id, t));
+    topicTeachers.forEach((t) => topicTeacherMap.set(t.id, t));
 
     return {
       department: {
@@ -682,11 +725,14 @@ export class DashboardService {
         rejected: rejectedReports,
         total: totalReports,
       },
-      recentTopics: topics.map(t => ({
+      recentTopics: topics.map((t) => ({
         id: `TOPIC-${t.id}`,
         name: t.name,
         code: `TOPIC-${t.id}`,
-        teacher: topicTeacherMap.get(t.teacher_id) || { id: t.teacher_id, name: 'Unknown' },
+        teacher: topicTeacherMap.get(t.teacher_id) || {
+          id: t.teacher_id,
+          name: 'Unknown',
+        },
         status: t.status,
         completionPercentage: 100,
       })),
@@ -717,7 +763,7 @@ export class DashboardService {
       throw new Error('Department not found');
     }
 
-    const teacherIds = dept.teachers.map(t => t.id);
+    const teacherIds = dept.teachers.map((t) => t.id);
 
     const topics = await this.prisma.topics.findMany({
       where: { teacher_id: { in: teacherIds } },
@@ -733,22 +779,27 @@ export class DashboardService {
 
     // Get teacher info separately
     const teacherMap = new Map();
-    const uniqueTeacherIds = [...new Set(topics.map(t => t.teacher_id))];
+    const uniqueTeacherIds = [...new Set(topics.map((t) => t.teacher_id))];
     const teachers = await this.prisma.teacher.findMany({
       where: { id: { in: uniqueTeacherIds } },
       select: { id: true, name: true, email: true },
     });
-    teachers.forEach(t => teacherMap.set(t.id, t));
+    teachers.forEach((t) => teacherMap.set(t.id, t));
 
     return {
       total: topics.length,
-      data: topics.map(t => ({
+      data: topics.map((t) => ({
         id: t.id,
         name: t.name,
         code: `TOPIC-${t.id}`,
-        teacher: teacherMap.get(t.teacher_id) || { id: t.teacher_id, name: 'Unknown', email: '' },
+        teacher: teacherMap.get(t.teacher_id) || {
+          id: t.teacher_id,
+          name: 'Unknown',
+          email: '',
+        },
         status: t.status,
-        completionPercentage: t.status === 'APPROVED' ? 100 : t.status === 'PENDING' ? 50 : 0,
+        completionPercentage:
+          t.status === 'APPROVED' ? 100 : t.status === 'PENDING' ? 50 : 0,
         createdAt: t.created_at,
       })),
     };
@@ -774,7 +825,7 @@ export class DashboardService {
         throw new Error('Department not found');
       }
 
-      const teacherIds = dept.teachers.map(t => t.id);
+      const teacherIds = dept.teachers.map((t) => t.id);
 
       // Handle empty teacher list
       if (teacherIds.length === 0) {
@@ -822,7 +873,11 @@ export class DashboardService {
           where: { teacher_id: { in: teacherIds }, deleted_at: null },
         }),
         this.prisma.progress_reports.count({
-          where: { teacher_id: { in: teacherIds }, status: 'PENDING', deleted_at: null },
+          where: {
+            teacher_id: { in: teacherIds },
+            status: 'PENDING',
+            deleted_at: null,
+          },
         }),
       ]);
 
@@ -840,7 +895,13 @@ export class DashboardService {
 
       // Build teacher info map from dept.teachers
       const teacherMap = new Map();
-      dept.teachers.forEach(t => teacherMap.set(t.id, { name: t.name, email: t.email, position: t.position }));
+      dept.teachers.forEach((t) =>
+        teacherMap.set(t.id, {
+          name: t.name,
+          email: t.email,
+          position: t.position,
+        }),
+      );
 
       return {
         departmentId: dept.id,
@@ -853,16 +914,25 @@ export class DashboardService {
         delayedTopics,
         totalReports,
         pendingApprovals: pendingReports,
-        topics: topics.map(t => {
-          const teacher = teacherMap.get(t.teacher_id) || { name: 'Unknown', position: 'Giảng viên bộ môn' };
+        topics: topics.map((t) => {
+          const teacher = teacherMap.get(t.teacher_id) || {
+            name: 'Unknown',
+            position: 'Giảng viên bộ môn',
+          };
           return {
             id: t.id,
             name: t.name,
             code: `TOPIC-${t.id}`,
             instructorName: teacher.name,
             instructorRole: teacher.position || 'Giảng viên bộ môn',
-            completionPercentage: t.status === 'APPROVED' ? 100 : t.status === 'PENDING' ? 50 : 0,
-            status: t.status === 'APPROVED' ? 'completed' : t.status === 'PENDING' ? 'pending' : 'delayed',
+            completionPercentage:
+              t.status === 'APPROVED' ? 100 : t.status === 'PENDING' ? 50 : 0,
+            status:
+              t.status === 'APPROVED'
+                ? 'completed'
+                : t.status === 'PENDING'
+                  ? 'pending'
+                  : 'delayed',
           };
         }),
       };

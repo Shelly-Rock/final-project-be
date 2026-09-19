@@ -88,7 +88,9 @@ export class AlertDispatchService {
       },
     });
     if (!deadline) {
-      throw new NotFoundException(`Không tìm thấy deadline có id ${deadlineId}.`);
+      throw new NotFoundException(
+        `Không tìm thấy deadline có id ${deadlineId}.`,
+      );
     }
     if (!deadline.enabled || !deadline.config.alerts_enabled) {
       return { matched: 0, sent: 0, skipped: 0, failed: 0, errors: [] };
@@ -481,5 +483,3 @@ export class AlertDispatchService {
     return message.slice(0, 2_000);
   }
 }
-
-

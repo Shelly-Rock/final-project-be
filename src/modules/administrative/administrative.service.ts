@@ -12,13 +12,10 @@ export class AdministrativeService {
       select: { id: true, name: true },
     });
 
-    return faculties.map(
-      (f) =>
-        ({
-          id: f.id,
-          name: f.name,
-        }) as FacultyResponseDto,
-    );
+    return faculties.map((f) => ({
+      id: f.id,
+      name: f.name,
+    }));
   }
 
   async getDepartments(facultyId?: string): Promise<DepartmentResponseDto[]> {
@@ -29,13 +26,10 @@ export class AdministrativeService {
       select: { id: true, name: true, faculty_id: true },
     });
 
-    return departments.map(
-      (d) =>
-        ({
-          id: d.id,
-          name: d.name,
-          facultyId: d.faculty_id,
-        }) as DepartmentResponseDto,
-    );
+    return departments.map((d) => ({
+      id: d.id,
+      name: d.name,
+      facultyId: d.faculty_id,
+    }));
   }
 }

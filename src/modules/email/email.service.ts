@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  Logger,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import { Resend } from 'resend';
@@ -189,7 +185,7 @@ export class EmailService {
     const { error } = await this.resend.emails.send({
       from: mailOptions.from as string,
       to: mailOptions.to as string | string[],
-      subject: mailOptions.subject as string,
+      subject: mailOptions.subject,
       html: mailOptions.html as string,
     });
 
@@ -286,7 +282,7 @@ export class EmailService {
   private createRawMessage(mailOptions: nodemailer.SendMailOptions): string {
     const from = mailOptions.from as string;
     const to = mailOptions.to as string;
-    const subject = mailOptions.subject as string;
+    const subject = mailOptions.subject;
     const html = mailOptions.html as string;
     const message = [
       `From: ${from}`,

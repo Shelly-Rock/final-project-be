@@ -1,5 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsArray, IsInt, IsBoolean } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsArray,
+  IsInt,
+  IsBoolean,
+} from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class CreateRoleDto {
@@ -11,7 +17,10 @@ export class CreateRoleDto {
   @IsString()
   display_name: string;
 
-  @ApiPropertyOptional({ example: 'Quyền kiểm duyệt nội dung', description: 'Mô tả' })
+  @ApiPropertyOptional({
+    example: 'Quyền kiểm duyệt nội dung',
+    description: 'Mô tả',
+  })
   @IsString()
   @IsOptional()
   description?: string;
@@ -21,12 +30,18 @@ export class CreateRoleDto {
   @IsOptional()
   is_system?: boolean;
 
-  @ApiPropertyOptional({ example: 3, description: 'Độ ưu tiên (số càng lớn càng cao)' })
+  @ApiPropertyOptional({
+    example: 3,
+    description: 'Độ ưu tiên (số càng lớn càng cao)',
+  })
   @IsInt()
   @IsOptional()
   priority?: number;
 
-  @ApiPropertyOptional({ example: [1, 2, 3], description: 'Mảng ID permissions' })
+  @ApiPropertyOptional({
+    example: [1, 2, 3],
+    description: 'Mảng ID permissions',
+  })
   @IsArray()
   @IsInt({ each: true })
   @IsOptional()

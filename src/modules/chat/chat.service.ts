@@ -35,7 +35,8 @@ function stripQuotes(value: string): string {
 function isUsableApiKey(value: string | undefined): boolean {
   const key = value?.trim() ?? '';
   if (key.length < 20) return false;
-  if (key.includes('...') || /your_|changeme|placeholder/i.test(key)) return false;
+  if (key.includes('...') || /your_|changeme|placeholder/i.test(key))
+    return false;
   return key.startsWith('AIza') || key.startsWith('AQ.');
 }
 
@@ -60,7 +61,8 @@ function extractErrorText(error: unknown): string {
         error?: { message?: unknown };
         message?: unknown;
       };
-      if (typeof parsed.error?.message === 'string') return parsed.error.message;
+      if (typeof parsed.error?.message === 'string')
+        return parsed.error.message;
       if (typeof parsed.message === 'string') return parsed.message;
     } catch {
       // plain text
@@ -114,7 +116,9 @@ function isHighDemand(error: unknown): boolean {
   const message = extractErrorText(error);
   return (
     status === 503 ||
-    /high demand|overloaded|unavailable|try again later|UNAVAILABLE/i.test(message)
+    /high demand|overloaded|unavailable|try again later|UNAVAILABLE/i.test(
+      message,
+    )
   );
 }
 
@@ -188,7 +192,8 @@ export class ChatService {
       return;
     }
 
-    const role = ((user.role || 'STUDENT').toUpperCase() as ChatRole) || 'STUDENT';
+    const role =
+      ((user.role || 'STUDENT').toUpperCase() as ChatRole) || 'STUDENT';
     const contents: Content[] = messages.slice(-MAX_HISTORY).map((message) => ({
       role: message.role === 'assistant' ? 'model' : 'user',
       parts: [{ text: message.content.slice(0, MAX_CONTENT) }],
@@ -286,9 +291,16 @@ export class ChatService {
       tools: Array<{ functionDeclarations: unknown[] }>;
     },
     onChunk: (chunk: { text?: string }) => void,
-  ): Promise<{ functionCalls: FunctionCall[]; content?: Content; text: string }> {
+  ): Promise<{
+    functionCalls: FunctionCall[];
+    content?: Content;
+    text: string;
+  }> {
     const models = this.resolvedModel
-      ? [this.resolvedModel, ...MODELS.filter((name) => name !== this.resolvedModel)]
+      ? [
+          this.resolvedModel,
+          ...MODELS.filter((name) => name !== this.resolvedModel),
+        ]
       : MODELS;
 
     let lastError: unknown;
@@ -302,7 +314,7 @@ export class ChatService {
           const stream = await client.models.generateContentStream({
             model,
             contents,
-            config: streamConfig as never,
+            config: streamConfig,
           });
 
           const functionCalls: FunctionCall[] = [];

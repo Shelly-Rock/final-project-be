@@ -1,5 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, IsArray, Min, Max, IsDateString } from 'class-validator';
+import {
+  IsEnum,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsArray,
+  Min,
+  Max,
+  IsDateString,
+} from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ScoringType, ScoringStatus, CommitteeRole } from '@prisma/client';
 
@@ -241,7 +251,9 @@ export class QueryTranscriptsDto {
   @Transform(({ value }) => parseInt(value))
   limit?: number = 20;
 
-  @ApiPropertyOptional({ description: 'true = đã công bố, false = chưa công bố' })
+  @ApiPropertyOptional({
+    description: 'true = đã công bố, false = chưa công bố',
+  })
   @IsOptional()
   @Transform(({ value }) => {
     if (value === 'true' || value === true) return true;
@@ -252,7 +264,11 @@ export class QueryTranscriptsDto {
 }
 
 export class UpdateBonusScoreDto {
-  @ApiProperty({ minimum: 0, maximum: 3, description: 'Điểm thưởng do thư ký hội đồng cộng, tối đa 3' })
+  @ApiProperty({
+    minimum: 0,
+    maximum: 3,
+    description: 'Điểm thưởng do thư ký hội đồng cộng, tối đa 3',
+  })
   @IsNotEmpty()
   @IsNumber()
   @Min(0)

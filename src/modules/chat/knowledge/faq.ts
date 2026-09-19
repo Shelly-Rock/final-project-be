@@ -117,10 +117,7 @@ export const FAQ_ENTRIES: FaqEntry[] = [
 ];
 
 function normalize(text: string): string {
-  return text
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/\p{M}/gu, '');
+  return text.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
 }
 
 export function searchFaq(role: ChatRole, query: string): FaqEntry[] {
