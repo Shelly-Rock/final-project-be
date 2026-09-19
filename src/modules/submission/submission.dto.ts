@@ -156,7 +156,7 @@ export class ConfirmDriveUploadDto {
   @IsNotEmpty()
   fileSize: number;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  fileType: string;
+  fileType?: string;
 }

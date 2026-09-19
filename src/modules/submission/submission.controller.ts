@@ -46,8 +46,11 @@ export class SubmissionController {
 
   @Post('drive/init-upload')
   @Roles('STUDENT')
-  initDriveUpload(@Body() dto: InitDriveUploadDto) {
-    return this.service.initDriveUpload(dto);
+  initDriveUpload(
+    @CurrentUser() user: JwtUser,
+    @Body() dto: InitDriveUploadDto,
+  ) {
+    return this.service.initDriveUpload(user, dto);
   }
 
   @Post('drive/confirm')

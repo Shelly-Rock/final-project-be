@@ -102,7 +102,10 @@ export class SubmissionService {
         'Tên file không đúng định dạng. Vui lòng đặt tên theo mẫu: [Mã Đề Tài].PDF (hoặc .DOCX, .PPTX)',
       );
     }
-    return { projectCode: match[1], extension: match[2].toUpperCase() };
+    // Trim spaces from project code to handle any extra spaces
+    const projectCode = match[1].trim();
+    const extension = match[2].toUpperCase();
+    return { projectCode, extension };
   }
 
   // Get file type from extension
@@ -129,10 +132,10 @@ export class SubmissionService {
     const fileType = this.getFileType(extension);
 
     // Verify project exists
-    const project = (await this.prisma.project.findUnique({
+    const project = await this.prisma.project.findUnique({
       where: { id: dto.project_id },
-      include: { student: true, topics: { select: { period_id: true } } },
-    })) as any;
+      include: { student: true, topics: { select: { period_id: true, code: true } } },
+    }) as any;
 
     if (!project) {
       throw new NotFoundException('Đề tài không tồn tại');
@@ -143,41 +146,16 @@ export class SubmissionService {
       throw new ForbiddenException('Sinh viên không sở hữu đề tài này');
     }
 
-    // Check if project code matches
-    if (project.project_id !== projectCode) {
+    // Check if project code matches (use topics.code instead of project.project_id)
+    const dbTopicCode = project.topics?.code?.trim() || '';
+    if (dbTopicCode !== projectCode) {
       throw new BadRequestException(
-        `Mã đề tài trong tên file (${projectCode}) không khớp với mã đề tài thực tế (${project.project_id})`,
+        `Mã đề tài trong tên file (${projectCode}) không khớp với mã đề tài thực tế (${dbTopicCode})`,
       );
     }
 
-    // Enforce FINAL_SUBMISSION deadline when the project is linked to a period
-    const periodId: number | null = project.topics?.period_id ?? null;
-    if (periodId) {
-      await this.deadlinePolicy.assertFinalSubmissionOpen(periodId);
-    }
-
-    // Check if student has permission to submit
-    // Must have APPROVED progress status (not banned, submitted all reports)
-    const progress = await this.prisma.student_progress.findUnique({
-      where: { student_id: dto.student_id },
-    });
-
-    if (progress?.is_banned) {
-      throw new ForbiddenException('Sinh viên đang bị cấm thi, không thể nộp bài');
-    }
-
-    // Check if already submitted
-    const existingSubmission = await this.prisma.final_submissions.findFirst({
-      where: {
-        submitted_by_student_id: dto.student_id,
-        topic_id: project.topic_id,
-        deleted_at: null,
-      },
-    });
-
-    if (existingSubmission) {
-      throw new BadRequestException('Đã nộp bài cho đề tài này rồi');
-    }
+    // Use unified validation logic (now includes is_leader, deadline, ban status, existing submission)
+    await this.validateSubmissionEligibility(dto.student_id, project);
 
     return this.prisma.final_submissions.create({
       data: {
@@ -196,14 +174,47 @@ export class SubmissionService {
 
   // ========== GOOGLE DRIVE RESUMABLE UPLOAD ==========
 
-  async initDriveUpload(dto: InitDriveUploadDto) {
+  async initDriveUpload(user: JwtUser, dto: InitDriveUploadDto) {
     const { projectId, fileName, fileSize, mimeType } = dto;
     const { projectCode } = this.validateFileName(fileName);
     
-    const project = await this.prisma.project.findUnique({ where: { id: projectId } });
+    const project = await this.prisma.project.findUnique({ 
+      where: { id: projectId },
+      include: { topics: { select: { period_id: true, code: true } } }
+    });
     if (!project) throw new NotFoundException('Đề tài không tồn tại');
-    if (project.project_id !== projectCode) {
-      throw new BadRequestException('Tên file không khớp với mã đề tài');
+    
+    // Use topic.code instead of project.project_id for project code comparison
+    // because project_id currently contains UUID in the database
+    const dbTopicCode = project.topics?.code?.trim() || '';
+    if (!dbTopicCode) {
+      throw new BadRequestException('Đề tài chưa có mã đề tài trong hệ thống');
+    }
+    
+    if (dbTopicCode !== projectCode) {
+      throw new BadRequestException(
+        `Tên file không khớp với mã đề tài. Trong file: [${projectCode}], Trong hệ thống: ${dbTopicCode}`
+      );
+    }
+
+    // Resolve student from JWT
+    const student = await this.resolveStudentByUserId(user.sub);
+
+    // Verify student owns this project
+    if (project.student_id !== student.id) {
+      throw new ForbiddenException('Bạn không sở hữu đề tài này');
+    }
+
+    // Check eligibility before initializing upload
+    // This includes: is_leader, ban status, deadline, existing submission
+    try {
+      await this.validateSubmissionEligibility(student.id, project);
+    } catch (error) {
+      // Convert validation errors to user-friendly messages
+      if (error instanceof ForbiddenException || error instanceof BadRequestException) {
+        throw error; // Re-throw as-is for clear message
+      }
+      throw new BadRequestException('Không đủ điều kiện nộp bài');
     }
 
       try {
@@ -269,6 +280,20 @@ export class SubmissionService {
       };
     } catch (error: any) {
       console.error('Lỗi khi khởi tạo Google Drive upload session:', error);
+      
+      // Handle specific Google Drive errors
+      if (error.response?.data?.error?.message) {
+        throw new BadRequestException(`Lỗi Google Drive: ${error.response.data.error.message}`);
+      }
+      
+      if (error.code === '401' || error.code === 401) {
+        throw new BadRequestException('Lỗi xác thực Google Drive. Vui lòng liên hệ quản trị viên.');
+      }
+      
+      if (error.code === '403' || error.code === 403) {
+        throw new BadRequestException('Không có quyền truy cập Google Drive. Vui lòng liên hệ quản trị viên.');
+      }
+      
       throw new BadRequestException(`Không thể khởi tạo phiên tải lên Google Drive: ${error.message}`);
     }
   }
@@ -281,11 +306,27 @@ export class SubmissionService {
     // Get the student's project to find the topic_id
     const project = await this.prisma.project.findUnique({
       where: { id: dto.projectId },
+      include: { topics: { select: { period_id: true } } }
     });
     if (!project) throw new NotFoundException('Không tìm thấy project');
     if (!project.topic_id) throw new NotFoundException('Project chưa thuộc đề tài nào');
 
-    // Kim tra `A nTp cha
+    // Verify student owns this project
+    if (project.student_id !== student.id) {
+      throw new ForbiddenException('Bạn không sở hữu đề tài này');
+    }
+
+    // Check eligibility before confirming
+    try {
+      await this.validateSubmissionEligibility(student.id, project);
+    } catch (error) {
+      if (error instanceof ForbiddenException || error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException('Không đủ điều kiện nộp bài');
+    }
+
+    // Check existing submission
     const existingSubmission = await this.prisma.final_submissions.findFirst({
       where: {
         topic_id: project.topic_id,
@@ -312,23 +353,85 @@ export class SubmissionService {
     });
   }
 
+  // ========== VALIDATION LOGIC ==========
+
+  /**
+   * Validate submission eligibility - used by both getMyEligibility and createSubmission
+   * @throws ForbiddenException or BadRequestException if validation fails
+   */
+  private async validateSubmissionEligibility(studentId: number, project: any) {
+    // Check is_leader status
+    if (!project.is_leader) {
+      throw new ForbiddenException('Chỉ trưởng nhóm mới được phép nộp báo cáo tổng');
+    }
+
+    // Check ban status
+    const progress = await this.prisma.student_progress.findUnique({
+      where: { student_id: studentId },
+    });
+
+    if (progress?.is_banned) {
+      throw new ForbiddenException('Sinh viên đang bị cấm thi, không thể nộp bài');
+    }
+
+    // Check progress status
+    if (progress?.status && progress.status !== 'ON_TRACK' && progress.status !== 'EXTENDED') {
+      throw new ForbiddenException('Trạng thái tiến độ không cho phép nộp bài');
+    }
+
+    // Check deadline (nếu có period)
+    if (project.topics?.period_id) {
+      await this.deadlinePolicy.assertFinalSubmissionOpen(project.topics.period_id);
+    }
+
+    // Check existing submission
+    const existingSubmission = await this.prisma.final_submissions.findFirst({
+      where: {
+        submitted_by_student_id: studentId,
+        topic_id: project.topic_id,
+        deleted_at: null,
+      },
+    });
+
+    if (existingSubmission) {
+      throw new BadRequestException('Đã nộp bài cho đề tài này rồi');
+    }
+  }
+
   async getMyEligibility(user: JwtUser) {
     const student = await this.resolveStudentByUserId(user.sub);
     const project = await this.prisma.project.findFirst({
       where: { student_id: student.id, deleted_at: null },
+      include: { 
+        topics: { select: { period_id: true } }
+      },
       orderBy: { created_at: 'desc' },
     });
 
     if (!project) {
-      return { eligible: false, reason: 'Chưa tham gia đề tài nào' };
+      return { 
+        eligible: false, 
+        reason: 'Bạn chưa tham gia đề tài nào' 
+      };
     }
-    
-    return {
-      eligible: project.is_leader,
-      reason: project.is_leader ? undefined : 'Chỉ trưởng nhóm mới được phép nộp báo cáo tổng.',
-      isLeader: project.is_leader,
-      topicId: project.topic_id,
-    };
+
+    // Use validation logic (now includes is_leader check)
+    try {
+      await this.validateSubmissionEligibility(student.id, project);
+      return {
+        eligible: true,
+        reason: undefined,
+        isLeader: project.is_leader,
+        topicId: project.topic_id,
+      };
+    } catch (error) {
+      return {
+        eligible: false,
+        reason: error instanceof Error ? error.message : 'Không đủ điều kiện nộp bài',
+        isLeader: project.is_leader,
+        topicId: project.topic_id,
+      };
+    }
   }
 
   async getMySubmissions(user: JwtUser) {
