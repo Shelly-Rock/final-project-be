@@ -384,6 +384,12 @@ export class SubmissionService {
       await this.deadlinePolicy.assertFinalSubmissionOpen(project.topics.period_id);
     }
 
+    if (!project.topic_id) {
+      throw new BadRequestException(
+        'Đề tài của bạn chưa được gán, không thể nộp bài. Vui lòng liên hệ thư ký ngành.',
+      );
+    }
+
     // Check existing submission
     const existingSubmission = await this.prisma.final_submissions.findFirst({
       where: {
@@ -425,9 +431,14 @@ export class SubmissionService {
         topicId: project.topic_id,
       };
     } catch (error) {
+      const reason =
+        error instanceof ForbiddenException || error instanceof BadRequestException
+          ? error.message
+          : 'Không đủ điều kiện nộp bài';
+
       return {
         eligible: false,
-        reason: error instanceof Error ? error.message : 'Không đủ điều kiện nộp bài',
+        reason,
         isLeader: project.is_leader,
         topicId: project.topic_id,
       };
