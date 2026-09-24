@@ -1399,17 +1399,17 @@ export class ScoringService {
       where: { student_id: student.id },
     });
     if (!project) {
-      throw new NotFoundException('Bạn chưa có đề tài');
+      return { available: false, reason: 'Bạn chưa có đề tài' };
     }
 
     const result = await this.prisma.scoring_results.findUnique({
       where: { project_id: project.id },
     });
     if (!result?.is_published) {
-      throw new NotFoundException('Bảng điểm chưa được công bố');
+      return { available: false, reason: 'Bảng điểm chưa được công bố' };
     }
 
-    return this.buildTranscript(project.id);
+    return { ...(await this.buildTranscript(project.id)), available: true };
   }
 
   // ============ GIAI ĐOẠN 7: HẬU KIỂM VÀ XẾP HẠNG ============
@@ -1627,13 +1627,13 @@ export class ScoringService {
       where: { student_id: student.id },
     });
     if (!project) {
-      throw new NotFoundException('Bạn chưa có đề tài');
+      return { available: false, reason: 'Bạn chưa có đề tài' };
     }
     const result = await this.prisma.scoring_results.findUnique({
       where: { project_id: project.id },
     });
     if (!result?.is_published) {
-      throw new NotFoundException('Bảng điểm chưa được công bố');
+      return { available: false, reason: 'Bảng điểm chưa được công bố' };
     }
 
     const transcript = await this.buildTranscript(project.id);

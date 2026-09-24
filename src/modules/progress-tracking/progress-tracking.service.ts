@@ -704,14 +704,17 @@ export class ProgressTrackingService {
 
   async getMyProgress(userId: number) {
     const student = await this.resolveStudentByUserId(userId);
-    return this.getStudentProgressById(student.id);
+    return this.getStudentProgressById(student.id, true);
   }
 
-  async getStudentProgressById(studentId: number) {
+  async getStudentProgressById(studentId: number, returnNullIfMissing = false) {
     const progress = (await this.prisma.student_progress.findFirst({
       where: { student_id: studentId },
     })) as any;
-    if (!progress) throw new NotFoundException('Student progress not found');
+    if (!progress) {
+      if (returnNullIfMissing) return null;
+      throw new NotFoundException('Student progress not found');
+    }
 
     // Get student info
     const student = await this.prisma.student.findUnique({
