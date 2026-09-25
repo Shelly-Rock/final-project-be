@@ -121,7 +121,7 @@ export class ProgressTrackingController {
   @Get('students/my-progress')
   @Roles('STUDENT')
   async getMyProgress(@CurrentUser('sub') userId: number) {
-    return this.service.getMyProgress(userId);
+    return (await this.service.getMyProgress(userId)) ?? {};
   }
 
   @Get('students/progress')

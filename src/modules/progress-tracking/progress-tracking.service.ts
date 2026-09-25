@@ -704,7 +704,14 @@ export class ProgressTrackingService {
 
   async getMyProgress(userId: number) {
     const student = await this.resolveStudentByUserId(userId);
-    return this.getStudentProgressById(student.id, true);
+    const project = await this.prisma.project.findFirst({
+      where: { student_id: student.id, deleted_at: null },
+    });
+    if (!project) {
+      return {};
+    }
+    await this.getOrCreateStudentProgress(student.id);
+    return this.getStudentProgressById(student.id);
   }
 
   async getStudentProgressById(studentId: number, returnNullIfMissing = false) {
@@ -712,7 +719,7 @@ export class ProgressTrackingService {
       where: { student_id: studentId },
     })) as any;
     if (!progress) {
-      if (returnNullIfMissing) return null;
+      if (returnNullIfMissing) return {};
       throw new NotFoundException('Student progress not found');
     }
 
@@ -727,6 +734,15 @@ export class ProgressTrackingService {
         class_name: true,
       },
     });
+    const project = await this.prisma.project.findFirst({
+      where: { student_id: studentId, deleted_at: null },
+    });
+    const teacher = project
+      ? await this.prisma.teacher.findUnique({
+          where: { id: project.teacher_id },
+          select: { name: true },
+        })
+      : null;
 
     return {
       ...progress,
@@ -734,6 +750,8 @@ export class ProgressTrackingService {
         ? `${student.first_name} ${student.middle_name} ${student.last_name}`
         : '',
       student_mssv: student?.student_id,
+      topic_name: project?.project_name,
+      teacher_name: teacher?.name,
     };
   }
 

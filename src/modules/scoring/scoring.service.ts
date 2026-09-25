@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  HttpException,
 } from '@nestjs/common';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -1393,23 +1394,27 @@ export class ScoringService {
   }
 
   async getMyTranscript(userId: number) {
-    const student = await this.resolveOrCreateStudent(userId);
+    try {
+      const student = await this.resolveOrCreateStudent(userId);
 
-    const project = await this.prisma.project.findUnique({
-      where: { student_id: student.id },
-    });
-    if (!project) {
-      return { available: false, reason: 'Bạn chưa có đề tài' };
+      const project = await this.prisma.project.findUnique({
+        where: { student_id: student.id },
+      });
+      if (!project) {
+        return { available: false, reason: 'Bạn chưa có đề tài' };
+      }
+
+      const result = await this.prisma.scoring_results.findUnique({
+        where: { project_id: project.id },
+      });
+      if (!result?.is_published) {
+        return { available: false, reason: 'Bảng điểm chưa được công bố' };
+      }
+
+      return { ...(await this.buildTranscript(project.id)), available: true };
+    } catch (error) {
+      return this.studentUnavailable(error, 'Bảng điểm chưa sẵn sàng');
     }
-
-    const result = await this.prisma.scoring_results.findUnique({
-      where: { project_id: project.id },
-    });
-    if (!result?.is_published) {
-      return { available: false, reason: 'Bảng điểm chưa được công bố' };
-    }
-
-    return { ...(await this.buildTranscript(project.id)), available: true };
   }
 
   // ============ GIAI ĐOẠN 7: HẬU KIỂM VÀ XẾP HẠNG ============
@@ -1622,43 +1627,47 @@ export class ScoringService {
   }
 
   async getMyRevision(userId: number) {
-    const student = await this.resolveOrCreateStudent(userId);
-    const project = await this.prisma.project.findUnique({
-      where: { student_id: student.id },
-    });
-    if (!project) {
-      return { available: false, reason: 'Bạn chưa có đề tài' };
-    }
-    const result = await this.prisma.scoring_results.findUnique({
-      where: { project_id: project.id },
-    });
-    if (!result?.is_published) {
-      return { available: false, reason: 'Bảng điểm chưa được công bố' };
-    }
+    try {
+      const student = await this.resolveOrCreateStudent(userId);
+      const project = await this.prisma.project.findUnique({
+        where: { student_id: student.id },
+      });
+      if (!project) {
+        return { available: false, reason: 'Bạn chưa có đề tài' };
+      }
+      const result = await this.prisma.scoring_results.findUnique({
+        where: { project_id: project.id },
+      });
+      if (!result?.is_published) {
+        return { available: false, reason: 'Bảng điểm chưa được công bố' };
+      }
 
-    const transcript = await this.buildTranscript(project.id);
-    const deadline =
-      result.revision_deadline ??
-      this.defaultRevisionDeadline(result.published_at);
-    const revision = await this.prisma.thesis_revisions.findFirst({
-      where: { project_id: project.id, deleted_at: null },
-      orderBy: { submitted_at: 'desc' },
-    });
+      const transcript = await this.buildTranscript(project.id);
+      const deadline =
+        result.revision_deadline ??
+        this.defaultRevisionDeadline(result.published_at);
+      const revision = await this.prisma.thesis_revisions.findFirst({
+        where: { project_id: project.id, deleted_at: null },
+        orderBy: { submitted_at: 'desc' },
+      });
 
-    return {
-      ...transcript,
-      revisionDeadline: deadline,
-      canSubmitRevision: deadline.getTime() > Date.now(),
-      revision: revision
-        ? {
-            id: revision.id,
-            fileName: revision.file_name,
-            fileUrl: revision.file_url,
-            submittedAt: revision.submitted_at,
-            note: revision.note,
-          }
-        : null,
-    };
+      return {
+        ...transcript,
+        revisionDeadline: deadline,
+        canSubmitRevision: deadline.getTime() > Date.now(),
+        revision: revision
+          ? {
+              id: revision.id,
+              fileName: revision.file_name,
+              fileUrl: revision.file_url,
+              submittedAt: revision.submitted_at,
+              note: revision.note,
+            }
+          : null,
+      };
+    } catch (error) {
+      return this.studentUnavailable(error, 'Hồ sơ chỉnh sửa chưa sẵn sàng');
+    }
   }
 
   async submitRevision(userId: number, dto: SubmitRevisionDto) {
@@ -1701,6 +1710,24 @@ export class ScoringService {
   private isStaff(role?: string) {
     const normalized = (role || '').toLowerCase();
     return normalized === 'admin' || normalized === 'secretary';
+  }
+
+  private studentUnavailable(error: unknown, fallback: string) {
+    if (error instanceof HttpException) {
+      const response = error.getResponse();
+      if (typeof response === 'string') {
+        return { available: false as const, reason: response };
+      }
+      if (typeof response === 'object' && response && 'message' in response) {
+        const message = (response as { message: string | string[] }).message;
+        return {
+          available: false as const,
+          reason: Array.isArray(message) ? message.join(', ') : message,
+        };
+      }
+      return { available: false as const, reason: error.message };
+    }
+    return { available: false as const, reason: fallback };
   }
 
   private isFinalized(result?: { final_status?: string | null } | null) {

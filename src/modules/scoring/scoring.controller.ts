@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  ParseIntPipe,
   Query,
   UseGuards,
   Request,
@@ -189,9 +190,12 @@ export class ScoringController {
   @Get('transcripts/:projectId')
   @Roles('ADMIN', 'SECRETARY', 'TEACHER')
   @ApiOperation({ summary: 'Chi tiết bảng điểm tổng hợp' })
-  async getTranscript(@Request() req, @Param('projectId') projectId: string) {
+  async getTranscript(
+    @Request() req,
+    @Param('projectId', ParseIntPipe) projectId: number,
+  ) {
     return this.scoringService.getTranscript(
-      parseInt(projectId),
+      projectId,
       this.userId(req),
       req.user.role,
     );
