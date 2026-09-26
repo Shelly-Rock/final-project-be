@@ -41,6 +41,7 @@ export const TEACHER_HEADER_ALIASES: Record<string, string> = {
 
   gmail: 'email',
   mail: 'email',
+  email: 'email',
 
   sodienthoai: 'phone',
   'số điện thoại': 'phone',
