@@ -1,11 +1,8 @@
-import {
-  Injectable,
-  ConflictException,
-  NotFoundException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../core/database/prisma/prisma.service';
 import { CreateTeacherDto, UpdateTeacherDto, ListTeacherQueryDto } from './dto';
+import { CreateTeacherService, ImportTeacherService } from './services';
+import { MulterFile } from '@/shared/types/multer-file.type';
 import {
   getPaginationOptions,
   formatPaginatedResponse,
@@ -15,7 +12,11 @@ import { TeacherMapper } from './mapper/teacher.mapper';
 
 @Injectable()
 export class TeacherService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly createTeacherService: CreateTeacherService,
+    private readonly importTeacherService: ImportTeacherService,
+  ) {}
 
   async generateNextLecturerCode(): Promise<{ code: string }> {
     const lastTeacher = await this.prisma.teacher.findFirst({
@@ -41,45 +42,17 @@ export class TeacherService {
   }
 
   async create(dto: CreateTeacherDto) {
-    const existingTeacher = await this.prisma.teacher.findFirst({
-      where: { OR: [{ teacher_id: dto.code }, { email: dto.email }] },
-    });
+    return this.createTeacherService.createTeacher(dto);
+  }
 
-    if (existingTeacher) {
-      if (existingTeacher.teacher_id === dto.code) {
-        throw new ConflictException('Mã giảng viên đã tồn tại');
-      }
-      throw new ConflictException('Email đã được sử dụng');
-    }
-
-    const teacherRole = await this.prisma.role.findUnique({
-      where: { name: 'TEACHER' },
-    });
-    if (!teacherRole)
-      throw new BadRequestException(
-        'Chưa cấu hình Role TEACHER trong hệ thống',
-      );
-
-    return this.prisma.$transaction(async (tx) => {
-      const newUser = await tx.user.create({
-        data: {
-          email: dto.email,
-          username: dto.code,
-          password_hash: 'hashed_default_password',
-          user_roles: {
-            create: [{ role_id: teacherRole.id }],
-          },
-        },
-      });
-      const newTeacher = await tx.teacher.create({
-        data: {
-          ...TeacherMapper.toPrismaCreateInput(dto, newUser.id),
-          status: TeacherStatus.active,
-        },
-      });
-
-      return newTeacher;
-    });
+  async importTeachers(file: MulterFile) {
+    const teachers = await this.importTeacherService.importTeachers(file);
+    await this.createTeacherService.createTeachers(teachers);
+    return {
+      success: true,
+      message: `Đã import thành công ${teachers.length} giảng viên`,
+      count: teachers.length,
+    };
   }
 
   async findAll(query: ListTeacherQueryDto) {

@@ -10,12 +10,17 @@ import {
   UseInterceptors,
   ClassSerializerInterceptor,
   UseGuards,
+  UploadedFile,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
   ApiOkResponse,
   ApiCreatedResponse,
+  ApiConsumes,
+  ApiBody,
 } from '@nestjs/swagger';
 import { TeacherService } from './teacher.service';
 import {
@@ -26,6 +31,8 @@ import {
   TeacherResponseDto,
 } from './dto';
 import { JwtAuthGuard } from '@/core/auth/guards/jwtAuth.guard';
+import { FileInterceptor } from '@nestjs/platform-express';
+import type { MulterFile } from '@/shared/types/multer-file.type';
 
 @ApiTags('Teachers')
 @UseGuards(JwtAuthGuard)
@@ -46,6 +53,31 @@ export class TeacherController {
   async create(@Body() createTeacherDto: CreateTeacherDto) {
     const teacher = await this.teacherService.create(createTeacherDto);
     return new TeacherResponseDto(teacher);
+  }
+
+  @Post('import')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Import danh sách giảng viên từ file Excel' })
+  @ApiBody({
+    description: 'File Excel chứa danh sách giảng viên',
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+    },
+  })
+  @ApiCreatedResponse({
+    description: 'Import danh sách giảng viên thành công',
+  })
+  @UseInterceptors(FileInterceptor('file'))
+  async importTeachers(@UploadedFile() file: MulterFile) {
+    return this.teacherService.importTeachers(file);
   }
 
   @Get()

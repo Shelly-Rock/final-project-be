@@ -343,7 +343,8 @@ export class EmailService {
   async sendVerificationEmail(
     to: string,
     token: string,
-    studentName: string,
+    displayName: string,
+    accountCode?: string,
   ): Promise<void> {
     const appUrl =
       this.configService.get<string>('APP_URL') ||
@@ -373,12 +374,12 @@ export class EmailService {
       <h1>Xác nhận Email</h1>
     </div>
     <div class="content">
-      <p>Xin chào <strong>${studentName}</strong>,</p>
+      <p>Xin chào <strong>${displayName}</strong>,</p>
       <p>Bạn đã được tạo tài khoản trên hệ thống Quản lý Khóa luận tốt nghiệp.</p>
-      
+
       <div class="info-box">
         <p><strong>Tài khoản đăng nhập:</strong></p>
-        <p>Username: Vui lòng sử dụng mã sinh viên của bạn</p>
+        <p>Tên đăng nhập/Mã tài khoản: <strong>${accountCode || 'Vui lòng sử dụng mã tài khoản được cấp'}</strong></p>
         <p>Mật khẩu tạm: <strong>1111</strong></p>
       </div>
       

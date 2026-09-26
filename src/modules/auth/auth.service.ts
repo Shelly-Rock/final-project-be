@@ -144,7 +144,7 @@ export class AuthService {
     const verificationToken =
       await this.prisma.email_verification_tokens.findUnique({
         where: { token: dto.token },
-        include: { users: { include: { student: true } } },
+        include: { users: { include: { student: true, teacher: true } } },
       });
 
     if (!verificationToken) {
@@ -186,7 +186,7 @@ export class AuthService {
     try {
       await this.emailService.sendPasswordChangedNotification(
         verificationToken.users.email,
-        verificationToken.users.student?.first_name || 'Người dùng',
+        this.getUserDisplayName(verificationToken.users),
       );
     } catch (error) {
       console.error('Password changed, but notification email failed:', error);
@@ -204,7 +204,7 @@ export class AuthService {
   ): Promise<ChangePasswordRespDTO> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: { student: true },
+      include: { student: true, teacher: true },
     });
 
     if (!user) {
@@ -236,7 +236,7 @@ export class AuthService {
     try {
       await this.emailService.sendPasswordChangedNotification(
         user.email,
-        user.student?.first_name || 'Người dùng',
+        this.getUserDisplayName(user),
       );
     } catch (error) {
       console.error('Password changed, but notification email failed:', error);
@@ -253,7 +253,7 @@ export class AuthService {
   ): Promise<ForgotPasswordRespDTO> {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
-      include: { student: true },
+      include: { student: true, teacher: true },
     });
 
     if (!user) {
@@ -287,7 +287,7 @@ export class AuthService {
       await this.emailService.sendPasswordResetEmail(
         user.email,
         token,
-        user.student?.first_name || 'Người dùng',
+        this.getUserDisplayName(user),
       );
     } catch (error) {
       console.error('Failed to send password reset email:', error);
@@ -308,7 +308,7 @@ export class AuthService {
   async resetPassword(dto: ResetPasswordReqDTO): Promise<ResetPasswordRespDTO> {
     const token = await this.prisma.email_verification_tokens.findUnique({
       where: { token: dto.token },
-      include: { users: { include: { student: true } } },
+      include: { users: { include: { student: true, teacher: true } } },
     });
 
     if (!token) {
@@ -346,7 +346,7 @@ export class AuthService {
     try {
       await this.emailService.sendPasswordChangedNotification(
         token.users.email,
-        token.users.student?.first_name || 'Người dùng',
+        this.getUserDisplayName(token.users),
       );
     } catch (error) {
       console.error('Password reset, but notification email failed:', error);
@@ -446,7 +446,7 @@ export class AuthService {
   ): Promise<ResendVerificationRespDTO> {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
-      include: { student: true },
+      include: { student: true, teacher: true },
     });
 
     if (!user) {
@@ -573,6 +573,7 @@ export class AuthService {
         verificationEmail.email,
         verificationEmail.token,
         verificationEmail.fullName,
+        dto.studentId,
       );
     } catch (error) {
       emailSent = false;
@@ -593,7 +594,7 @@ export class AuthService {
   async sendVerificationEmailToUser(userId: number): Promise<void> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: { student: true },
+      include: { student: true, teacher: true },
     });
 
     if (!user) {
@@ -655,6 +656,7 @@ export class AuthService {
           create: [{ role_id: studentRole.id }],
         },
       },
+      include: { student: true, teacher: true },
     });
 
     await this.sendVerificationEmail(user, studentName);
@@ -662,7 +664,7 @@ export class AuthService {
 
   private async sendVerificationEmail(
     user: any,
-    studentName?: string,
+    displayName?: string,
   ): Promise<void> {
     const token = uuidv4();
     const expiresAt = new Date();
@@ -676,8 +678,32 @@ export class AuthService {
       },
     });
 
-    const name = studentName || user.student?.first_name || 'Sinh viên';
-    await this.emailService.sendVerificationEmail(user.email, token, name);
+    const name = displayName || this.getUserDisplayName(user);
+    const accountCode = this.getUserAccountCode(user);
+    await this.emailService.sendVerificationEmail(
+      user.email,
+      token,
+      name,
+      accountCode,
+    );
+  }
+
+  private getUserDisplayName(user: any): string {
+    if (user.student) {
+      return [user.student.last_name, user.student.middle_name, user.student.first_name]
+        .filter(Boolean)
+        .join(' ');
+    }
+
+    if (user.teacher?.name) {
+      return user.teacher.name;
+    }
+
+    return user.username || 'Người dùng';
+  }
+
+  private getUserAccountCode(user: any): string {
+    return user.student?.student_id || user.teacher?.teacher_id || user.username;
   }
 
   private async generateTokens(
