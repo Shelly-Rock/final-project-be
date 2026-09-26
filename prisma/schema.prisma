@@ -155,6 +155,7 @@ model Teacher {
   faculty_id                   String?                        @db.VarChar(50)
   name                         String                         @db.VarChar(255)
   academic_title               AcademicTitle?
+  extra_data                   Json?
   committee_external_reviewers committee_external_reviewers[]
   committee_members            committee_members[]
   defense_scores               defense_scores[]
