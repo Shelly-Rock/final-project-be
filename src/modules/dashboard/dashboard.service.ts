@@ -1,4 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '@/core/database/prisma/prisma.service';
 import {
   ProjectStatus,
@@ -120,7 +124,12 @@ export class DashboardService {
       approvedReports,
       rejectedReports,
     ] = await Promise.all([
-      this.prisma.student.count({ where: { deleted_at: null } }),
+      this.prisma.project.count({
+        where: {
+          teacher_id: { in: teacherIds },
+          deleted_at: null,
+        },
+      }),
       this.prisma.project.count({
         where: {
           teacher_id: { in: teacherIds },
@@ -264,6 +273,32 @@ export class DashboardService {
     }
   }
 
+  private async assertCanAccessDepartment(user: any, departmentId: string) {
+    const role = user?.role || 'USER';
+
+    if (role === 'ADMIN') return;
+
+    if (role === 'SECRETARY') {
+      const userId = Number(user.sub);
+      if (Number.isNaN(userId)) {
+        throw new ForbiddenException('Invalid secretary user');
+      }
+
+      const secretaryDeptId = await this.getSecretaryDepartmentId(userId);
+      if (!secretaryDeptId) {
+        throw new ForbiddenException('Thư ký chưa được gán khoa');
+      }
+
+      if (secretaryDeptId !== departmentId) {
+        throw new ForbiddenException('Bạn không có quyền truy cập khoa này');
+      }
+
+      return;
+    }
+
+    throw new ForbiddenException('Unauthorized');
+  }
+
   async getSecretaryDepartmentDetails(departmentId: string) {
     const department = await this.prisma.department.findUnique({
       where: { id: departmentId },
@@ -385,70 +420,32 @@ export class DashboardService {
     }
 
     if (role === 'SECRETARY') {
-      try {
-        const userId = Number(user.sub);
-        if (isNaN(userId)) {
-          console.warn('Invalid user ID format:', user.sub);
-          return [];
-        }
-
-        // Try to find secretary and their associated department
-        const secretary = await this.prisma.secretary.findUnique({
-          where: { user_id: userId },
-          select: { id: true },
-        });
-
-        if (!secretary) {
-          console.warn('Secretary record not found for userId:', userId);
-          // Return all departments as fallback for secretary
-          return this.getDepartmentStatsWithProjectCounts();
-        }
-
-        // Try old method first (with department_id column)
-        let departmentId = await this.getSecretaryDepartmentId(userId);
-
-        // If that fails, check if we can find department through secretary record
-        if (!departmentId) {
-          const depts = await this.prisma.department.findMany({
-            where: { secretary: { user_id: userId } },
-            select: { id: true },
-          });
-          departmentId = depts[0]?.id || null;
-        }
-
-        if (!departmentId) {
-          console.warn('No department found for secretary, userId:', userId);
-          // Return all departments as fallback
-          return this.getDepartmentStatsWithProjectCounts();
-        }
-
-        const deptStats = await this.getDepartmentStatsWithProjectCounts();
-        return deptStats.filter((d) => d.department_id === departmentId);
-      } catch (error) {
-        console.error('Error in getDepartmentListScoped for SECRETARY:', error);
-        // Return all departments on error as fallback
-        return this.getDepartmentStatsWithProjectCounts();
+      const userId = Number(user.sub);
+      if (Number.isNaN(userId)) {
+        throw new ForbiddenException('Invalid secretary user');
       }
+
+      const departmentId = await this.getSecretaryDepartmentId(userId);
+      if (!departmentId) {
+        throw new ForbiddenException('Thư ký chưa được gán khoa');
+      }
+
+      const deptStats = await this.getDepartmentStatsWithProjectCounts();
+      return deptStats.filter((d) => d.department_id === departmentId);
     }
 
-    throw new Error('Unauthorized');
+    throw new ForbiddenException('Unauthorized');
   }
 
   async getDepartmentDetailScoped(departmentId: string, user: any) {
-    const role = user.role || 'USER';
-
-    if (role === 'SECRETARY') {
-      // Allow secretary to view department details (no strict assignment check needed for testing)
-      // In production, you can enable the check below if needed
-      console.log('Secretary viewing department:', departmentId);
-    }
+    await this.assertCanAccessDepartment(user, departmentId);
 
     const dept = await this.prisma.department.findUnique({
       where: { id: departmentId },
     });
 
     if (!dept) {
-      throw new Error('Department not found');
+      throw new NotFoundException('Department not found');
     }
 
     const teacherIds = await this.prisma.teacher.findMany({
@@ -498,21 +495,14 @@ export class DashboardService {
   }
 
   async getDepartmentProgressReportsScoped(departmentId: string, user: any) {
-    const role = user.role || 'USER';
-
-    if (role === 'SECRETARY') {
-      const secretaryDeptId = await this.getSecretaryDepartmentId(user.sub);
-      if (!secretaryDeptId || secretaryDeptId !== departmentId) {
-        throw new Error('Forbidden');
-      }
-    }
+    await this.assertCanAccessDepartment(user, departmentId);
 
     const dept = await this.prisma.department.findUnique({
       where: { id: departmentId },
     });
 
     if (!dept) {
-      throw new Error('Department not found');
+      throw new NotFoundException('Department not found');
     }
 
     const teacherIds = await this.prisma.teacher.findMany({
@@ -595,14 +585,7 @@ export class DashboardService {
   }
 
   async getSecretaryDepartmentOverview(departmentId: string, user: any) {
-    const role = user.role || 'USER';
-
-    if (role === 'SECRETARY') {
-      const secretaryDeptId = await this.getSecretaryDepartmentId(user.sub);
-      if (!secretaryDeptId || secretaryDeptId !== departmentId) {
-        throw new Error('Forbidden');
-      }
-    }
+    await this.assertCanAccessDepartment(user, departmentId);
 
     const dept = await this.prisma.department.findUnique({
       where: { id: departmentId },
@@ -616,7 +599,7 @@ export class DashboardService {
     });
 
     if (!dept) {
-      throw new Error('Department not found');
+      throw new NotFoundException('Department not found');
     }
 
     const teacherIds = dept.teachers.map((t) => t.id);
@@ -704,7 +687,7 @@ export class DashboardService {
         id: dept.id,
         name: dept.name,
         faculty: dept.faculty?.name,
-        code: 'SE-IT',
+        code: dept.id,
         status: 'Đang hoạt động',
       },
       stats: {
@@ -740,14 +723,7 @@ export class DashboardService {
   }
 
   async getSecretaryDepartmentTopics(departmentId: string, user: any) {
-    const role = user.role || 'USER';
-
-    if (role === 'SECRETARY') {
-      const secretaryDeptId = await this.getSecretaryDepartmentId(user.sub);
-      if (!secretaryDeptId || secretaryDeptId !== departmentId) {
-        throw new Error('Forbidden');
-      }
-    }
+    await this.assertCanAccessDepartment(user, departmentId);
 
     const dept = await this.prisma.department.findUnique({
       where: { id: departmentId },
@@ -760,7 +736,7 @@ export class DashboardService {
     });
 
     if (!dept) {
-      throw new Error('Department not found');
+      throw new NotFoundException('Department not found');
     }
 
     const teacherIds = dept.teachers.map((t) => t.id);
@@ -806,171 +782,114 @@ export class DashboardService {
   }
 
   async getDepartmentSecretaryDetail(departmentId: string, user: any) {
-    try {
-      const role = user.role || 'USER';
+    await this.assertCanAccessDepartment(user, departmentId);
 
-      // Allow SECRETARY to view any department (no department assignment restriction)
-
-      const dept = await this.prisma.department.findUnique({
-        where: { id: departmentId },
-        include: {
-          teachers: {
-            where: { deleted_at: null },
-            select: { id: true, name: true, email: true, position: true },
-          },
+    const dept = await this.prisma.department.findUnique({
+      where: { id: departmentId },
+      include: {
+        teachers: {
+          where: { deleted_at: null },
+          select: { id: true, name: true, email: true, position: true },
         },
-      });
+      },
+    });
 
-      if (!dept) {
-        throw new Error('Department not found');
-      }
-
-      const teacherIds = dept.teachers.map((t) => t.id);
-
-      // Handle empty teacher list
-      if (teacherIds.length === 0) {
-        return {
-          departmentId: dept.id,
-          departmentName: dept.name,
-          departmentCode: 'SE-IT',
-          totalTeachers: 0,
-          totalTopics: 0,
-          completedTopics: 0,
-          pendingApprovalTopics: 0,
-          delayedTopics: 0,
-          totalReports: 0,
-          pendingApprovals: 0,
-          topics: [],
-        };
-      }
-
-      const [
-        completedTopics,
-        pendingTopics,
-        delayedTopics,
-        totalReports,
-        pendingReports,
-      ] = await Promise.all([
-        this.prisma.topics.count({
-          where: {
-            teacher_id: { in: teacherIds },
-            status: 'APPROVED',
-          },
-        }),
-        this.prisma.topics.count({
-          where: {
-            teacher_id: { in: teacherIds },
-            status: 'PENDING',
-          },
-        }),
-        this.prisma.topics.count({
-          where: {
-            teacher_id: { in: teacherIds },
-            status: 'REJECTED',
-          },
-        }),
-        this.prisma.progress_reports.count({
-          where: { teacher_id: { in: teacherIds }, deleted_at: null },
-        }),
-        this.prisma.progress_reports.count({
-          where: {
-            teacher_id: { in: teacherIds },
-            status: 'PENDING',
-            deleted_at: null,
-          },
-        }),
-      ]);
-
-      const topics = await this.prisma.topics.findMany({
-        where: { teacher_id: { in: teacherIds } },
-        select: {
-          id: true,
-          name: true,
-          status: true,
-          created_at: true,
-          teacher_id: true,
-        },
-        orderBy: { created_at: 'desc' },
-      });
-
-      // Build teacher info map from dept.teachers
-      const teacherMap = new Map();
-      dept.teachers.forEach((t) =>
-        teacherMap.set(t.id, {
-          name: t.name,
-          email: t.email,
-          position: t.position,
-        }),
-      );
-
-      return {
-        departmentId: dept.id,
-        departmentName: dept.name,
-        departmentCode: 'SE-IT',
-        totalTeachers: dept.teachers.length,
-        totalTopics: completedTopics + pendingTopics + delayedTopics,
-        completedTopics,
-        pendingApprovalTopics: pendingTopics,
-        delayedTopics,
-        totalReports,
-        pendingApprovals: pendingReports,
-        topics: topics.map((t) => {
-          const teacher = teacherMap.get(t.teacher_id) || {
-            name: 'Unknown',
-            position: 'Giảng viên bộ môn',
-          };
-          return {
-            id: t.id,
-            name: t.name,
-            code: `TOPIC-${t.id}`,
-            instructorName: teacher.name,
-            instructorRole: teacher.position || 'Giảng viên bộ môn',
-            completionPercentage:
-              t.status === 'APPROVED' ? 100 : t.status === 'PENDING' ? 50 : 0,
-            status:
-              t.status === 'APPROVED'
-                ? 'completed'
-                : t.status === 'PENDING'
-                  ? 'pending'
-                  : 'delayed',
-          };
-        }),
-      };
-    } catch (error) {
-      console.error('Error in getDepartmentSecretaryDetail:', error);
-      // Return mock data as fallback
-      return {
-        departmentId: departmentId,
-        departmentName: 'Bộ môn Kỹ thuật phần mềm',
-        departmentCode: 'SE-IT',
-        totalTeachers: 6,
-        totalTopics: 2,
-        completedTopics: 2,
-        pendingApprovalTopics: 0,
-        delayedTopics: 0,
-        totalReports: 0,
-        pendingApprovals: 0,
-        topics: [
-          {
-            id: 1,
-            name: 'Hệ thống Quản lý Đào tạo & NCKH',
-            code: 'DT-2024-KTPM01',
-            instructorName: 'TS. Trần Văn A',
-            instructorRole: 'Giảng viên chính',
-            completionPercentage: 100,
-            status: 'completed',
-          },
-          {
-            id: 2,
-            name: 'Ứng dụng AI phân tích kết quả học tập',
-            code: 'DT-2024-KTPM02',
-            instructorName: 'ThS. Lê Thị B',
-            instructorRole: 'Giảng viên bộ môn',
-            completionPercentage: 100,
-            status: 'completed',
-          },
-        ],
-      };
+    if (!dept) {
+      throw new NotFoundException('Department not found');
     }
+
+    const teacherIds = dept.teachers.map((t) => t.id);
+
+    const [
+      completedTopics,
+      pendingTopics,
+      delayedTopics,
+      totalReports,
+      pendingReports,
+    ] = await Promise.all([
+      this.prisma.topics.count({
+        where: {
+          teacher_id: { in: teacherIds },
+          status: 'APPROVED',
+        },
+      }),
+      this.prisma.topics.count({
+        where: {
+          teacher_id: { in: teacherIds },
+          status: 'PENDING',
+        },
+      }),
+      this.prisma.topics.count({
+        where: {
+          teacher_id: { in: teacherIds },
+          status: 'REJECTED',
+        },
+      }),
+      this.prisma.progress_reports.count({
+        where: { teacher_id: { in: teacherIds }, deleted_at: null },
+      }),
+      this.prisma.progress_reports.count({
+        where: {
+          teacher_id: { in: teacherIds },
+          status: 'PENDING',
+          deleted_at: null,
+        },
+      }),
+    ]);
+
+    const topics = await this.prisma.topics.findMany({
+      where: { teacher_id: { in: teacherIds } },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        created_at: true,
+        teacher_id: true,
+      },
+      orderBy: { created_at: 'desc' },
+    });
+
+    const teacherMap = new Map();
+    dept.teachers.forEach((t) =>
+      teacherMap.set(t.id, {
+        name: t.name,
+        email: t.email,
+        position: t.position,
+      }),
+    );
+
+    return {
+      departmentId: dept.id,
+      departmentName: dept.name,
+      departmentCode: dept.id,
+      totalTeachers: dept.teachers.length,
+      totalTopics: completedTopics + pendingTopics + delayedTopics,
+      completedTopics,
+      pendingApprovalTopics: pendingTopics,
+      delayedTopics,
+      totalReports,
+      pendingApprovals: pendingReports,
+      topics: topics.map((t) => {
+        const teacher = teacherMap.get(t.teacher_id) || {
+          name: 'Unknown',
+          position: 'Giảng viên bộ môn',
+        };
+        return {
+          id: t.id,
+          name: t.name,
+          code: `TOPIC-${t.id}`,
+          instructorName: teacher.name,
+          instructorRole: teacher.position || 'Giảng viên bộ môn',
+          completionPercentage:
+            t.status === 'APPROVED' ? 100 : t.status === 'PENDING' ? 50 : 0,
+          status:
+            t.status === 'APPROVED'
+              ? 'completed'
+              : t.status === 'PENDING'
+                ? 'pending'
+                : 'delayed',
+        };
+      }),
+    };
   }
 }
