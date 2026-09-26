@@ -147,6 +147,7 @@ model Teacher {
   updated_at                   DateTime                       @updatedAt
   deleted_at                   DateTime?
   address                      String?
+  extra_data                   Json?
   date_of_birth                DateTime?                      @db.Date
   email                        String                         @unique @db.VarChar(255)
   gender                       Gender?

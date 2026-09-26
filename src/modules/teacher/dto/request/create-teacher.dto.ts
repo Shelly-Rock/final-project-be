@@ -8,6 +8,7 @@ import {
   IsOptional,
   IsEnum,
   MaxDate,
+  IsObject,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Gender, AcademicTitle } from '@prisma/client';
@@ -91,4 +92,9 @@ export class CreateTeacherDto {
   @IsOptional()
   @IsString()
   address?: string;
+
+  @ApiPropertyOptional({ description: 'Dữ liệu bổ sung (JSON)', example: '{}' })
+  @IsOptional()
+  @IsObject()
+  extraData?: Record<string, unknown>;
 }

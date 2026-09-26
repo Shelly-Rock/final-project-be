@@ -31,6 +31,7 @@ export class TeacherResponseDto {
   @Expose() date_of_birth: Date;
   @Expose() gender: Gender;
   @Expose() address: string;
+  @Expose() extra_data: unknown;
   @Expose() status: TeacherStatus;
   @Expose() created_at: Date;
   @Expose() updated_at: Date;

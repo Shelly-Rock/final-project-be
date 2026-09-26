@@ -19,6 +19,7 @@ export class TeacherMapper {
       date_of_birth: dto.dateOfBirth,
       gender: dto.gender,
       address: dto.address,
+      extra_data: (dto.extraData as Prisma.InputJsonValue) ?? null,
       user: { connect: { id: userId } },
     };
   }
@@ -40,6 +41,9 @@ export class TeacherMapper {
     }
     if (dto.departmentId) {
       data.department = { connect: { id: dto.departmentId } };
+    }
+    if (dto.extraData !== undefined) {
+      data.extra_data = dto.extraData as Prisma.InputJsonValue;
     }
 
     return data;
