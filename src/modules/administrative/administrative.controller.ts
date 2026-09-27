@@ -25,6 +25,10 @@ import { FacultyResponseDto } from './dto/faculty.response.dto';
 import { DepartmentResponseDto } from './dto/department.response.dto';
 import { CreateFacultyDto } from './dto/create-faculty.dto';
 import { UpdateFacultyDto } from './dto/update-faculty.dto';
+import {
+  CreateDepartmentDto,
+  UpdateDepartmentDto,
+} from './dto/create-department.dto';
 
 @ApiTags('Administrative')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -82,5 +86,39 @@ export class AdministrativeController {
   @ApiOkResponse({ type: [DepartmentResponseDto] })
   async getDepartments(@Query('facultyId') facultyId?: string) {
     return this.adminService.getDepartments(facultyId);
+  }
+
+  @Get('departments/:id')
+  @ApiOperation({ summary: 'Lấy chi tiết bộ môn' })
+  @ApiOkResponse({ type: DepartmentResponseDto })
+  async getDepartment(@Param('id') id: string) {
+    return this.adminService.getDepartmentById(id);
+  }
+
+  @Post('departments')
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Tạo bộ môn mới' })
+  @ApiCreatedResponse({ type: DepartmentResponseDto })
+  async createDepartment(@Body() dto: CreateDepartmentDto) {
+    return this.adminService.createDepartment(dto);
+  }
+
+  @Patch('departments/:id')
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Cập nhật bộ môn' })
+  @ApiOkResponse({ type: DepartmentResponseDto })
+  async updateDepartment(
+    @Param('id') id: string,
+    @Body() dto: UpdateDepartmentDto,
+  ) {
+    return this.adminService.updateDepartment(id, dto);
+  }
+
+  @Delete('departments/:id')
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Xóa bộ môn' })
+  @ApiOkResponse({ description: 'Đã xóa bộ môn' })
+  async deleteDepartment(@Param('id') id: string) {
+    return this.adminService.deleteDepartment(id);
   }
 }
