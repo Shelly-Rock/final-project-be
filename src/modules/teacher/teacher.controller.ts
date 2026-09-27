@@ -28,6 +28,7 @@ import {
   UpdateTeacherDto,
   ListTeacherQueryDto,
   ToggleTeacherStatusDto,
+  RemoveTeacherDto,
   TeacherResponseDto,
 } from './dto';
 import { JwtAuthGuard } from '@/core/auth/guards/jwtAuth.guard';
@@ -116,6 +117,12 @@ export class TeacherController {
   ) {
     const teacher = await this.teacherService.toggleStatus(code, dto.status);
     return new TeacherResponseDto(teacher);
+  }
+
+  @Delete()
+  @ApiOperation({ summary: 'Xóa nhiều giảng viên' })
+  async removeMany(@Body() dto: RemoveTeacherDto) {
+    return this.teacherService.removeMany(dto.codes);
   }
 
   @Delete(':code') //[cite: 3]
