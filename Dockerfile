@@ -36,5 +36,5 @@ COPY --from=builder /app/prisma ./prisma
 ENV DATABASE_URL="postgresql://dummy:dummy@dummy:5432/dummy"
 RUN npx prisma generate
 EXPOSE 3000
-# SỬA CMD: chuyển sang dist/src/main.js
-CMD ["sh", "-c", "node dist/src/main.js"]
+# Apply pending Prisma migrations before starting the API
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/main.js"]
