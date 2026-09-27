@@ -36,5 +36,5 @@ COPY --from=builder /app/prisma ./prisma
 ENV DATABASE_URL="postgresql://dummy:dummy@dummy:5432/dummy"
 RUN npx prisma generate
 EXPOSE 3000
-# Apply pending Prisma migrations before starting the API
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/main.js"]
+# Apply the idempotent production schema patch before starting the API
+CMD ["sh", "-c", "node prisma/apply-production-patches.js && node dist/src/main.js"]
