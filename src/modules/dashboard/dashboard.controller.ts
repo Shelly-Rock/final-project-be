@@ -57,10 +57,26 @@ export class DashboardController {
 
   @Get('admin/departments')
   @Roles('ADMIN')
-  @ApiOperation({ summary: 'Danh sách các khoa với thống kê' })
-  @ApiOkResponse({ description: 'Thống kê chi tiết từng khoa' })
+  @ApiOperation({ summary: 'Danh sách các bộ môn với thống kê' })
+  @ApiOkResponse({ description: 'Thống kê chi tiết từng bộ môn' })
   async getAdminDepartments() {
     return this.dashboardService.getDepartmentStats();
+  }
+
+  @Get('admin/faculties')
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Thống kê tổng hợp theo khoa' })
+  @ApiOkResponse({ description: 'Số liệu gom từ các bộ môn thuộc khoa' })
+  async getAdminFaculties() {
+    return this.dashboardService.getFacultyStats();
+  }
+
+  @Get('admin/faculties/:facultyId')
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Chi tiết một khoa kèm danh sách bộ môn' })
+  @ApiOkResponse({ description: 'Thông tin khoa và số liệu từng bộ môn' })
+  async getAdminFacultyDetail(@Param('facultyId') facultyId: string) {
+    return this.dashboardService.getFacultyDetail(facultyId);
   }
 
   @Get('department')

@@ -226,23 +226,46 @@ export class DashboardService {
           include: { user: { select: { username: true, email: true } } },
         },
       },
+      orderBy: { id: 'asc' },
     });
 
     return Promise.all(
       departments.map(async (dept) => {
-        const [projectCount, topicCount] = await Promise.all([
-          this.prisma.project.count({
-            where: {
-              teacher_id: { in: dept.teachers.map((t) => t.id) },
-              deleted_at: null,
-            },
-          }),
-          this.prisma.topics.count({
-            where: {
-              teacher_id: { in: dept.teachers.map((t) => t.id) },
-            },
-          }),
-        ]);
+        const teacherIds = dept.teachers.map((t) => t.id);
+
+        const [projectCount, topicCount, pending, approved, rejected, reports] =
+          await Promise.all([
+            this.prisma.project.count({
+              where: { teacher_id: { in: teacherIds }, deleted_at: null },
+            }),
+            this.prisma.topics.count({
+              where: { teacher_id: { in: teacherIds } },
+            }),
+            this.prisma.project.count({
+              where: {
+                teacher_id: { in: teacherIds },
+                status: ProjectStatus.PENDING,
+                deleted_at: null,
+              },
+            }),
+            this.prisma.project.count({
+              where: {
+                teacher_id: { in: teacherIds },
+                status: ProjectStatus.APPROVED,
+                deleted_at: null,
+              },
+            }),
+            this.prisma.project.count({
+              where: {
+                teacher_id: { in: teacherIds },
+                status: ProjectStatus.REJECTED,
+                deleted_at: null,
+              },
+            }),
+            this.prisma.progress_reports.count({
+              where: { teacher_id: { in: teacherIds }, deleted_at: null },
+            }),
+          ]);
 
         return {
           id: dept.id,
@@ -256,11 +279,103 @@ export class DashboardService {
             : 'Chưa gán',
           teachers: dept.teachers.length,
           teacherCount: dept.teachers.length,
-          projects: projectCount,
+          projects: {
+            total: projectCount,
+            pending,
+            approved,
+            rejected,
+          },
           topics: topicCount,
+          reports,
         };
       }),
     );
+  }
+
+  /**
+   * Thống kê tổng hợp theo KHOA (gom từ các bộ môn thuộc khoa).
+   * Dùng cho dashboard home + sidebar chi tiết khoa.
+   */
+  async getFacultyStats() {
+    const faculties = await this.prisma.faculty.findMany({
+      orderBy: { created_at: 'desc' },
+    });
+
+    const departmentStats = await this.getDepartmentStats();
+
+    return faculties.map((faculty) => {
+      const departments = departmentStats.filter(
+        (d) => d.faculty_id === faculty.id,
+      );
+
+      const sum = (key: 'total' | 'pending' | 'approved' | 'rejected') =>
+        departments.reduce((acc, d) => acc + (d.projects[key] ?? 0), 0);
+
+      const totalProjects = sum('total');
+
+      return {
+        id: faculty.id,
+        name: faculty.name,
+        description: faculty.description,
+        is_active: faculty.is_active,
+        department_count: departments.length,
+        teacher_count: departments.reduce((acc, d) => acc + d.teachers, 0),
+        topic_count: departments.reduce((acc, d) => acc + d.topics, 0),
+        projects: {
+          total: totalProjects,
+          pending: sum('pending'),
+          approved: sum('approved'),
+          rejected: sum('rejected'),
+        },
+        reports: departments.reduce((acc, d) => acc + d.reports, 0),
+      };
+    });
+  }
+
+  /**
+   * Chi tiết một khoa: thông tin khoa + số liệu từng bộ môn (BM_xxx).
+   */
+  async getFacultyDetail(facultyId: string) {
+    const faculty = await this.prisma.faculty.findUnique({
+      where: { id: facultyId },
+    });
+
+    if (!faculty) {
+      throw new NotFoundException('Không tìm thấy khoa');
+    }
+
+    const departmentStats = await this.getDepartmentStats();
+    const departments = departmentStats.filter(
+      (d) => d.faculty_id === facultyId,
+    );
+
+    return {
+      faculty: {
+        id: faculty.id,
+        name: faculty.name,
+        description: faculty.description,
+        is_active: faculty.is_active,
+      },
+      summary: {
+        department_count: departments.length,
+        teacher_count: departments.reduce((acc, d) => acc + d.teachers, 0),
+        topic_count: departments.reduce((acc, d) => acc + d.topics, 0),
+        report_count: departments.reduce((acc, d) => acc + d.reports, 0),
+        projects: {
+          total: departments.reduce((acc, d) => acc + d.projects.total, 0),
+          pending: departments.reduce((acc, d) => acc + d.projects.pending, 0),
+          approved: departments.reduce(
+            (acc, d) => acc + d.projects.approved,
+            0,
+          ),
+          rejected: departments.reduce(
+            (acc, d) => acc + d.projects.rejected,
+            0,
+          ),
+        },
+      },
+      departments,
+    };
   }
 
   async getSecretaryDepartmentId(userId: number): Promise<string | null> {
