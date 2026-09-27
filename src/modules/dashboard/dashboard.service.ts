@@ -220,7 +220,7 @@ export class DashboardService {
           select: { id: true },
         },
         faculty: {
-          select: { name: true },
+          select: { id: true, name: true },
         },
         secretary: {
           include: { user: { select: { username: true, email: true } } },
@@ -246,12 +246,16 @@ export class DashboardService {
 
         return {
           id: dept.id,
+          department_id: dept.id,
+          department_name: dept.name,
           name: dept.name,
+          faculty_id: dept.faculty?.id ?? null,
           faculty: dept.faculty?.name || 'N/A',
           secretary: dept.secretary
             ? dept.secretary.user?.username
             : 'Chưa gán',
           teachers: dept.teachers.length,
+          teacherCount: dept.teachers.length,
           projects: projectCount,
           topics: topicCount,
         };
@@ -350,6 +354,9 @@ export class DashboardService {
           where: { deleted_at: null },
           select: { id: true },
         },
+        faculty: {
+          select: { id: true, name: true },
+        },
       },
     });
 
@@ -384,6 +391,8 @@ export class DashboardService {
         return {
           department_id: dept.id,
           department_name: dept.name,
+          faculty_id: dept.faculty?.id ?? null,
+          faculty: dept.faculty?.name || 'N/A',
           teachers: dept.teachers.length,
           projects: {
             total,
