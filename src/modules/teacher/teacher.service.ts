@@ -124,6 +124,54 @@ export class TeacherService {
     });
   }
 
+  async removeMany(teacherCodes: string[]) {
+    const uniqueCodes = [...new Set(teacherCodes)];
+
+    return this.prisma.$transaction(async (transaction) => {
+      const teachers = await transaction.teacher.findMany({
+        where: {
+          teacher_id: { in: uniqueCodes },
+          deleted_at: null,
+        },
+        include: { project: true },
+      });
+
+      if (teachers.length !== uniqueCodes.length) {
+        const foundCodes = new Set(
+          teachers.map((teacher) => teacher.teacher_id),
+        );
+        const missingCodes = uniqueCodes.filter((code) => !foundCodes.has(code));
+        throw new NotFoundException(
+          `Không tìm thấy giảng viên với mã: ${missingCodes.join(', ')}`,
+        );
+      }
+
+      const blockedTeacher = teachers.find(
+        (teacher) => teacher.project && teacher.project.length > 0,
+      );
+      if (blockedTeacher) {
+        throw new BadRequestException(
+          `Không thể xóa giảng viên ${blockedTeacher.teacher_id}: giảng viên đang có đề tài hoạt động`,
+        );
+      }
+
+      await transaction.teacher.updateMany({
+        where: { teacher_id: { in: uniqueCodes } },
+        data: {
+          status: TeacherStatus.inactive,
+          deleted_at: new Date(),
+        },
+      });
+
+      return {
+        codes: uniqueCodes,
+        count: uniqueCodes.length,
+        deleted: true,
+        message: 'Xóa giảng viên thành công',
+      };
+    });
+  }
+
   async remove(teacherCode: string) {
     const teacher = await this.prisma.teacher.findUnique({
       where: { teacher_id: teacherCode },
