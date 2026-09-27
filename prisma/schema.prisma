@@ -117,7 +117,10 @@ model Student {
 model Faculty {
   id          String       @id @db.VarChar(50)
   name        String       @db.VarChar(255)
+  description String?      @db.Text
+  is_active   Boolean      @default(true)
   created_at  DateTime     @default(now())
+  updated_at  DateTime     @updatedAt
   departments Department[]
   teachers    Teacher[]
 
