@@ -47,7 +47,7 @@ export class RemoveStudentService {
     const student = await this.getStudentById(id);
 
     const hasActiveProject = student.project && !student.project.deleted_at;
-    const hasFinalSubmission = !!student.final_submissions;
+    const hasFinalSubmission = student.final_submissions.length > 0;
 
     if (hasActiveProject) {
       throw new BadRequestException(
@@ -96,7 +96,7 @@ export class RemoveStudentService {
       const blockedStudent = students.find(
         (student) =>
           (student.project && !student.project.deleted_at) ||
-          student.final_submissions,
+          student.final_submissions.length > 0,
       );
       if (blockedStudent) {
         throw new BadRequestException(

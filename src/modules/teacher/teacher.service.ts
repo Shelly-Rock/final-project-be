@@ -146,8 +146,8 @@ export class TeacherService {
         );
       }
 
-      const blockedTeacher = teachers.find(
-        (teacher) => teacher.project && teacher.project.length > 0,
+      const blockedTeacher = teachers.find((teacher) =>
+        teacher.project.some((project) => !project.deleted_at),
       );
       if (blockedTeacher) {
         throw new BadRequestException(
@@ -184,7 +184,7 @@ export class TeacherService {
       );
     }
 
-    if (teacher.project && teacher.project.length > 0) {
+    if (teacher.project.some((project) => !project.deleted_at)) {
       throw new BadRequestException(
         'Không thể xóa: giảng viên đang có đề tài hoạt động',
       );
