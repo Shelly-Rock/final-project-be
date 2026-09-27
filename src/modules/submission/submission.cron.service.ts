@@ -12,25 +12,28 @@ export class SubmissionCronService {
 
   @Cron(CronExpression.EVERY_30_MINUTES)
   async syncDriveSubmissions() {
+    if (process.env.GOOGLE_DRIVE_SYNC_ENABLED === 'false') return;
+
+    const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    const refreshToken = process.env.GOOGLE_REFRESH_TOKEN;
+
+    if (!folderId || !clientId || !clientSecret || !refreshToken) {
+      this.logger.warn(
+        'Thiếu cấu hình Google Drive OAuth. Bỏ qua cronjob đồng bộ Drive.',
+      );
+      return;
+    }
+
     this.logger.log(
       'Bắt đầu chạy Cronjob đồng bộ file nộp bài từ Google Drive...',
     );
     try {
-      const auth = new google.auth.OAuth2(
-        process.env.GOOGLE_CLIENT_ID,
-        process.env.GOOGLE_CLIENT_SECRET,
-      );
-      auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
+      const auth = new google.auth.OAuth2(clientId, clientSecret);
+      auth.setCredentials({ refresh_token: refreshToken });
 
       const drive = google.drive({ version: 'v3', auth });
-
-      const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
-      if (!folderId) {
-        this.logger.warn(
-          'GOOGLE_DRIVE_FOLDER_ID chưa được cấu hình. Bỏ qua cronjob.',
-        );
-        return;
-      }
 
       // Lấy danh sách file trong thư mục, được tạo trong vòng 24h qua
       const timeMin = new Date();
