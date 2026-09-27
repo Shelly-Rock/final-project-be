@@ -321,6 +321,8 @@ export class DashboardService {
         department_count: departments.length,
         teacher_count: departments.reduce((acc, d) => acc + d.teachers, 0),
         topic_count: departments.reduce((acc, d) => acc + d.topics, 0),
+        // Mã bộ môn thuộc khoa, dùng để điều hướng tới /department/<ma_bm>
+        department_ids: departments.map((d) => d.id),
         projects: {
           total: totalProjects,
           pending: sum('pending'),
