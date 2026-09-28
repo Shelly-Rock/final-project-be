@@ -158,7 +158,6 @@ export class TeacherBasicDto {
   teacher_id: string;
   name: string;
   email: string;
-  department: string | null;
   faculty: string | null;
 }
 

@@ -44,7 +44,7 @@ export class ProgressTrackingService {
         user_id: true,
         teacher_id: true,
         name: true,
-        department_id: true,
+        faculty_id: true,
       },
     });
     if (!teacher) {
@@ -72,7 +72,7 @@ export class ProgressTrackingService {
   private async resolveSecretaryByUserId(userId: number) {
     const secretary = await this.prisma.secretary.findFirst({
       where: { user_id: userId, deleted_at: null },
-      select: { id: true, user_id: true, department_id: true },
+      select: { id: true, user_id: true, faculty_id: true },
     });
     if (!secretary) {
       throw new ForbiddenException(
@@ -84,10 +84,10 @@ export class ProgressTrackingService {
 
   async createTemplateForActor(user: JwtUser, dto: CreateTemplateDto) {
     const secretary = await this.resolveSecretaryByUserId(user.sub);
-    if (!secretary.department_id) {
-      throw new BadRequestException('Thư ký chưa được phân bổ về ngành nào.');
+    if (!secretary.faculty_id) {
+      throw new BadRequestException('Thư ký chưa được gán khoa.');
     }
-    return this.createTemplate(secretary.department_id, dto);
+    return this.createTemplate(secretary.faculty_id, dto);
   }
 
   async cloneTemplates(
@@ -96,13 +96,13 @@ export class ProgressTrackingService {
     toPeriodId: number,
   ) {
     const secretary = await this.resolveSecretaryByUserId(user.sub);
-    if (!secretary.department_id) {
-      throw new BadRequestException('Thư ký chưa được phân bổ về ngành nào.');
+    if (!secretary.faculty_id) {
+      throw new BadRequestException('Thư ký chưa được gán khoa.');
     }
 
     const templatesToClone = await this.prisma.report_templates.findMany({
       where: {
-        department_id: secretary.department_id,
+        faculty_id: secretary.faculty_id,
         period_id: fromPeriodId,
         deleted_at: null,
       },
@@ -121,7 +121,7 @@ export class ProgressTrackingService {
       file_url: t.file_url,
       file_name: t.file_name,
       file_size: t.file_size,
-      department_id: t.department_id,
+      faculty_id: t.faculty_id,
       period_id: toPeriodId,
       is_cloned: true,
       created_at: new Date(),
@@ -213,13 +213,13 @@ export class ProgressTrackingService {
 
   // ========== Template Methods ==========
 
-  async createTemplate(departmentId: string, dto: CreateTemplateDto) {
+  async createTemplate(facultyId: string, dto: CreateTemplateDto) {
     const { deadline_ids, ...templateData } = dto;
 
     const newTemplate = await this.prisma.report_templates.create({
       data: {
         ...templateData,
-        department_id: departmentId,
+        faculty_id: facultyId,
         updated_at: new Date(),
       } as any,
     });
@@ -238,13 +238,13 @@ export class ProgressTrackingService {
     const {
       page = 1,
       limit = 20,
-      department_id,
+      faculty_id,
       period_id,
       is_exception,
     } = query;
 
     const where: any = { deleted_at: null };
-    if (department_id) where.department_id = department_id;
+    if (faculty_id) where.faculty_id = faculty_id;
     if (period_id) where.period_id = period_id;
     if (is_exception !== undefined) {
       if (is_exception) {

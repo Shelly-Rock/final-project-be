@@ -317,20 +317,20 @@ export class NotificationService {
     return notifications;
   }
 
-  async getDepartments(): Promise<Array<{ id: string; name: string }>> {
-    const departments = await this.prisma.department.findMany();
-    return departments.map((d) => ({
-      id: d.id,
-      name: d.name,
+  async getFaculties(): Promise<Array<{ id: string; name: string }>> {
+    const faculties = await this.prisma.faculty.findMany();
+    return faculties.map((faculty) => ({
+      id: faculty.id,
+      name: faculty.name,
     }));
   }
 
-  async getUsersByDepartment(
-    departmentId: string,
+  async getUsersByFaculty(
+    facultyId: string,
   ): Promise<Array<{ id: number; name: string; email: string; role: string }>> {
     const teachers = await this.prisma.teacher.findMany({
       where: {
-        department_id: departmentId,
+        faculty_id: facultyId,
         user: {
           is_active: true,
         },

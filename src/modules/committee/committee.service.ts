@@ -81,7 +81,6 @@ export class CommitteeService {
         teacher_id: true,
         name: true,
         email: true,
-        department: { select: { name: true } },
         faculty: { select: { name: true } },
       },
     });
@@ -91,7 +90,6 @@ export class CommitteeService {
       teacher_id: t.teacher_id,
       name: t.name,
       email: t.email,
-      department: t.department?.name || null,
       faculty: t.faculty?.name || null,
     }));
   }
@@ -105,7 +103,6 @@ export class CommitteeService {
         teacher_id: true,
         name: true,
         email: true,
-        department: { select: { name: true } },
         faculty: { select: { name: true } },
       },
     });
@@ -115,7 +112,7 @@ export class CommitteeService {
       teacher_id: t.teacher_id,
       name: t.name,
       email: t.email,
-      department: t.department?.name || null,
+      faculty: t.faculty?.name || null,
     }));
   }
 

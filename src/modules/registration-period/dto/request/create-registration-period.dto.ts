@@ -13,11 +13,11 @@ import {
 import { Type } from 'class-transformer';
 import { IsAfter } from './is-after.validator';
 
-class DepartmentLimitDto {
-  @ApiProperty({ description: 'Mã ngành (hoặc tên ngành)' })
+class FacultyLimitDto {
+  @ApiProperty({ description: 'Mã khoa (hoặc tên khoa)' })
   @IsString()
   @IsNotEmpty()
-  department: string;
+  faculty: string;
 
   @ApiProperty({
     description: 'Giới hạn sinh viên (1-10)',
@@ -85,12 +85,12 @@ export class CreateRegistrationPeriodDto {
   description?: string;
 
   @ApiPropertyOptional({
-    description: 'Cấu hình giới hạn sĩ số theo từng ngành',
-    type: [DepartmentLimitDto],
+    description: 'Cấu hình giới hạn sĩ số theo từng khoa',
+    type: [FacultyLimitDto],
   })
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => DepartmentLimitDto)
-  departmentStudentLimits?: DepartmentLimitDto[];
+  @Type(() => FacultyLimitDto)
+  facultyStudentLimits?: FacultyLimitDto[];
 }

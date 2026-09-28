@@ -33,10 +33,6 @@ export class TopicManageQueryDto {
   facultyId?: string;
 
   @IsOptional()
-  @IsString()
-  departmentId?: string;
-
-  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)

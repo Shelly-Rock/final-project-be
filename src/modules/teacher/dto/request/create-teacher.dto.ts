@@ -52,11 +52,6 @@ export class CreateTeacherDto {
   @IsNotEmpty()
   facultyId: string;
 
-  @ApiProperty({ description: 'Mã Bộ môn', example: 'BM_KTPM' })
-  @IsString()
-  @IsNotEmpty()
-  departmentId: string;
-
   @ApiPropertyOptional({
     description: 'Học hàm, học vị',
     enum: AcademicTitle,

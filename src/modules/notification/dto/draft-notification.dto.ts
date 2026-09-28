@@ -44,7 +44,7 @@ export class DraftNotificationDto {
   recipientIds: number[];
 
   @ApiProperty({
-    example: 'department',
+    example: 'faculty',
     description: 'Type of recipient',
   })
   @IsString()

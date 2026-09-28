@@ -56,7 +56,7 @@ export class TeacherService {
   }
 
   async findAll(query: ListTeacherQueryDto) {
-    const { search, facultyId, departmentId, status, page, pageSize } = query;
+    const { search, facultyId, status, page, pageSize } = query;
     const { skip, take } = getPaginationOptions(page, pageSize);
 
     const where: Prisma.TeacherWhereInput = {
@@ -65,8 +65,6 @@ export class TeacherService {
 
     if (status) where.status = status;
     if (facultyId) where.faculty_id = facultyId;
-    if (departmentId) where.department_id = departmentId;
-
     if (search) {
       where.OR = [
         { teacher_id: { contains: search, mode: 'insensitive' } },
@@ -81,7 +79,7 @@ export class TeacherService {
         where,
         skip,
         take,
-        include: { faculty: true, department: true },
+        include: { faculty: true },
         orderBy: { created_at: 'desc' },
       }),
     ]);
@@ -92,7 +90,7 @@ export class TeacherService {
   async findOne(teacherCode: string) {
     const teacher = await this.prisma.teacher.findUnique({
       where: { teacher_id: teacherCode },
-      include: { faculty: true, department: true },
+      include: { faculty: true },
     });
 
     if (!teacher || teacher.deleted_at) {

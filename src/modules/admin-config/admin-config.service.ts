@@ -209,7 +209,6 @@ export class AdminConfigService {
     const teacherWhere: Prisma.TeacherWhereInput = {
       deleted_at: null,
       ...(query.facultyId && { faculty_id: query.facultyId }),
-      ...(query.departmentId && { department_id: query.departmentId }),
       ...(search && {
         OR: [
           { name: { contains: search, mode: 'insensitive' } },
@@ -231,9 +230,7 @@ export class AdminConfigService {
           name: true,
           email: true,
           faculty_id: true,
-          department_id: true,
           faculty: { select: { id: true, name: true } },
-          department: { select: { id: true, name: true } },
         },
       }),
       this.prisma.teacher.count({ where: teacherWhere }),

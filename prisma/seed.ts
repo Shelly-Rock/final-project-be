@@ -255,7 +255,7 @@ async function main() {
   }
   console.log('✅ Đã gán permissions cho tất cả roles');
 
-  // 5. Tạo Faculty và Department
+  // 5. Tạo Faculty
   const faculty = await prisma.faculty.upsert({
     where: { id: 'KHOA_CNTT' },
     update: {},
@@ -265,17 +265,6 @@ async function main() {
     },
   });
   console.log(`✅ Đã tạo Khoa: ${faculty.name}`);
-
-  const department = await prisma.department.upsert({
-    where: { id: 'BM_KTPM' },
-    update: {},
-    create: {
-      id: 'BM_KTPM',
-      name: 'Bộ môn Kỹ thuật phần mềm',
-      faculty_id: faculty.id,
-    },
-  });
-  console.log(`✅ Đã tạo Bộ môn: ${department.name}`);
 
   // 6. Tạo 4 User Accounts với các Roles tương ứng
   const defaultUsers = [
@@ -440,7 +429,6 @@ async function main() {
           name: `${userData.lastName} ${userData.firstName}`,
           email: userData.email,
           status: 'active',
-          department: { connect: { id: department.id } },
           faculty: { connect: { id: faculty.id } },
         },
         create: {
@@ -449,7 +437,6 @@ async function main() {
           name: `${userData.lastName} ${userData.firstName}`,
           email: userData.email,
           status: 'active',
-          department: { connect: { id: department.id } },
           faculty: { connect: { id: faculty.id } },
         },
       });

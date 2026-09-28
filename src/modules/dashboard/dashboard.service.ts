@@ -19,7 +19,7 @@ export class DashboardService {
       totalStudents,
       totalTeachers,
       totalProjects,
-      totalDepartments,
+      totalFaculties,
       totalTopics,
       pendingProjects,
       approvedProjects,
@@ -33,7 +33,7 @@ export class DashboardService {
       this.prisma.student.count({ where: { deleted_at: null } }),
       this.prisma.teacher.count({ where: { deleted_at: null } }),
       this.prisma.project.count({ where: { deleted_at: null } }),
-      this.prisma.department.count(),
+      this.prisma.faculty.count(),
       this.prisma.topics.count(),
       this.prisma.project.count({
         where: { status: ProjectStatus.PENDING, deleted_at: null },
@@ -59,7 +59,7 @@ export class DashboardService {
       }),
     ]);
 
-    const departmentStats = await this.getDepartmentStats();
+    const facultyStats = await this.getFacultyStats();
     const topRecentActivities = await this.getRecentActivities(5);
 
     return {
@@ -67,7 +67,7 @@ export class DashboardService {
         students: totalStudents,
         teachers: totalTeachers,
         projects: totalProjects,
-        departments: totalDepartments,
+        faculties: totalFaculties,
         topics: totalTopics,
         alerts: insufficientQuotas,
       },
@@ -87,17 +87,16 @@ export class DashboardService {
         active: activeTopics,
         insufficientQuotas,
       },
-      departmentStats,
+      facultyStats,
       recentActivities: topRecentActivities,
     };
   }
 
-  async getSecretaryDashboard(departmentId: string) {
-    const department = await this.prisma.department.findUnique({
-      where: { id: departmentId },
+  async getSecretaryDashboard(facultyId: string) {
+    const faculty = await this.prisma.faculty.findUnique({
+      where: { id: facultyId },
       include: {
-        faculty: true,
-        secretary: {
+        secretaries: {
           include: { user: true },
         },
         teachers: {
@@ -107,11 +106,11 @@ export class DashboardService {
       },
     });
 
-    if (!department) {
-      throw new Error(`Department ${departmentId} not found`);
+    if (!faculty) {
+      throw new Error(`Faculty ${facultyId} not found`);
     }
 
-    const teacherIds = department.teachers.map((t) => t.id);
+    const teacherIds = faculty.teachers.map((t) => t.id);
 
     const [
       totalStudents,
@@ -186,14 +185,14 @@ export class DashboardService {
     ]);
 
     return {
-      department: {
-        id: department.id,
-        name: department.name,
-        faculty: department.faculty?.name || 'N/A',
+      faculty: {
+        id: faculty.id,
+        name: faculty.name,
+        faculty: faculty.name,
       },
       summary: {
         totalStudents,
-        totalTeachers: department.teachers.length,
+        totalTeachers: faculty.teachers.length,
         totalProjects,
         totalTopics,
       },
@@ -212,17 +211,14 @@ export class DashboardService {
     };
   }
 
-  async getDepartmentStats() {
-    const departments = await this.prisma.department.findMany({
+  async getFacultyUnitStats() {
+    const facultys = await this.prisma.faculty.findMany({
       include: {
         teachers: {
           where: { deleted_at: null },
           select: { id: true },
         },
-        faculty: {
-          select: { id: true, name: true },
-        },
-        secretary: {
+        secretaries: {
           include: { user: { select: { username: true, email: true } } },
         },
       },
@@ -230,7 +226,7 @@ export class DashboardService {
     });
 
     return Promise.all(
-      departments.map(async (dept) => {
+      facultys.map(async (dept) => {
         const teacherIds = dept.teachers.map((t) => t.id);
 
         const [projectCount, topicCount, pending, approved, rejected, reports] =
@@ -269,13 +265,12 @@ export class DashboardService {
 
         return {
           id: dept.id,
-          department_id: dept.id,
-          department_name: dept.name,
+          faculty_id: dept.id,
+          faculty_name: dept.name,
           name: dept.name,
-          faculty_id: dept.faculty?.id ?? null,
-          faculty: dept.faculty?.name || 'N/A',
-          secretary: dept.secretary
-            ? dept.secretary.user?.username
+          faculty: dept.name,
+          secretary: dept.secretaries[0]
+            ? dept.secretaries[0].user?.username
             : 'Chưa gán',
           teachers: dept.teachers.length,
           teacherCount: dept.teachers.length,
@@ -294,37 +289,36 @@ export class DashboardService {
 
   /**
    * Thống kê tổng hợp theo KHOA.
-   * Hệ thống quản lý ở cấp KHOA; số liệu gộp từ các bộ môn thuộc khoa
-   * (bộ môn chỉ là dữ liệu nội bộ gắn với giảng viên/đề tài).
+   * Thống kê trực tiếp theo khoa.
    */
   async getFacultyStats() {
     const faculties = await this.prisma.faculty.findMany({
       orderBy: { created_at: 'desc' },
     });
 
-    const departmentStats = await this.getDepartmentStats();
+    const facultyStats = await this.getFacultyUnitStats();
 
     return faculties.map((faculty) => {
-      const departments = departmentStats.filter(
+      const facultys = facultyStats.filter(
         (d) => d.faculty_id === faculty.id,
       );
 
       const sum = (key: 'total' | 'pending' | 'approved' | 'rejected') =>
-        departments.reduce((acc, d) => acc + (d.projects[key] ?? 0), 0);
+        facultys.reduce((acc, d) => acc + (d.projects[key] ?? 0), 0);
 
       return {
         id: faculty.id,
         name: faculty.name,
         description: faculty.description,
         is_active: faculty.is_active,
-        teacher_count: departments.reduce((acc, d) => acc + d.teachers, 0),
+        teacher_count: facultys.reduce((acc, d) => acc + d.teachers, 0),
         projects: {
           total: sum('total'),
           pending: sum('pending'),
           approved: sum('approved'),
           rejected: sum('rejected'),
         },
-        reports: departments.reduce((acc, d) => acc + d.reports, 0),
+        reports: facultys.reduce((acc, d) => acc + d.reports, 0),
       };
     });
   }
@@ -341,8 +335,8 @@ export class DashboardService {
       throw new NotFoundException('Không tìm thấy khoa');
     }
 
-    const departmentStats = await this.getDepartmentStats();
-    const departments = departmentStats.filter(
+    const facultyStats = await this.getFacultyUnitStats();
+    const facultys = facultyStats.filter(
       (d) => d.faculty_id === facultyId,
     );
 
@@ -354,17 +348,17 @@ export class DashboardService {
         is_active: faculty.is_active,
       },
       summary: {
-        teacher_count: departments.reduce((acc, d) => acc + d.teachers, 0),
-        topic_count: departments.reduce((acc, d) => acc + d.topics, 0),
-        report_count: departments.reduce((acc, d) => acc + d.reports, 0),
+        teacher_count: facultys.reduce((acc, d) => acc + d.teachers, 0),
+        topic_count: facultys.reduce((acc, d) => acc + d.topics, 0),
+        report_count: facultys.reduce((acc, d) => acc + d.reports, 0),
         projects: {
-          total: departments.reduce((acc, d) => acc + d.projects.total, 0),
-          pending: departments.reduce((acc, d) => acc + d.projects.pending, 0),
-          approved: departments.reduce(
+          total: facultys.reduce((acc, d) => acc + d.projects.total, 0),
+          pending: facultys.reduce((acc, d) => acc + d.projects.pending, 0),
+          approved: facultys.reduce(
             (acc, d) => acc + d.projects.approved,
             0,
           ),
-          rejected: departments.reduce(
+          rejected: facultys.reduce(
             (acc, d) => acc + d.projects.rejected,
             0,
           ),
@@ -373,21 +367,21 @@ export class DashboardService {
     };
   }
 
-  async getSecretaryDepartmentId(userId: number): Promise<string | null> {
+  async getSecretaryFacultyId(userId: number): Promise<string | null> {
     try {
       const secretary = await this.prisma.secretary.findUnique({
         where: { user_id: userId },
-        include: { department: { select: { id: true } } },
+        select: { faculty_id: true },
       });
-      return secretary?.department?.id || null;
+      return secretary?.faculty_id || null;
     } catch (error) {
-      // Fallback if department_id column doesn't exist in production
-      console.log('Note: Secretary department migration not yet applied');
+      // Fallback if faculty_id column doesn't exist in production
+      console.log('Note: Secretary faculty migration not yet applied');
       return null;
     }
   }
 
-  private async assertCanAccessDepartment(user: any, departmentId: string) {
+  private async assertCanAccessFaculty(user: any, facultyId: string) {
     const role = user?.role || 'USER';
 
     if (role === 'ADMIN') return;
@@ -398,18 +392,18 @@ export class DashboardService {
         throw new ForbiddenException('Invalid secretary user');
       }
 
-      const secretaryDeptId = await this.getSecretaryDepartmentId(userId);
+      const secretaryDeptId = await this.getSecretaryFacultyId(userId);
       if (!secretaryDeptId) {
         throw new ForbiddenException('Thư ký chưa được gán khoa');
       }
 
       // Route mang MÃ KHOA: cho phép khi khoa của thư ký trùng mã này.
-      const ownDepartment = await this.prisma.department.findUnique({
+      const ownFaculty = await this.prisma.faculty.findUnique({
         where: { id: secretaryDeptId },
-        select: { faculty_id: true },
+        select: { id: true },
       });
 
-      if (ownDepartment?.faculty_id === departmentId) {
+      if (ownFaculty?.id === facultyId) {
         return;
       }
 
@@ -419,9 +413,9 @@ export class DashboardService {
     throw new ForbiddenException('Unauthorized');
   }
 
-  async getSecretaryDepartmentDetails(departmentId: string) {
-    const department = await this.prisma.department.findUnique({
-      where: { id: departmentId },
+  async getSecretaryFacultyDetails(facultyId: string) {
+    const faculty = await this.prisma.faculty.findUnique({
+      where: { id: facultyId },
       include: {
         teachers: {
           where: { deleted_at: null },
@@ -434,16 +428,16 @@ export class DashboardService {
       },
     });
 
-    if (!department) {
-      throw new Error(`Department ${departmentId} not found`);
+    if (!faculty) {
+      throw new Error(`Faculty ${facultyId} not found`);
     }
 
     return {
-      department: {
-        id: department.id,
-        name: department.name,
+      faculty: {
+        id: faculty.id,
+        name: faculty.name,
       },
-      teachers: department.teachers.map((teacher) => {
+      teachers: faculty.teachers.map((teacher) => {
         const projects = teacher.project;
         return {
           id: teacher.id,
@@ -463,21 +457,18 @@ export class DashboardService {
     };
   }
 
-  async getDepartmentStatsWithProjectCounts() {
-    const departments = await this.prisma.department.findMany({
+  async getFacultyStatsWithProjectCounts() {
+    const facultys = await this.prisma.faculty.findMany({
       include: {
         teachers: {
           where: { deleted_at: null },
           select: { id: true },
         },
-        faculty: {
-          select: { id: true, name: true },
-        },
       },
     });
 
     return Promise.all(
-      departments.map(async (dept) => {
+      facultys.map(async (dept) => {
         const [pending, approved, rejected] = await Promise.all([
           this.prisma.project.count({
             where: {
@@ -505,10 +496,9 @@ export class DashboardService {
         const total = pending + approved + rejected;
 
         return {
-          department_id: dept.id,
-          department_name: dept.name,
-          faculty_id: dept.faculty?.id ?? null,
-          faculty: dept.faculty?.name || 'N/A',
+          faculty_id: dept.id,
+          faculty_name: dept.name,
+          faculty: dept.name,
           teachers: dept.teachers.length,
           projects: {
             total,
@@ -537,11 +527,11 @@ export class DashboardService {
     }));
   }
 
-  async getDepartmentListScoped(user: any) {
+  async getFacultyListScoped(user: any) {
     const role = user?.role || 'USER';
 
     if (role === 'ADMIN') {
-      return this.getDepartmentStatsWithProjectCounts();
+      return this.getFacultyStatsWithProjectCounts();
     }
 
     if (role === 'SECRETARY') {
@@ -550,21 +540,21 @@ export class DashboardService {
         throw new ForbiddenException('Invalid secretary user');
       }
 
-      const departmentId = await this.getSecretaryDepartmentId(userId);
-      if (!departmentId) {
+      const facultyId = await this.getSecretaryFacultyId(userId);
+      if (!facultyId) {
         throw new ForbiddenException('Thư ký chưa được gán khoa');
       }
 
-      const deptStats = await this.getDepartmentStatsWithProjectCounts();
-      return deptStats.filter((d) => d.department_id === departmentId);
+      const deptStats = await this.getFacultyStatsWithProjectCounts();
+      return deptStats.filter((d) => d.faculty_id === facultyId);
     }
 
     throw new ForbiddenException('Unauthorized');
   }
 
   /**
-   * Route /department/:id mang MÃ KHOA.
-   * Số liệu được gộp từ toàn bộ bộ môn (nội bộ) thuộc khoa đó.
+   * Route /faculty/:id mang MÃ KHOA.
+   * Số liệu được tính từ toàn bộ giảng viên thuộc khoa đó.
    */
   private async resolveFacultyScope(facultyId: string) {
     const faculty = await this.prisma.faculty.findUnique({
@@ -573,29 +563,18 @@ export class DashboardService {
 
     if (!faculty) return null;
 
-    const departments = await this.prisma.department.findMany({
-      where: { faculty_id: facultyId },
-      select: { id: true, name: true },
-      orderBy: { id: 'asc' },
-    });
+    const teacherIds = (await this.prisma.teacher.findMany({
+      where: { faculty_id: facultyId, deleted_at: null },
+      select: { id: true },
+    })).map((t) => t.id);
 
-    const teacherIds = (
-      await this.prisma.teacher.findMany({
-        where: {
-          department_id: { in: departments.map((d) => d.id) },
-          deleted_at: null,
-        },
-        select: { id: true },
-      })
-    ).map((t) => t.id);
-
-    return { faculty, departments, teacherIds };
+    return { faculty, teacherIds };
   }
 
-  async getDepartmentDetailScoped(departmentId: string, user: any) {
-    await this.assertCanAccessDepartment(user, departmentId);
+  async getFacultyDetailScoped(facultyId: string, user: any) {
+    await this.assertCanAccessFaculty(user, facultyId);
 
-    const scope = await this.resolveFacultyScope(departmentId);
+    const scope = await this.resolveFacultyScope(facultyId);
 
     if (!scope) {
       throw new NotFoundException('Không tìm thấy khoa');
@@ -630,8 +609,8 @@ export class DashboardService {
     const total = pending + approved + rejected;
 
     return {
-      department_id: faculty.id,
-      department_name: faculty.name,
+      faculty_id: faculty.id,
+      faculty_name: faculty.name,
       teachers: teacherIdList.length,
       projects: {
         total,
@@ -642,10 +621,10 @@ export class DashboardService {
     };
   }
 
-  async getDepartmentProgressReportsScoped(departmentId: string, user: any) {
-    await this.assertCanAccessDepartment(user, departmentId);
+  async getFacultyProgressReportsScoped(facultyId: string, user: any) {
+    await this.assertCanAccessFaculty(user, facultyId);
 
-    const scope = await this.resolveFacultyScope(departmentId);
+    const scope = await this.resolveFacultyScope(facultyId);
 
     if (!scope) {
       throw new NotFoundException('Không tìm thấy khoa');
@@ -717,8 +696,8 @@ export class DashboardService {
       .sort((a, b) => a.year - b.year || a.month - b.month);
 
     return {
-      department: {
-        id: departmentId,
+      faculty: {
+        id: facultyId,
         name: deptName,
       },
       summary,
@@ -726,13 +705,12 @@ export class DashboardService {
     };
   }
 
-  async getSecretaryDepartmentOverview(departmentId: string, user: any) {
-    await this.assertCanAccessDepartment(user, departmentId);
+  async getSecretaryFacultyOverview(facultyId: string, user: any) {
+    await this.assertCanAccessFaculty(user, facultyId);
 
-    const dept = await this.prisma.department.findUnique({
-      where: { id: departmentId },
+    const dept = await this.prisma.faculty.findUnique({
+      where: { id: facultyId },
       include: {
-        faculty: { select: { name: true } },
         teachers: {
           where: { deleted_at: null },
           select: { id: true, name: true, email: true },
@@ -741,7 +719,7 @@ export class DashboardService {
     });
 
     if (!dept) {
-      throw new NotFoundException('Department not found');
+      throw new NotFoundException('Faculty not found');
     }
 
     const teacherIds = dept.teachers.map((t) => t.id);
@@ -825,10 +803,10 @@ export class DashboardService {
     topicTeachers.forEach((t) => topicTeacherMap.set(t.id, t));
 
     return {
-      department: {
+      faculty: {
         id: dept.id,
         name: dept.name,
-        faculty: dept.faculty?.name,
+        faculty: dept.name,
         code: dept.id,
         status: 'Đang hoạt động',
       },
@@ -864,11 +842,11 @@ export class DashboardService {
     };
   }
 
-  async getSecretaryDepartmentTopics(departmentId: string, user: any) {
-    await this.assertCanAccessDepartment(user, departmentId);
+  async getSecretaryFacultyTopics(facultyId: string, user: any) {
+    await this.assertCanAccessFaculty(user, facultyId);
 
-    const dept = await this.prisma.department.findUnique({
-      where: { id: departmentId },
+    const dept = await this.prisma.faculty.findUnique({
+      where: { id: facultyId },
       include: {
         teachers: {
           where: { deleted_at: null },
@@ -878,7 +856,7 @@ export class DashboardService {
     });
 
     if (!dept) {
-      throw new NotFoundException('Department not found');
+      throw new NotFoundException('Faculty not found');
     }
 
     const teacherIds = dept.teachers.map((t) => t.id);
@@ -923,11 +901,11 @@ export class DashboardService {
     };
   }
 
-  async getDepartmentSecretaryDetail(departmentId: string, user: any) {
-    await this.assertCanAccessDepartment(user, departmentId);
+  async getFacultySecretaryDetail(facultyId: string, user: any) {
+    await this.assertCanAccessFaculty(user, facultyId);
 
-    const dept = await this.prisma.department.findUnique({
-      where: { id: departmentId },
+    const dept = await this.prisma.faculty.findUnique({
+      where: { id: facultyId },
       include: {
         teachers: {
           where: { deleted_at: null },
@@ -937,7 +915,7 @@ export class DashboardService {
     });
 
     if (!dept) {
-      throw new NotFoundException('Department not found');
+      throw new NotFoundException('Faculty not found');
     }
 
     const teacherIds = dept.teachers.map((t) => t.id);
@@ -1001,9 +979,9 @@ export class DashboardService {
     );
 
     return {
-      departmentId: dept.id,
-      departmentName: dept.name,
-      departmentCode: dept.id,
+      facultyId: dept.id,
+      facultyName: dept.name,
+      facultyCode: dept.id,
       totalTeachers: dept.teachers.length,
       totalTopics: completedTopics + pendingTopics + delayedTopics,
       completedTopics,
@@ -1014,14 +992,14 @@ export class DashboardService {
       topics: topics.map((t) => {
         const teacher = teacherMap.get(t.teacher_id) || {
           name: 'Unknown',
-          position: 'Giảng viên bộ môn',
+          position: 'Giảng viên',
         };
         return {
           id: t.id,
           name: t.name,
           code: `TOPIC-${t.id}`,
           instructorName: teacher.name,
-          instructorRole: teacher.position || 'Giảng viên bộ môn',
+          instructorRole: teacher.position || 'Giảng viên',
           completionPercentage:
             t.status === 'APPROVED' ? 100 : t.status === 'PENDING' ? 50 : 0,
           status:

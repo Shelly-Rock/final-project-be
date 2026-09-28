@@ -61,7 +61,7 @@ export class CreateTeacherService {
             ...TeacherMapper.toPrismaCreateInput(teacher, user.id),
             status: TeacherStatus.active,
           },
-          include: { faculty: true, department: true },
+          include: { faculty: true },
         });
 
         results.push(createdTeacher);

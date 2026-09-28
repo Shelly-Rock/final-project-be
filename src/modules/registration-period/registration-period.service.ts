@@ -40,8 +40,8 @@ export class RegistrationPeriodService {
         student_deadline: dto.studentDeadline,
         default_quota: dto.defaultQuota,
         description: dto.description,
-        department_student_limits:
-          dto.departmentStudentLimits as unknown as Prisma.InputJsonArray,
+        faculty_student_limits:
+          dto.facultyStudentLimits as unknown as Prisma.InputJsonArray,
         status: RegistrationPeriodStatus.UPCOMING,
         updated_at: new Date(),
       },
@@ -95,8 +95,8 @@ export class RegistrationPeriodService {
         student_deadline: dto.studentDeadline,
         default_quota: dto.defaultQuota,
         description: dto.description,
-        department_student_limits: dto.departmentStudentLimits
-          ? (dto.departmentStudentLimits as unknown as Prisma.InputJsonArray)
+        faculty_student_limits: dto.facultyStudentLimits
+          ? (dto.facultyStudentLimits as unknown as Prisma.InputJsonArray)
           : undefined,
       },
     });
@@ -145,7 +145,7 @@ export class RegistrationPeriodService {
     await this.findOne(periodId); // Kiểm tra đợt tồn tại
     return this.prisma.teacher_quotas.findMany({
       where: { period_id: periodId },
-      include: { teachers: { select: { name: true, department_id: true } } },
+      include: { teachers: { select: { name: true, faculty_id: true } } },
     });
   }
 

@@ -49,12 +49,9 @@ export class ImportTeacherService {
   private async mapTeachers(
     rows: RawTeacherRow[],
   ): Promise<CreateTeacherDto[]> {
-    const [faculties, departments] = await Promise.all([
-      this.prisma.faculty.findMany({ select: { id: true, name: true } }),
-      this.prisma.department.findMany({
-        select: { id: true, name: true, faculty_id: true },
-      }),
-    ]);
+    const faculties = await this.prisma.faculty.findMany({
+      select: { id: true, name: true },
+    });
 
     return rows.map((row, index) => {
       const rowNumber = index + 2;
@@ -63,20 +60,12 @@ export class ImportTeacherService {
         faculties,
         rowNumber,
       );
-      const departmentId = this.resolveDepartmentId(
-        this.toStringValue(row.departmentId),
-        facultyId,
-        departments,
-        rowNumber,
-      );
-
       return {
         code: this.toStringValue(row.code),
         name: this.toStringValue(row.name),
         email: this.toStringValue(row.email),
         phone: this.toOptionalString(row.phone),
         facultyId,
-        departmentId,
         academicTitle: this.normalizeAcademicTitle(row.academicTitle, rowNumber),
         position: this.toOptionalString(row.position),
         dateOfBirth: this.normalizeDate(row.dateOfBirth, rowNumber),
@@ -117,31 +106,6 @@ export class ImportTeacherService {
     }
 
     return faculty.id;
-  }
-
-  private resolveDepartmentId(
-    value: string,
-    facultyId: string,
-    departments: { id: string; name: string; faculty_id: string }[],
-    rowNumber: number,
-  ): string {
-    if (!value) return '';
-
-    const normalizedValue = value.toLowerCase();
-    const department = departments.find(
-      (item) =>
-        item.faculty_id === facultyId &&
-        (item.id.toLowerCase() === normalizedValue ||
-          item.name.toLowerCase() === normalizedValue),
-    );
-
-    if (!department) {
-      throw new BadRequestException(
-        `Dòng ${rowNumber}: Không tìm thấy bộ môn ${value}`,
-      );
-    }
-
-    return department.id;
   }
 
   private normalizeAcademicTitle(
@@ -251,9 +215,6 @@ export class ImportTeacherService {
       }
       if (!teacher.facultyId) {
         throw new BadRequestException(`Dòng ${rowNumber}: Thiếu mã khoa`);
-      }
-      if (!teacher.departmentId) {
-        throw new BadRequestException(`Dòng ${rowNumber}: Thiếu mã bộ môn`);
       }
       if (
         teacher.phone &&

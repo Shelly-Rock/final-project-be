@@ -45,8 +45,8 @@ export class ComposeNotificationDto {
   recipientIds: number[];
 
   @ApiProperty({
-    example: 'department',
-    description: 'Type of recipient: user, department, faculty, role',
+    example: 'faculty',
+    description: 'Type of recipient: user, faculty, role',
   })
   @IsString()
   @IsNotEmpty()

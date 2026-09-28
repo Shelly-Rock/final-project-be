@@ -123,7 +123,7 @@ export class TemplateQueryDto {
 
   @IsOptional()
   @IsString()
-  department_id?: string;
+  faculty_id?: string;
 
   @IsOptional()
   @Type(() => Number)

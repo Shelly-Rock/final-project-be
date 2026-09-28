@@ -8,7 +8,6 @@ import {
 import { PrismaService } from '@/core/database/prisma/prisma.service';
 import type { JwtUser } from '@/core/auth/interfaces/currentUser.interface';
 import { FacultyResponseDto } from './dto/faculty.response.dto';
-import { DepartmentResponseDto } from './dto/department.response.dto';
 import { CreateFacultyDto } from './dto/create-faculty.dto';
 import { UpdateFacultyDto } from './dto/update-faculty.dto';
 
@@ -133,16 +132,11 @@ export class AdministrativeService {
     const faculty = await this.prisma.faculty.findUnique({ where: { id } });
     if (!faculty) throw new NotFoundException('Không tìm thấy khoa');
 
-    const [departmentCount, teacherCount] = await Promise.all([
-      this.prisma.department.count({ where: { faculty_id: id } }),
+    const [teacherCount] = await Promise.all([
       this.prisma.teacher.count({
         where: { faculty_id: id, deleted_at: null },
       }),
     ]);
-
-    if (departmentCount > 0) {
-      throw new ConflictException('Không thể xóa khoa đang có bộ môn');
-    }
 
     if (teacherCount > 0) {
       throw new ConflictException('Không thể xóa khoa đang có giảng viên');
@@ -155,27 +149,12 @@ export class AdministrativeService {
   private async assertSecretaryCanUpdateFaculty(user: JwtUser, facultyId: string) {
     const secretary = await this.prisma.secretary.findUnique({
       where: { user_id: Number(user.sub) },
-      include: { department: { select: { faculty_id: true } } },
+      select: { faculty_id: true },
     });
 
-    if (secretary?.department?.faculty_id !== facultyId) {
+    if (secretary?.faculty_id !== facultyId) {
       throw new ForbiddenException('Bạn không có quyền cập nhật khoa này');
     }
   }
 
-  async getDepartments(facultyId?: string): Promise<DepartmentResponseDto[]> {
-    const where = facultyId ? { faculty_id: facultyId } : {};
-
-    const departments = await this.prisma.department.findMany({
-      where,
-      select: { id: true, name: true, faculty_id: true },
-      orderBy: { id: 'asc' },
-    });
-
-    return departments.map((d) => ({
-      id: d.id,
-      name: d.name,
-      facultyId: d.faculty_id,
-    }));
-  }
 }

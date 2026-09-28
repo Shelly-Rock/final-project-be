@@ -3,27 +3,27 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function seedSecretaryData() {
-  console.log('🌱 Nạp dữ liệu cho Secretary Department Dashboard...');
+  console.log('🌱 Nạp dữ liệu cho Secretary Faculty Dashboard...');
 
   try {
-    // 1. Lấy Department và Teachers
-    const department = await prisma.department.findUnique({
-      where: { id: 'BM_KTPM' },
+    // 1. Lấy Faculty và Teachers
+    const faculty = await prisma.faculty.findUnique({
+      where: { id: 'KHOA_CNTT' },
     });
 
-    if (!department) {
-      throw new Error('Department BM_KTPM not found');
+    if (!faculty) {
+      throw new Error('Faculty KHOA_CNTT not found');
     }
-    console.log('✅ Found Department:', department.name);
+    console.log('✅ Found Faculty:', faculty.name);
 
-    // 2. Lấy 6 teachers từ department
+    // 2. Lấy 6 teachers từ faculty
     const teachers = await prisma.teacher.findMany({
-      where: { department_id: department.id },
+      where: { faculty_id: faculty.id },
       take: 6,
     });
 
     if (teachers.length === 0) {
-      throw new Error('No teachers found in department');
+      throw new Error('No teachers found in faculty');
     }
     console.log(`✅ Found ${teachers.length} teachers`);
 
@@ -136,7 +136,7 @@ async function seedSecretaryData() {
 
     console.log('🎉 Secretary dashboard seed data completed successfully!');
     console.log('📊 Summary:');
-    console.log(`   - Department: ${department.name}`);
+    console.log(`   - Faculty: ${faculty.name}`);
     console.log(`   - Teachers: ${teachers.length}`);
     console.log(`   - Topics: 2 (both APPROVED)`);
     console.log(`   - Progress Reports: ${student ? '9 (3 months × 3 teachers)' : '0'}`);
@@ -146,7 +146,7 @@ async function seedSecretaryData() {
     console.log(`   Email: secretary@system.com`);
     console.log(`   Password: 1111`);
     console.log(
-      '\n🔗 Test URL: https://final-project-fe-orpin.vercel.app/department/BM_KTPM',
+      '\n🔗 Test URL: https://final-project-fe-orpin.vercel.app/faculty/KHOA_CNTT',
     );
   } catch (error) {
     console.error('❌ Error seeding secretary data:', error);

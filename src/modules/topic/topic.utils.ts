@@ -33,7 +33,7 @@ export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
   [ProjectStatus.ASSIGNED]: 'Được gán',
 };
 
-export const DEFAULT_DEPARTMENT_CODE = 'GEN';
+export const DEFAULT_FACULTY_CODE = 'GEN';
 
 /**
  * Năm dùng trong mã đề tài. Với năm học dạng "2025-2026" lấy năm kết thúc
@@ -48,28 +48,28 @@ export function resolveCodeYear(schoolYear: string | null | undefined): string {
 }
 
 /**
- * Bộ môn dùng trong mã đề tài: ưu tiên mã bộ môn, chuẩn hoá về chữ in hoa
- * không dấu cách. Không có bộ môn → 'GEN'.
+ * Mã khoa dùng trong mã đề tài, chuẩn hoá về chữ in hoa và không dấu cách.
+ * Không có mã khoa thì dùng 'GEN'.
  */
-export function resolveDepartmentCode(
-  departmentId: string | null | undefined,
+export function resolveFacultyCode(
+  facultyId: string | null | undefined,
 ): string {
-  const normalized = (departmentId ?? '')
+  const normalized = (facultyId ?? '')
     .trim()
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, '_')
     .replace(/_+/g, '_')
     .replace(/^_|_$/g, '');
 
-  return normalized || DEFAULT_DEPARTMENT_CODE;
+  return normalized || DEFAULT_FACULTY_CODE;
 }
 
 export function formatTopicCode(
   year: string,
-  departmentCode: string,
+  facultyCode: string,
   sequence: number,
 ): string {
-  return `DT${year}_${departmentCode}_${String(sequence).padStart(3, '0')}`;
+  return `DT${year}_${facultyCode}_${String(sequence).padStart(3, '0')}`;
 }
 
 export interface StudentLike {

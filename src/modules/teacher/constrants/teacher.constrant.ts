@@ -3,7 +3,6 @@ export const TEACHER_REQUIRED_HEADERS: string[] = [
   'name',
   'email',
   'facultyId',
-  'departmentId',
 ];
 
 export const TEACHER_OPTIONAL_HEADERS: string[] = [
@@ -57,14 +56,6 @@ export const TEACHER_HEADER_ALIASES: Record<string, string> = {
   faculty: 'facultyId',
   faculty_id: 'facultyId',
   facultyid: 'facultyId',
-
-  bomon: 'departmentId',
-  'bộ môn': 'departmentId',
-  mabomon: 'departmentId',
-  'mã bộ môn': 'departmentId',
-  department: 'departmentId',
-  department_id: 'departmentId',
-  departmentid: 'departmentId',
 
   hocham: 'academicTitle',
   'học hàm': 'academicTitle',

@@ -261,21 +261,21 @@ export class NotificationController {
     return this.notificationService.publishDraft(parseInt(id));
   }
 
-  @Get('compose/departments')
-  @ApiOperation({ summary: 'Get departments for recipient selection' })
-  async getDepartments(): Promise<{
-    departments: Array<{ id: string; name: string }>;
+  @Get('compose/faculties')
+  @ApiOperation({ summary: 'Get faculties for recipient selection' })
+  async getFaculties(): Promise<{
+    faculties: Array<{ id: string; name: string }>;
   }> {
-    const departments = await this.notificationService.getDepartments();
-    return { departments };
+    const faculties = await this.notificationService.getFaculties();
+    return { faculties };
   }
 
-  @Get('compose/departments/:deptId/users')
-  @ApiOperation({ summary: 'Get users by department' })
-  async getUsersByDepartment(@Param('deptId') deptId: string): Promise<{
+  @Get('compose/faculties/:facultyId/users')
+  @ApiOperation({ summary: 'Get users by faculty' })
+  async getUsersByFaculty(@Param('facultyId') facultyId: string): Promise<{
     users: Array<{ id: number; name: string; email: string; role: string }>;
   }> {
-    const users = await this.notificationService.getUsersByDepartment(deptId);
+    const users = await this.notificationService.getUsersByFaculty(facultyId);
     return { users };
   }
 

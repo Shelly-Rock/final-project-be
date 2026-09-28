@@ -12,7 +12,6 @@ export class TeacherMapper {
       email: dto.email,
       phone: dto.phone,
       faculty: { connect: { id: dto.facultyId } },
-      department: { connect: { id: dto.departmentId } },
 
       academic_title: dto.academicTitle,
       position: dto.position,
@@ -38,9 +37,6 @@ export class TeacherMapper {
 
     if (dto.facultyId) {
       data.faculty = { connect: { id: dto.facultyId } };
-    }
-    if (dto.departmentId) {
-      data.department = { connect: { id: dto.departmentId } };
     }
     if (dto.extraData !== undefined) {
       data.extra_data = dto.extraData as Prisma.InputJsonValue;

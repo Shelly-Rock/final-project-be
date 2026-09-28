@@ -14,11 +14,6 @@ export class ListTeacherQueryDto {
   @IsString()
   facultyId?: string;
 
-  @ApiPropertyOptional({ description: 'Lọc theo ID Bộ môn' })
-  @IsOptional()
-  @IsString()
-  departmentId?: string;
-
   @ApiPropertyOptional({
     description: 'Lọc theo trạng thái',
     enum: TeacherStatus,

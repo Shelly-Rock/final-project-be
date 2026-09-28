@@ -5,3 +5,43 @@ ALTER TABLE "faculties"
 ADD COLUMN IF NOT EXISTS "description" TEXT,
 ADD COLUMN IF NOT EXISTS "is_active" BOOLEAN NOT NULL DEFAULT true,
 ADD COLUMN IF NOT EXISTS "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
+
+-- Faculty-only organization model. This is idempotent for databases that were
+-- provisioned before the Prisma migration history was introduced.
+ALTER TABLE "teachers" ADD COLUMN IF NOT EXISTS "faculty_id" VARCHAR(50);
+ALTER TABLE "secretaries" ADD COLUMN IF NOT EXISTS "faculty_id" VARCHAR(50);
+ALTER TABLE "report_templates" ADD COLUMN IF NOT EXISTS "faculty_id" VARCHAR(50);
+
+DO $$
+BEGIN
+  IF to_regclass('public.departments') IS NOT NULL THEN
+    EXECUTE 'UPDATE "teachers" t SET "faculty_id" = d."faculty_id" FROM "departments" d WHERE t."department_id" = d."id" AND t."faculty_id" IS NULL';
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'secretaries' AND column_name = 'department_id') THEN
+      EXECUTE 'UPDATE "secretaries" s SET "faculty_id" = d."faculty_id" FROM "departments" d WHERE s."department_id" = d."id" AND s."faculty_id" IS NULL';
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'report_templates' AND column_name = 'department_id') THEN
+      EXECUTE 'UPDATE "report_templates" r SET "faculty_id" = d."faculty_id" FROM "departments" d WHERE r."department_id" = d."id" AND r."faculty_id" IS NULL';
+    END IF;
+  END IF;
+END $$;
+
+ALTER TABLE "teachers" DROP CONSTRAINT IF EXISTS "teachers_department_id_fkey";
+ALTER TABLE "secretaries" DROP CONSTRAINT IF EXISTS "secretaries_department_id_fkey";
+ALTER TABLE "secretaries" DROP CONSTRAINT IF EXISTS "secretaries_department_id_key";
+ALTER TABLE "report_templates" DROP CONSTRAINT IF EXISTS "report_templates_department_id_fkey";
+ALTER TABLE "teachers" DROP COLUMN IF EXISTS "department_id";
+ALTER TABLE "secretaries" DROP COLUMN IF EXISTS "department_id";
+ALTER TABLE "report_templates" DROP COLUMN IF EXISTS "department_id";
+DROP TABLE IF EXISTS "departments";
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'registration_periods' AND column_name = 'department_student_limits')
+     AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'registration_periods' AND column_name = 'faculty_student_limits') THEN
+    ALTER TABLE "registration_periods" RENAME COLUMN "department_student_limits" TO "faculty_student_limits";
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'topic_code_sequences' AND column_name = 'dept_code')
+     AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'topic_code_sequences' AND column_name = 'faculty_code') THEN
+    ALTER TABLE "topic_code_sequences" RENAME COLUMN "dept_code" TO "faculty_code";
+  END IF;
+END $$;

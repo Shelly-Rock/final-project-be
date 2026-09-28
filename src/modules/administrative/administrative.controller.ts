@@ -22,7 +22,6 @@ import { Roles } from '@/core/auth/decorators/roles.decorator';
 import { CurrentUser } from '@/core/auth/decorators/currentUser.decorator';
 import type { JwtUser } from '@/core/auth/interfaces/currentUser.interface';
 import { FacultyResponseDto } from './dto/faculty.response.dto';
-import { DepartmentResponseDto } from './dto/department.response.dto';
 import { CreateFacultyDto } from './dto/create-faculty.dto';
 import { UpdateFacultyDto } from './dto/update-faculty.dto';
 
@@ -77,10 +76,4 @@ export class AdministrativeController {
     return this.adminService.deleteFaculty(id);
   }
 
-  @Get('departments')
-  @ApiOperation({ summary: 'Lấy danh sách bộ môn (có thể lọc theo khoa)' })
-  @ApiOkResponse({ type: [DepartmentResponseDto] })
-  async getDepartments(@Query('facultyId') facultyId?: string) {
-    return this.adminService.getDepartments(facultyId);
-  }
 }

@@ -33,141 +33,133 @@ export class DashboardController {
   @ApiOkResponse({ description: 'Thống kê tổng quan khoa của thư ký' })
   async getSecretaryDashboard(@CurrentUser() user: JwtUser) {
     const userId = Number(user.sub);
-    const departmentId =
-      await this.dashboardService.getSecretaryDepartmentId(userId);
-    if (!departmentId) {
+    const facultyId =
+      await this.dashboardService.getSecretaryFacultyId(userId);
+    if (!facultyId) {
       return { error: 'Thư ký chưa được gán khoa' };
     }
-    return this.dashboardService.getSecretaryDashboard(departmentId);
+    return this.dashboardService.getSecretaryDashboard(facultyId);
   }
 
-  @Get('secretary/department-details')
+  @Get('secretary/faculty-details')
   @Roles('SECRETARY')
   @ApiOperation({ summary: 'Chi tiết khoa cho thư ký' })
   @ApiOkResponse({ description: 'Chi tiết về giáo viên và dự án' })
-  async getSecretaryDepartmentDetails(@CurrentUser() user: JwtUser) {
+  async getSecretaryFacultyDetails(@CurrentUser() user: JwtUser) {
     const userId = Number(user.sub);
-    const departmentId =
-      await this.dashboardService.getSecretaryDepartmentId(userId);
-    if (!departmentId) {
+    const facultyId =
+      await this.dashboardService.getSecretaryFacultyId(userId);
+    if (!facultyId) {
       return { error: 'Thư ký chưa được gán khoa' };
     }
-    return this.dashboardService.getSecretaryDepartmentDetails(departmentId);
-  }
-
-  @Get('admin/departments')
-  @Roles('ADMIN')
-  @ApiOperation({ summary: 'Danh sách các bộ môn với thống kê' })
-  @ApiOkResponse({ description: 'Thống kê chi tiết từng bộ môn' })
-  async getAdminDepartments() {
-    return this.dashboardService.getDepartmentStats();
+    return this.dashboardService.getSecretaryFacultyDetails(facultyId);
   }
 
   @Get('admin/faculties')
   @Roles('ADMIN')
   @ApiOperation({ summary: 'Thống kê tổng hợp theo khoa' })
-  @ApiOkResponse({ description: 'Số liệu gom từ các bộ môn thuộc khoa' })
+  @ApiOkResponse({ description: 'Số liệu tổng hợp theo khoa' })
   async getAdminFaculties() {
     return this.dashboardService.getFacultyStats();
   }
 
   @Get('admin/faculties/:facultyId')
   @Roles('ADMIN')
-  @ApiOperation({ summary: 'Chi tiết một khoa kèm danh sách bộ môn' })
-  @ApiOkResponse({ description: 'Thông tin khoa và số liệu từng bộ môn' })
+  @ApiOperation({ summary: 'Chi tiết một khoa' })
+  @ApiOkResponse({ description: 'Thông tin và số liệu của khoa' })
   async getAdminFacultyDetail(@Param('facultyId') facultyId: string) {
     return this.dashboardService.getFacultyDetail(facultyId);
   }
 
-  @Get('department')
+  @Get('faculty')
   @Roles('ADMIN', 'SECRETARY')
   @ApiOperation({ summary: 'Danh sách khoa theo phạm vi quyền' })
   @ApiOkResponse({
     description: 'Admin: tất cả khoa; Secretary: khoa được gán',
   })
-  async getDepartmentList(@CurrentUser() user: JwtUser) {
-    const data = await this.dashboardService.getDepartmentListScoped(user);
+  async getFacultyList(@CurrentUser() user: JwtUser) {
+    const data = await this.dashboardService.getFacultyListScoped(user);
     return { data };
   }
 
-  @Get('department/:id')
+  @Get('faculty/:id')
   @Roles('ADMIN', 'SECRETARY')
   @ApiOperation({ summary: 'Chi tiết một khoa' })
   @ApiOkResponse({ description: 'Thống kê khoa, quyền truy cập theo role' })
-  async getDepartmentDetail(
-    @Param('id') departmentId: string,
+  async getFacultyDetail(
+    @Param('id') facultyId: string,
     @CurrentUser() user: JwtUser,
   ) {
-    const data = await this.dashboardService.getDepartmentDetailScoped(
-      departmentId,
+    const data = await this.dashboardService.getFacultyDetailScoped(
+      facultyId,
       user,
     );
     return { data };
   }
 
-  @Get('department/:id/progress-reports')
+  @Get('faculty/:id/progress-reports')
   @Roles('ADMIN', 'SECRETARY')
   @ApiOperation({ summary: 'Thống kê báo cáo tiến trình của khoa theo tháng' })
   @ApiOkResponse({ description: 'Dữ liệu grouped column chart báo cáo' })
-  async getDepartmentProgressReports(
-    @Param('id') departmentId: string,
+  async getFacultyProgressReports(
+    @Param('id') facultyId: string,
     @CurrentUser() user: JwtUser,
   ) {
-    const data = await this.dashboardService.getDepartmentProgressReportsScoped(
-      departmentId,
+    const data = await this.dashboardService.getFacultyProgressReportsScoped(
+      facultyId,
       user,
     );
     return { data };
   }
 
-  @Get('secretary/department-overview')
+  @Get('secretary/faculty-overview')
   @Roles('SECRETARY')
   @ApiOperation({ summary: 'Tổng quan khoa cho thư ký (chi tiết dashboard)' })
   @ApiOkResponse({ description: 'Tổng quan đầy đủ khoa với thống kê' })
-  async getSecretaryDepartmentOverview(@CurrentUser() user: JwtUser) {
+  async getSecretaryFacultyOverview(@CurrentUser() user: JwtUser) {
     const userId = Number(user.sub);
-    const departmentId =
-      await this.dashboardService.getSecretaryDepartmentId(userId);
-    if (!departmentId) {
+    const facultyId =
+      await this.dashboardService.getSecretaryFacultyId(userId);
+    if (!facultyId) {
       return { error: 'Thư ký chưa được gán khoa' };
     }
-    const data = await this.dashboardService.getSecretaryDepartmentOverview(
-      departmentId,
+    const data = await this.dashboardService.getSecretaryFacultyOverview(
+      facultyId,
       user,
     );
     return { data };
   }
 
-  @Get('secretary/department-topics')
+  @Get('secretary/faculty-topics')
   @Roles('SECRETARY')
   @ApiOperation({ summary: 'Danh sách đề tài của khoa cho thư ký' })
   @ApiOkResponse({ description: 'Danh sách tất cả đề tài trong khoa' })
-  async getSecretaryDepartmentTopics(@CurrentUser() user: JwtUser) {
+  async getSecretaryFacultyTopics(@CurrentUser() user: JwtUser) {
     const userId = Number(user.sub);
-    const departmentId =
-      await this.dashboardService.getSecretaryDepartmentId(userId);
-    if (!departmentId) {
+    const facultyId =
+      await this.dashboardService.getSecretaryFacultyId(userId);
+    if (!facultyId) {
       return { error: 'Thư ký chưa được gán khoa' };
     }
-    const data = await this.dashboardService.getSecretaryDepartmentTopics(
-      departmentId,
+    const data = await this.dashboardService.getSecretaryFacultyTopics(
+      facultyId,
       user,
     );
     return { data };
   }
 
-  @Get('department/:id/secretary-detail')
+  @Get('faculty/:id/secretary-detail')
   @Roles('ADMIN', 'SECRETARY')
   @ApiOperation({ summary: 'Chi tiết khoa cho thư ký với đề tài' })
   @ApiOkResponse({
     description: 'Thông tin chi tiết khoa, giảng viên, và danh sách đề tài',
   })
-  async getDepartmentSecretaryDetail(
-    @Param('id') departmentId: string,
+  async getFacultySecretaryDetail(
+    @Param('id') facultyId: string,
     @CurrentUser() user: JwtUser,
   ) {
-    const data = await this.dashboardService.getDepartmentSecretaryDetail(
-      departmentId,
+    const data = await this.dashboardService.getFacultySecretaryDetail(
+      facultyId,
       user,
     );
     return { data };

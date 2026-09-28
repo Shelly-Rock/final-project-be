@@ -11,20 +11,12 @@ export class TeacherResponseDto {
   @Expose() phone: string;
 
   @Expose() faculty_id: string;
-  @Expose() department_id: string;
 
   @Expose()
   @Transform(
     ({ obj }: { obj: { faculty?: { name?: string } } }) => obj.faculty?.name,
   )
   faculty_name: string;
-
-  @Expose()
-  @Transform(
-    ({ obj }: { obj: { department?: { name?: string } } }) =>
-      obj.department?.name,
-  )
-  department_name: string;
 
   @Expose() academic_title: string;
   @Expose() position: string;
@@ -40,7 +32,6 @@ export class TeacherResponseDto {
   @Exclude() deleted_at: Date;
 
   @Exclude() faculty: any;
-  @Exclude() department: any;
 
   constructor(partial: Partial<any>) {
     Object.assign(this, partial);

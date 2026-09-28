@@ -40,7 +40,7 @@ import {
   paginate,
   registrationHeadline,
   resolveCodeYear,
-  resolveDepartmentCode,
+  resolveFacultyCode,
   studentFullName,
   summarizeRegistrations,
 } from './topic.utils';
@@ -58,9 +58,7 @@ const MANAGE_INCLUDE = {
       teacher_id: true,
       name: true,
       email: true,
-      department_id: true,
       faculty_id: true,
-      department: { select: { id: true, name: true } },
       faculty: { select: { id: true, name: true } },
     },
   },
@@ -143,9 +141,7 @@ export class TopicService {
           teacher_id: true,
           name: true,
           faculty_id: true,
-          department_id: true,
           faculty: { select: { name: true } },
-          department: { select: { name: true } },
         },
         orderBy: { name: 'asc' },
       }),
@@ -154,26 +150,12 @@ export class TopicService {
     const rows = topics.map((topic) => this.mapManagedRow(topic));
 
     const faculties = new Map<string, string>();
-    const departments = new Map<
-      string,
-      { id: string; name: string; facultyId: string | null }
-    >();
     for (const teacher of periodTeachers) {
       if (teacher.faculty_id) {
         faculties.set(
           teacher.faculty_id,
           teacher.faculty?.name ?? teacher.faculty_id,
         );
-      }
-      if (
-        teacher.department_id &&
-        (!query.facultyId || teacher.faculty_id === query.facultyId)
-      ) {
-        departments.set(teacher.department_id, {
-          id: teacher.department_id,
-          name: teacher.department?.name ?? teacher.department_id,
-          facultyId: teacher.faculty_id,
-        });
       }
     }
 
@@ -191,13 +173,11 @@ export class TopicService {
           }),
         ),
         faculties: [...faculties.entries()].map(([id, name]) => ({ id, name })),
-        departments: [...departments.values()],
         teachers: periodTeachers
           .filter(
             (teacher) =>
               (!query.facultyId || teacher.faculty_id === query.facultyId) &&
-              (!query.departmentId ||
-                teacher.department_id === query.departmentId),
+              true,
           )
           .map((teacher) => ({
             id: teacher.id,
@@ -228,7 +208,7 @@ export class TopicService {
       { header: 'Mã đề tài', key: 'code', width: 18 },
       { header: 'Tên đề tài', key: 'name', width: 46 },
       { header: 'GVHD', key: 'teacher', width: 26 },
-      { header: 'Khoa/Bộ môn', key: 'unit', width: 30 },
+      { header: 'Khoa', key: 'unit', width: 30 },
       { header: 'Chỉ tiêu tối đa', key: 'maxStudents', width: 14 },
       { header: 'Đã nhận', key: 'registered', width: 10 },
       { header: 'Danh sách SV', key: 'students', width: 52 },
@@ -246,9 +226,7 @@ export class TopicService {
         code: row.code ?? '',
         name: row.name,
         teacher: row.teacher?.name ?? '',
-        unit: [row.teacher?.facultyName, row.teacher?.departmentName]
-          .filter(Boolean)
-          .join(' / '),
+        unit: row.teacher?.facultyName ?? '',
         maxStudents: row.maxStudents,
         registered: row.registeredStudents,
         students: row.students
@@ -379,9 +357,7 @@ export class TopicService {
         teacher_id: true,
         name: true,
         email: true,
-        department_id: true,
         faculty_id: true,
-        department: { select: { id: true, name: true } },
         faculty: { select: { id: true, name: true } },
       },
       orderBy: [{ name: 'asc' }],
@@ -431,8 +407,6 @@ export class TopicService {
           teacherId: teacher.teacher_id,
           name: teacher.name,
           email: teacher.email,
-          departmentId: teacher.department_id,
-          departmentName: teacher.department?.name ?? null,
           facultyId: teacher.faculty_id,
           facultyName: teacher.faculty?.name ?? null,
           assignedQuota,
@@ -463,7 +437,7 @@ export class TopicService {
         where: { id: dto.topicId },
         include: {
           registration_periods: { select: { id: true, school_year: true } },
-          teachers: { select: { id: true, department_id: true } },
+          teachers: { select: { id: true, faculty_id: true } },
         },
       });
       if (!topic) {
@@ -583,7 +557,7 @@ export class TopicService {
         where: { id: topicId },
         include: {
           registration_periods: { select: { id: true, school_year: true } },
-          teachers: { select: { id: true, department_id: true } },
+          teachers: { select: { id: true, faculty_id: true } },
           projects: {
             where: { deleted_at: null },
             select: { id: true, status: true, student_id: true },
@@ -851,7 +825,7 @@ export class TopicService {
       async (tx) => {
         const teacher = await tx.teacher.findFirst({
           where: { id: dto.teacherId, deleted_at: null },
-          select: { id: true, name: true, department_id: true },
+          select: { id: true, name: true, faculty_id: true },
         });
         if (!teacher) {
           throw new NotFoundException(
@@ -1627,7 +1601,6 @@ export class TopicService {
               registrationStatus: row.remainingSlots <= 0 ? 'FULL' : 'OPEN',
               teacherName: row.teacher?.name ?? null,
               teacherEmail: row.teacher?.email ?? null,
-              department: row.teacher?.departmentName ?? null,
               faculty: row.teacher?.facultyName ?? null,
               students: row.students
                 .filter((student) =>
@@ -1860,7 +1833,6 @@ export class TopicService {
         teacher_id: true,
         name: true,
         email: true,
-        department_id: true,
         faculty_id: true,
       },
     });
@@ -1953,13 +1925,10 @@ export class TopicService {
       status: query.status,
       is_supplemental: query.isSupplemental,
       teacher_id: query.teacherId,
-      ...(query.facultyId || query.departmentId
+      ...(query.facultyId
         ? {
             teachers: {
               ...(query.facultyId ? { faculty_id: query.facultyId } : {}),
-              ...(query.departmentId
-                ? { department_id: query.departmentId }
-                : {}),
             },
           }
         : {}),
@@ -2282,8 +2251,6 @@ export class TopicService {
             teacherId: topic.teachers.teacher_id,
             name: topic.teachers.name,
             email: topic.teachers.email,
-            departmentId: topic.teachers.department_id,
-            departmentName: topic.teachers.department?.name ?? null,
             facultyId: topic.teachers.faculty_id,
             facultyName: topic.teachers.faculty?.name ?? null,
           }
