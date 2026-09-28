@@ -11,10 +11,6 @@ import { FacultyResponseDto } from './dto/faculty.response.dto';
 import { DepartmentResponseDto } from './dto/department.response.dto';
 import { CreateFacultyDto } from './dto/create-faculty.dto';
 import { UpdateFacultyDto } from './dto/update-faculty.dto';
-import {
-  CreateDepartmentDto,
-  UpdateDepartmentDto,
-} from './dto/create-department.dto';
 
 type FacultyRecord = {
   id: string;
@@ -181,92 +177,5 @@ export class AdministrativeService {
       name: d.name,
       facultyId: d.faculty_id,
     }));
-  }
-
-  async getDepartmentById(id: string): Promise<DepartmentResponseDto> {
-    const department = await this.prisma.department.findUnique({
-      where: { id },
-      select: { id: true, name: true, faculty_id: true },
-    });
-
-    if (!department) throw new NotFoundException('Không tìm thấy bộ môn');
-
-    return {
-      id: department.id,
-      name: department.name,
-      facultyId: department.faculty_id,
-    };
-  }
-
-  async createDepartment(dto: CreateDepartmentDto): Promise<DepartmentResponseDto> {
-    const id = dto.id.trim();
-    const name = dto.name.trim();
-    const facultyId = dto.facultyId.trim();
-
-    const [exists, faculty] = await Promise.all([
-      this.prisma.department.findUnique({ where: { id } }),
-      this.prisma.faculty.findUnique({ where: { id: facultyId } }),
-    ]);
-
-    if (exists) throw new ConflictException('Mã bộ môn đã tồn tại');
-    if (!faculty) throw new BadRequestException('Khoa không tồn tại');
-
-    const created = await this.prisma.department.create({
-      data: { id, name, faculty_id: facultyId },
-    });
-
-    return { id: created.id, name: created.name, facultyId: created.faculty_id };
-  }
-
-  async updateDepartment(
-    id: string,
-    dto: UpdateDepartmentDto,
-  ): Promise<DepartmentResponseDto> {
-    const department = await this.prisma.department.findUnique({ where: { id } });
-    if (!department) throw new NotFoundException('Không tìm thấy bộ môn');
-
-    const data: { name?: string; faculty_id?: string } = {};
-
-    if (dto.name !== undefined) {
-      const name = dto.name.trim();
-      if (!name) throw new BadRequestException('Tên bộ môn không được để trống');
-      data.name = name;
-    }
-
-    if (dto.facultyId !== undefined) {
-      const facultyId = dto.facultyId.trim();
-      const faculty = await this.prisma.faculty.findUnique({
-        where: { id: facultyId },
-      });
-      if (!faculty) throw new BadRequestException('Khoa không tồn tại');
-      data.faculty_id = facultyId;
-    }
-
-    const updated = await this.prisma.department.update({ where: { id }, data });
-
-    return { id: updated.id, name: updated.name, facultyId: updated.faculty_id };
-  }
-
-  async deleteDepartment(id: string): Promise<{ message: string }> {
-    const department = await this.prisma.department.findUnique({ where: { id } });
-    if (!department) throw new NotFoundException('Không tìm thấy bộ môn');
-
-    const [teacherCount, secretary] = await Promise.all([
-      this.prisma.teacher.count({
-        where: { department_id: id, deleted_at: null },
-      }),
-      this.prisma.secretary.findUnique({ where: { department_id: id } }),
-    ]);
-
-    if (teacherCount > 0) {
-      throw new ConflictException('Không thể xóa bộ môn đang có giảng viên');
-    }
-
-    if (secretary) {
-      throw new ConflictException('Không thể xóa bộ môn đang có thư ký');
-    }
-
-    await this.prisma.department.delete({ where: { id } });
-    return { message: 'Đã xóa bộ môn' };
   }
 }

@@ -293,8 +293,9 @@ export class DashboardService {
   }
 
   /**
-   * Thống kê tổng hợp theo KHOA (gom từ các bộ môn thuộc khoa).
-   * Dùng cho dashboard home + sidebar chi tiết khoa.
+   * Thống kê tổng hợp theo KHOA.
+   * Hệ thống quản lý ở cấp KHOA; số liệu gộp từ các bộ môn thuộc khoa
+   * (bộ môn chỉ là dữ liệu nội bộ gắn với giảng viên/đề tài).
    */
   async getFacultyStats() {
     const faculties = await this.prisma.faculty.findMany({
@@ -311,20 +312,14 @@ export class DashboardService {
       const sum = (key: 'total' | 'pending' | 'approved' | 'rejected') =>
         departments.reduce((acc, d) => acc + (d.projects[key] ?? 0), 0);
 
-      const totalProjects = sum('total');
-
       return {
         id: faculty.id,
         name: faculty.name,
         description: faculty.description,
         is_active: faculty.is_active,
-        department_count: departments.length,
         teacher_count: departments.reduce((acc, d) => acc + d.teachers, 0),
-        topic_count: departments.reduce((acc, d) => acc + d.topics, 0),
-        // Mã bộ môn thuộc khoa, dùng để điều hướng tới /department/<ma_bm>
-        department_ids: departments.map((d) => d.id),
         projects: {
-          total: totalProjects,
+          total: sum('total'),
           pending: sum('pending'),
           approved: sum('approved'),
           rejected: sum('rejected'),
@@ -335,7 +330,7 @@ export class DashboardService {
   }
 
   /**
-   * Chi tiết một khoa: thông tin khoa + số liệu từng bộ môn (BM_xxx).
+   * Chi tiết một KHOA: thông tin khoa + tổng hợp số liệu.
    */
   async getFacultyDetail(facultyId: string) {
     const faculty = await this.prisma.faculty.findUnique({
@@ -359,7 +354,6 @@ export class DashboardService {
         is_active: faculty.is_active,
       },
       summary: {
-        department_count: departments.length,
         teacher_count: departments.reduce((acc, d) => acc + d.teachers, 0),
         topic_count: departments.reduce((acc, d) => acc + d.topics, 0),
         report_count: departments.reduce((acc, d) => acc + d.reports, 0),
@@ -376,7 +370,6 @@ export class DashboardService {
           ),
         },
       },
-      departments,
     };
   }
 
@@ -410,17 +403,13 @@ export class DashboardService {
         throw new ForbiddenException('Thư ký chưa được gán khoa');
       }
 
-      // Cho phép truy cập bằng mã bộ môn cũng lẫn mã khoa
-      // (route /department/<id> dùng chung hai loại mã này).
+      // Route mang MÃ KHOA: cho phép khi khoa của thư ký trùng mã này.
       const ownDepartment = await this.prisma.department.findUnique({
         where: { id: secretaryDeptId },
         select: { faculty_id: true },
       });
 
-      if (
-        secretaryDeptId === departmentId ||
-        ownDepartment?.faculty_id === departmentId
-      ) {
+      if (ownDepartment?.faculty_id === departmentId) {
         return;
       }
 
@@ -574,29 +563,16 @@ export class DashboardService {
   }
 
   /**
-   * Route /department/:id nhận cả mã BỘ MÔN (BM_xxx) lẫn mã KHOA (vd: "3").
-   * - Có bộ môn khớp  -> dùng bộ môn đó.
-   * - Không có        -> coi là mã khoa, gom các bộ môn của khoa.
+   * Route /department/:id mang MÃ KHOA.
+   * Số liệu được gộp từ toàn bộ bộ môn (nội bộ) thuộc khoa đó.
    */
-  private async resolveDepartmentScope(id: string) {
-    const department = await this.prisma.department.findUnique({
-      where: { id },
+  private async resolveFacultyScope(facultyId: string) {
+    const faculty = await this.prisma.faculty.findUnique({
+      where: { id: facultyId },
     });
-
-    if (department) return { kind: 'department' as const, department };
-
-    const faculty = await this.prisma.faculty.findUnique({ where: { id } });
 
     if (!faculty) return null;
 
-    return { kind: 'faculty' as const, faculty };
-  }
-
-  /**
-   * Số liệu gộp khi route trỏ tới MÃ KHOA: gom giảng viên / đề tài của
-   * toàn bộ bộ môn thuộc khoa đó.
-   */
-  private async getFacultyScopedSummary(facultyId: string) {
     const departments = await this.prisma.department.findMany({
       where: { faculty_id: facultyId },
       select: { id: true, name: true },
@@ -613,65 +589,19 @@ export class DashboardService {
       })
     ).map((t) => t.id);
 
-    const [pending, approved, rejected] = await Promise.all([
-      this.prisma.project.count({
-        where: {
-          teacher_id: { in: teacherIds },
-          status: ProjectStatus.PENDING,
-          deleted_at: null,
-        },
-      }),
-      this.prisma.project.count({
-        where: {
-          teacher_id: { in: teacherIds },
-          status: ProjectStatus.APPROVED,
-          deleted_at: null,
-        },
-      }),
-      this.prisma.project.count({
-        where: {
-          teacher_id: { in: teacherIds },
-          status: ProjectStatus.REJECTED,
-          deleted_at: null,
-        },
-      }),
-    ]);
-
-    return {
-      department_id: facultyId,
-      department_name: departments.map((d) => d.name).join(' · ') || facultyId,
-      teachers: teacherIds.length,
-      projects: {
-        total: pending + approved + rejected,
-        pending,
-        approved,
-        rejected,
-      },
-    };
+    return { faculty, departments, teacherIds };
   }
 
   async getDepartmentDetailScoped(departmentId: string, user: any) {
     await this.assertCanAccessDepartment(user, departmentId);
 
-    const scope = await this.resolveDepartmentScope(departmentId);
+    const scope = await this.resolveFacultyScope(departmentId);
 
     if (!scope) {
-      throw new NotFoundException('Department not found');
+      throw new NotFoundException('Không tìm thấy khoa');
     }
 
-    // Route trỏ tới mã KHOA: trả số liệu gộp từ toàn bộ bộ môn của khoa.
-    if (scope.kind === 'faculty') {
-      return this.getFacultyScopedSummary(scope.faculty.id);
-    }
-
-    const dept = scope.department;
-
-    const teacherIds = await this.prisma.teacher.findMany({
-      where: { department_id: departmentId, deleted_at: null },
-      select: { id: true },
-    });
-
-    const teacherIdList = teacherIds.map((t) => t.id);
+    const { faculty, teacherIds: teacherIdList } = scope;
 
     const [pending, approved, rejected] = await Promise.all([
       this.prisma.project.count({
@@ -700,8 +630,8 @@ export class DashboardService {
     const total = pending + approved + rejected;
 
     return {
-      department_id: dept.id,
-      department_name: dept.name,
+      department_id: faculty.id,
+      department_name: faculty.name,
       teachers: teacherIdList.length,
       projects: {
         total,
@@ -715,40 +645,14 @@ export class DashboardService {
   async getDepartmentProgressReportsScoped(departmentId: string, user: any) {
     await this.assertCanAccessDepartment(user, departmentId);
 
-    const scope = await this.resolveDepartmentScope(departmentId);
+    const scope = await this.resolveFacultyScope(departmentId);
 
     if (!scope) {
-      throw new NotFoundException('Department not found');
+      throw new NotFoundException('Không tìm thấy khoa');
     }
 
-    let deptName: string;
-    let teacherIdList: number[];
-
-    if (scope.kind === 'faculty') {
-      const departments = await this.prisma.department.findMany({
-        where: { faculty_id: scope.faculty.id },
-        select: { id: true, name: true },
-        orderBy: { id: 'asc' },
-      });
-      deptName = departments.map((d) => d.name).join(' · ') || scope.faculty.id;
-      teacherIdList = (
-        await this.prisma.teacher.findMany({
-          where: {
-            department_id: { in: departments.map((d) => d.id) },
-            deleted_at: null,
-          },
-          select: { id: true },
-        })
-      ).map((t) => t.id);
-    } else {
-      deptName = scope.department.name;
-      teacherIdList = (
-        await this.prisma.teacher.findMany({
-          where: { department_id: departmentId, deleted_at: null },
-          select: { id: true },
-        })
-      ).map((t) => t.id);
-    }
+    const deptName = scope.faculty.name;
+    const teacherIdList = scope.teacherIds;
 
     const reports = await this.prisma.progress_reports.findMany({
       where: {
