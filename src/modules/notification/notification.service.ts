@@ -229,7 +229,7 @@ export class NotificationService {
       data: {
         title,
         message,
-        type: type,
+        type: type || 'GENERAL',
         priority: priority as any,
         recipient_ids: recipientIds,
         sender_id: senderId,
@@ -275,7 +275,7 @@ export class NotificationService {
       data: {
         title,
         message,
-        type: type,
+        type: type || 'GENERAL',
         priority: priority as any,
         recipient_ids: recipientIds,
         file_url: fileUrl,
@@ -328,24 +328,66 @@ export class NotificationService {
   async getUsersByDepartment(
     departmentId: string,
   ): Promise<Array<{ id: number; name: string; email: string; role: string }>> {
-    const teachers = await this.prisma.teacher.findMany({
-      where: {
-        department_id: departmentId,
-        user: {
-          is_active: true,
+    const [teachers, secretaries, projects] = await Promise.all([
+      this.prisma.teacher.findMany({
+        where: {
+          department_id: departmentId,
+          user: { is_active: true },
         },
-      },
-      include: {
-        user: true,
-      },
+        include: { user: true },
+      }),
+      this.prisma.secretary.findMany({
+        where: {
+          department_id: departmentId,
+          user: { is_active: true },
+        },
+        include: { user: true },
+      }),
+      this.prisma.project.findMany({
+        where: {
+          teacher: { department_id: departmentId },
+          student: {
+            user: { is_active: true },
+          },
+        },
+        include: {
+          student: { include: { user: true } },
+        },
+      }),
+    ]);
+
+    const users: Array<{ id: number; name: string; email: string; role: string }> = [];
+
+    teachers.forEach((t) => {
+      users.push({
+        id: t.user_id,
+        name: t.name,
+        email: t.email,
+        role: 'TEACHER',
+      });
     });
 
-    return teachers.map((t) => ({
-      id: t.user_id,
-      name: t.name,
-      email: t.email,
-      role: 'TEACHER',
-    }));
+    secretaries.forEach((s) => {
+      users.push({
+        id: s.user_id,
+        name: s.user.username,
+        email: s.user.email,
+        role: 'SECRETARY',
+      });
+    });
+
+    projects.forEach((p) => {
+      if (p.student?.user_id) {
+        users.push({
+          id: p.student.user_id,
+          name: `${p.student.last_name} ${p.student.first_name}`,
+          email: p.student.email,
+          role: 'STUDENT',
+        });
+      }
+    });
+
+    return users;
   }
 
   async getUnreadCountByRole(role: string): Promise<number> {
