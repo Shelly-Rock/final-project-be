@@ -275,6 +275,9 @@ export class TopicService {
               ],
             }
           : {},
+        query.facultyId
+          ? { project: { teacher: { faculty_id: query.facultyId } } }
+          : {},
       ],
     };
 
@@ -342,6 +345,7 @@ export class TopicService {
       where: {
         deleted_at: null,
         status: 'active',
+        ...(query.facultyId ? { faculty_id: query.facultyId } : {}),
         ...(search
           ? {
               OR: [

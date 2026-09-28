@@ -89,8 +89,8 @@ export class SubmissionController {
   // Get submission stats â€” MUST be declared BEFORE ':id' or ParseIntPipe swallows it.
   @Get('stats/summary')
   @Roles('ADMIN', 'SECRETARY', 'TEACHER')
-  getStats() {
-    return this.service.getStats();
+  getStats(@Query('faculty_id') facultyId?: string) {
+    return this.service.getStats(facultyId);
   }
 
   // Get submission by ID

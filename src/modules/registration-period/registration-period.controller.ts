@@ -117,8 +117,11 @@ export class RegistrationPeriodController {
   @Get(':id/teacher-quotas')
   @Roles('ADMIN', 'SECRETARY')
   @ApiOperation({ summary: 'Lấy danh sách chỉ tiêu giảng viên theo đợt' })
-  getTeacherQuotas(@Param('id', ParseIntPipe) id: number) {
-    return this.periodService.getTeacherQuotas(id);
+  getTeacherQuotas(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('facultyId') facultyId?: string,
+  ) {
+    return this.periodService.getTeacherQuotas(id, facultyId);
   }
 
   @Put(':id/teacher-quotas/:teacherId')

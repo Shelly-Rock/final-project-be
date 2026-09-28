@@ -304,6 +304,10 @@ export class SearchPeriodEntityQueryDto {
 
   @IsOptional()
   @IsString()
+  facultyId?: string;
+
+  @IsOptional()
+  @IsString()
   search?: string;
 
   @IsOptional()

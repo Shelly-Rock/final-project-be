@@ -624,17 +624,22 @@ export class SubmissionService {
     }));
   }
 
-  async getStats() {
+  async getStats(facultyId?: string) {
+    const scope = facultyId
+      ? { topics: { teachers: { faculty_id: facultyId } } }
+      : {};
     const [total, pending, approved, rejected] = await Promise.all([
-      this.prisma.final_submissions.count({ where: { deleted_at: null } }),
       this.prisma.final_submissions.count({
-        where: { status: SubmissionStatus.PENDING, deleted_at: null },
+        where: { deleted_at: null, ...scope },
       }),
       this.prisma.final_submissions.count({
-        where: { status: SubmissionStatus.APPROVED, deleted_at: null },
+        where: { status: SubmissionStatus.PENDING, deleted_at: null, ...scope },
       }),
       this.prisma.final_submissions.count({
-        where: { status: SubmissionStatus.REJECTED, deleted_at: null },
+        where: { status: SubmissionStatus.APPROVED, deleted_at: null, ...scope },
+      }),
+      this.prisma.final_submissions.count({
+        where: { status: SubmissionStatus.REJECTED, deleted_at: null, ...scope },
       }),
     ]);
 

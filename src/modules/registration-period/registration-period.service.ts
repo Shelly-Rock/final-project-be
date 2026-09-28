@@ -66,9 +66,14 @@ export class RegistrationPeriodService {
     });
 
     if (!facultyId) return periods;
+    const quotaPeriods = await this.prisma.teacher_quotas.findMany({
+      where: { teachers: { faculty_id: facultyId } },
+      select: { period_id: true },
+    });
+    const quotaPeriodIds = new Set(quotaPeriods.map((quota) => quota.period_id));
     return periods.filter((period) => {
       const limits = period.faculty_student_limits;
-      return (
+      return quotaPeriodIds.has(period.id) || (
         Array.isArray(limits) &&
         limits.some(
           (item) =>
@@ -156,10 +161,13 @@ export class RegistrationPeriodService {
   }
 
   // Lấy danh sách chỉ tiêu theo đợt
-  async getTeacherQuotas(periodId: number) {
+  async getTeacherQuotas(periodId: number, facultyId?: string) {
     await this.findOne(periodId); // Kiểm tra đợt tồn tại
     return this.prisma.teacher_quotas.findMany({
-      where: { period_id: periodId },
+      where: {
+        period_id: periodId,
+        ...(facultyId ? { teachers: { faculty_id: facultyId } } : {}),
+      },
       include: { teachers: { select: { name: true, faculty_id: true } } },
     });
   }
