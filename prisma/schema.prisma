@@ -760,6 +760,7 @@ enum NotificationType {
   REPORT_REJECTED
   BAN_APPLIED
   BAN_WARNING
+  GENERAL
 }
 
 enum ProgressStatus {

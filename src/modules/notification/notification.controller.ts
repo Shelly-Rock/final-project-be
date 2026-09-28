@@ -300,11 +300,13 @@ export class NotificationController {
     body: {
       title: string;
       message: string;
-      type: string;
       priority: string;
       recipientIds: number[];
       saveDraft?: boolean;
-      attachmentUrl?: string;
+      fileName?: string;
+      fileSize?: number;
+      requireRead24h?: boolean;
+      pinToTop?: boolean;
     },
   ): Promise<{
     message: string;
@@ -315,11 +317,13 @@ export class NotificationController {
       const draft = await this.notificationService.saveDraft(
         body.title,
         body.message,
-        body.type,
+        'GENERAL',
         body.priority,
         body.recipientIds,
         req.user.id,
-        body.attachmentUrl,
+        body.fileName,
+        undefined,
+        body.fileSize,
       );
       return {
         message: 'Notification saved as draft',
@@ -330,7 +334,7 @@ export class NotificationController {
     const notifications = await this.notificationService.sendNotification(
       body.title,
       body.message,
-      body.type,
+      'GENERAL' as any,
       body.recipientIds,
       req.user.id,
     );
