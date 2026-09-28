@@ -366,6 +366,34 @@ export class RoleService {
       throw new BadRequestException('Một số role ID không hợp lệ');
     }
 
+    const secretaryRole = roles.find((role) => role.name === 'SECRETARY');
+    const adminRole = roles.find((role) => role.name === 'ADMIN');
+    const secretaryProfile = await this.prisma.secretary.findUnique({
+      where: { user_id: userId },
+      select: { faculty_id: true, deleted_at: true },
+    });
+    if (
+      secretaryRole &&
+      !adminRole &&
+      (!secretaryProfile ||
+        secretaryProfile.deleted_at ||
+        !secretaryProfile.faculty_id)
+    ) {
+      throw new BadRequestException(
+        'Tài khoản SECRETARY phải có hồ sơ thư ký gắn với một khoa. Hãy dùng /users/secretaries.',
+      );
+    }
+    if (
+      secretaryProfile &&
+      !secretaryProfile.deleted_at &&
+      secretaryProfile.faculty_id &&
+      !secretaryRole
+    ) {
+      throw new BadRequestException(
+        'Không thể gỡ role SECRETARY khỏi tài khoản đang được gắn với một khoa.',
+      );
+    }
+
     await this.prisma.$transaction(async (tx) => {
       await tx.userRole.deleteMany({ where: { user_id: userId } });
       await tx.userRole.createMany({

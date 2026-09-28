@@ -46,11 +46,13 @@ export class UserService {
     const password_hash = await bcrypt.hash(dto.password, 10);
 
     if (dto.role_ids?.length) {
-      const secretaryRole = await this.prisma.role.findUnique({
-        where: { name: 'SECRETARY' },
-        select: { id: true },
+      const roles = await this.prisma.role.findMany({
+        where: { id: { in: dto.role_ids } },
+        select: { id: true, name: true },
       });
-      if (secretaryRole && dto.role_ids.includes(secretaryRole.id)) {
+      const hasSecretaryRole = roles.some((role) => role.name === 'SECRETARY');
+      const hasAdminRole = roles.some((role) => role.name === 'ADMIN');
+      if (hasSecretaryRole && !hasAdminRole) {
         throw new BadRequestException(
           'Hãy tạo tài khoản thư ký qua /users/secretaries để gán khoa bắt buộc.',
         );
@@ -619,19 +621,22 @@ export class UserService {
     userId: number,
     roleIds: number[],
   ): Promise<void> {
-    const secretaryRole = await this.prisma.role.findUnique({
-      where: { name: 'SECRETARY' },
-      select: { id: true },
+    const roles = await this.prisma.role.findMany({
+      where: { id: { in: roleIds } },
+      select: { id: true, name: true },
     });
-    if (!secretaryRole) return;
-
-    const wantsSecretary = roleIds.includes(secretaryRole.id);
+    const wantsSecretary = roles.some((role) => role.name === 'SECRETARY');
+    const hasAdminRole = roles.some((role) => role.name === 'ADMIN');
     const profile = await this.prisma.secretary.findUnique({
       where: { user_id: userId },
       select: { faculty_id: true, deleted_at: true },
     });
 
-    if (wantsSecretary && (!profile || profile.deleted_at || !profile.faculty_id)) {
+    if (
+      wantsSecretary &&
+      !hasAdminRole &&
+      (!profile || profile.deleted_at || !profile.faculty_id)
+    ) {
       throw new BadRequestException(
         'Tài khoản SECRETARY phải có hồ sơ thư ký gắn với một khoa. Hãy dùng /users/secretaries.',
       );
