@@ -475,6 +475,22 @@ async function main() {
       });
     }
 
+    if (userData.role.name === 'SECRETARY') {
+      await prisma.secretary.upsert({
+        where: { user_id: user.id },
+        update: {
+          secretary_id: 'TK_CNTT',
+          faculty: { connect: { id: faculty.id } },
+          deleted_at: null,
+        },
+        create: {
+          user: { connect: { id: user.id } },
+          secretary_id: 'TK_CNTT',
+          faculty: { connect: { id: faculty.id } },
+        },
+      });
+    }
+
     console.log(
       `✅ Đã tạo tài khoản (${userData.role.name}): ${user.email} | Username: ${user.username}`,
     );

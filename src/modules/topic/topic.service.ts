@@ -275,9 +275,6 @@ export class TopicService {
               ],
             }
           : {},
-        query.facultyId
-          ? { project: { teacher: { faculty_id: query.facultyId } } }
-          : {},
       ],
     };
 

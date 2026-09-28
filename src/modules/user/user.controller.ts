@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Patch,
   Delete,
   Body,
   Param,
@@ -24,8 +25,12 @@ import { UserService } from './user.service';
 import { CreateUserReqDTO } from './dto/request/createUserREQ.dto';
 import { UpdateUserReqDTO } from './dto/request/updateUserREQ.dto';
 import { UserRespDTO } from './dto/response/userRESP.dto';
+import { CreateSecretaryReqDTO } from './dto/request/createSecretaryREQ.dto';
+import { UpdateSecretaryReqDTO } from './dto/request/updateSecretaryREQ.dto';
+import { SecretaryAccountRespDTO } from './dto/response/secretaryAccountRESP.dto';
 import { JwtAuthGuard } from '@/core/auth/guards/jwtAuth.guard';
 import { Permissions } from '@/core/auth/decorators/permissions.decorator';
+import { Roles } from '@/core/auth/decorators/roles.decorator';
 import { CurrentUser } from '@/core/auth/decorators/currentUser.decorator';
 
 @ApiTags('Users')
@@ -45,6 +50,83 @@ export class UserController {
     @CurrentUser('sub') actorUserId: number,
   ): Promise<UserRespDTO> {
     return this.userService.create(dto, actorUserId);
+  }
+
+  @Post('secretaries')
+  @Roles('ADMIN')
+  @HttpCode(HttpStatus.CREATED)
+  @Permissions('user:create')
+  @ApiOperation({
+    summary: 'Tạo tài khoản thư ký trực tiếp và gán duy nhất vào một khoa',
+  })
+  @ApiCreatedResponse({ type: SecretaryAccountRespDTO })
+  async createSecretary(
+    @Body() dto: CreateSecretaryReqDTO,
+    @CurrentUser('sub') actorUserId: number,
+  ): Promise<SecretaryAccountRespDTO> {
+    return this.userService.createSecretary(dto, actorUserId);
+  }
+
+  @Get('secretaries')
+  @Roles('ADMIN')
+  @Permissions('user:read')
+  @ApiOperation({ summary: 'Lấy danh sách tài khoản thư ký' })
+  @ApiQuery({ name: 'page', required: false, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, example: 20 })
+  @ApiQuery({ name: 'facultyId', required: false, example: 'KHOA_CNTT' })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'includeDeleted', required: false, example: false })
+  async findSecretaries(
+    @Query('page', new ParseIntPipe({ optional: true })) page = 1,
+    @Query('limit', new ParseIntPipe({ optional: true })) limit = 20,
+    @Query('includeDeleted') includeDeleted?: string,
+    @Query('facultyId') facultyId?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.userService.findSecretaries(
+      page,
+      limit,
+      includeDeleted === 'true',
+      facultyId,
+      search,
+    );
+  }
+
+  @Get('secretaries/:id')
+  @Roles('ADMIN')
+  @Permissions('user:read')
+  @ApiOperation({ summary: 'Lấy tài khoản thư ký theo ID' })
+  @ApiOkResponse({ type: SecretaryAccountRespDTO })
+  async findSecretary(
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<SecretaryAccountRespDTO> {
+    return this.userService.findSecretary(id);
+  }
+
+  @Put('secretaries/:id')
+  @Patch('secretaries/:id')
+  @Roles('ADMIN')
+  @Permissions('user:update')
+  @ApiOperation({ summary: 'Cập nhật tài khoản hoặc khoa của thư ký' })
+  @ApiOkResponse({ type: SecretaryAccountRespDTO })
+  async updateSecretary(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateSecretaryReqDTO,
+    @CurrentUser('sub') actorUserId: number,
+  ): Promise<SecretaryAccountRespDTO> {
+    return this.userService.updateSecretary(id, dto, actorUserId);
+  }
+
+  @Delete('secretaries/:id')
+  @Roles('ADMIN')
+  @Permissions('user:delete')
+  @ApiOperation({ summary: 'Xóa tài khoản thư ký và giải phóng khoa' })
+  @ApiOkResponse({ description: 'Xóa thành công' })
+  async removeSecretary(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser('sub') actorUserId: number,
+  ) {
+    return this.userService.removeSecretary(id, actorUserId);
   }
 
   @Get()
