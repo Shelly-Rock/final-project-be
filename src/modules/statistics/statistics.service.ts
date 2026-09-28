@@ -32,11 +32,21 @@ export class StatisticsService {
   constructor(private readonly prisma: PrismaService) {}
 
   // ============ BÁO CÁO HỌC VỤ: tỷ lệ SV đậu/rớt ============
-  async getAcademicReport(periodId?: number): Promise<AcademicReport> {
+  async getAcademicReport(
+    periodId?: number,
+    facultyId?: string,
+  ): Promise<AcademicReport> {
     const results = await this.prisma.scoring_results.findMany({
       where: {
         final_status: { not: null },
-        ...(periodId ? { projects: { topics: { period_id: periodId } } } : {}),
+        ...(periodId || facultyId
+          ? {
+              projects: {
+                ...(periodId ? { topics: { period_id: periodId } } : {}),
+                ...(facultyId ? { teacher: { faculty_id: facultyId } } : {}),
+              },
+            }
+          : {}),
       },
       select: {
         final_status: true,
@@ -81,9 +91,13 @@ export class StatisticsService {
   // ============ BÁO CÁO NĂNG SUẤT GIẢNG VIÊN ============
   async getTeacherProductivity(
     periodId?: number,
+    facultyId?: string,
   ): Promise<TeacherProductivityRow[]> {
     const teachers = await this.prisma.teacher.findMany({
-      where: { deleted_at: null },
+      where: {
+        deleted_at: null,
+        ...(facultyId ? { faculty_id: facultyId } : {}),
+      },
       select: { id: true, teacher_id: true, name: true },
       orderBy: { teacher_id: 'asc' },
     });
@@ -183,10 +197,10 @@ export class StatisticsService {
   }
 
   // ============ XUẤT EXCEL TOÀN BỘ SỐ LIỆU THỐNG KÊ ============
-  async exportStatistics(periodId?: number): Promise<Buffer> {
+  async exportStatistics(periodId?: number, facultyId?: string): Promise<Buffer> {
     const [academic, teachers, periods] = await Promise.all([
-      this.getAcademicReport(periodId),
-      this.getTeacherProductivity(periodId),
+      this.getAcademicReport(periodId, facultyId),
+      this.getTeacherProductivity(periodId, facultyId),
       this.prisma.registration_periods.findMany({
         select: { id: true, name: true },
       }),

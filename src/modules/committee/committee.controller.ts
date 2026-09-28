@@ -37,14 +37,14 @@ export class CommitteeController {
 
   // Get all available teachers
   @Get('teachers/available')
-  getAvailableTeachers() {
-    return this.service.getAvailableTeachers();
+  getAvailableTeachers(@Query('faculty_id') facultyId?: string) {
+    return this.service.getAvailableTeachers(facultyId);
   }
 
   // Get all external reviewers
   @Get('teachers/external-reviewers')
-  getExternalReviewers() {
-    return this.service.getExternalReviewers();
+  getExternalReviewers(@Query('faculty_id') facultyId?: string) {
+    return this.service.getExternalReviewers(facultyId);
   }
 
   // Get excluded teachers (teachers already in other committees)
@@ -76,7 +76,7 @@ export class CommitteeController {
 
   // Get committee stats
   @Get('stats/summary')
-  getStats() {
-    return this.service.getStats();
+  getStats(@Query('faculty_id') facultyId?: string) {
+    return this.service.getStats(facultyId);
   }
 }

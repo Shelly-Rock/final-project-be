@@ -53,8 +53,9 @@ export class RegistrationPeriodService {
     semester?: string,
     schoolYear?: string,
     status?: RegistrationPeriodStatus,
+    facultyId?: string,
   ) {
-    return this.prisma.registration_periods.findMany({
+    const periods = await this.prisma.registration_periods.findMany({
       where: {
         ...(search && { name: { contains: search, mode: 'insensitive' } }),
         ...(semester && { semester }),
@@ -62,6 +63,20 @@ export class RegistrationPeriodService {
         ...(status && { status }),
       },
       orderBy: { start_date: 'desc' },
+    });
+
+    if (!facultyId) return periods;
+    return periods.filter((period) => {
+      const limits = period.faculty_student_limits;
+      return (
+        Array.isArray(limits) &&
+        limits.some(
+          (item) =>
+            item &&
+            typeof item === 'object' &&
+            (item as { faculty?: unknown }).faculty === facultyId,
+        )
+      );
     });
   }
 

@@ -254,8 +254,12 @@ export class ScoringController {
   @Get('post-defense/print')
   @Roles('ADMIN', 'SECRETARY')
   @ApiOperation({ summary: 'Bảng điểm lưu trữ học vụ (in biểu mẫu)' })
-  async getPrintSheet(@Request() req) {
-    return this.scoringService.getPrintSheet(this.userId(req), req.user.role);
+  async getPrintSheet(@Request() req, @Query('facultyId') facultyId?: string) {
+    return this.scoringService.getPrintSheet(
+      this.userId(req),
+      req.user.role,
+      facultyId,
+    );
   }
 
   @Put('post-defense/:projectId/revision-window')

@@ -62,8 +62,15 @@ export class RegistrationPeriodController {
     @Query('semester') semester?: string,
     @Query('schoolYear') schoolYear?: string,
     @Query('status') status?: RegistrationPeriodStatus,
+    @Query('facultyId') facultyId?: string,
   ) {
-    return this.periodService.findAll(search, semester, schoolYear, status);
+    return this.periodService.findAll(
+      search,
+      semester,
+      schoolYear,
+      status,
+      facultyId,
+    );
   }
 
   @Get(':id')

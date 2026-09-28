@@ -42,8 +42,8 @@ export class DefenseController {
 
   // Get available projects for defense
   @Get('projects/available')
-  getAvailableProjects() {
-    return this.service.getAvailableProjects();
+  getAvailableProjects(@Query('faculty_id') facultyId?: string) {
+    return this.service.getAvailableProjects(facultyId);
   }
 
   // Get defense session by ID
@@ -123,7 +123,7 @@ export class DefenseController {
 
   // Get defense stats
   @Get('stats/summary')
-  getStats() {
-    return this.service.getStats();
+  getStats(@Query('faculty_id') facultyId?: string) {
+    return this.service.getStats(facultyId);
   }
 }

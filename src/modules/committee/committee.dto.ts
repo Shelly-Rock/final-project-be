@@ -115,6 +115,10 @@ export class CommitteeQueryDto {
   @IsOptional()
   @IsString()
   name?: string;
+
+  @IsOptional()
+  @IsString()
+  faculty_id?: string;
 }
 
 // Response DTOs

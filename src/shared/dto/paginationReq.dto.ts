@@ -12,4 +12,7 @@ export class PaginationReqDTO {
   @IsInt()
   @Min(10)
   limit?: number;
+
+  @IsOptional()
+  facultyId?: string;
 }

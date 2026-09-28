@@ -63,6 +63,14 @@ export class AuditService {
     if (query.entity_type) where.entity_type = query.entity_type;
     if (query.entity_id) where.entity_id = query.entity_id;
     if (query.actor_user_id) where.actor_user_id = query.actor_user_id;
+    if (query.facultyId) {
+      where.actor = {
+        OR: [
+          { teacher: { faculty_id: query.facultyId } },
+          { secretary: { faculty_id: query.facultyId } },
+        ],
+      };
+    }
     if (query.action) where.action = query.action;
     if (query.from || query.to) {
       where.created_at = {};

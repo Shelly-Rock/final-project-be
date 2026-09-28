@@ -1,4 +1,4 @@
-import { IsOptional, IsEnum, IsInt, Min, IsDateString } from 'class-validator';
+import { IsOptional, IsEnum, IsInt, Min, IsDateString, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
 import { AuditAction, AuditEntityType } from '@prisma/client';
 
@@ -40,4 +40,8 @@ export class AuditQueryDto {
   @IsOptional()
   @IsDateString()
   to?: string;
+
+  @IsOptional()
+  @IsString()
+  facultyId?: string;
 }

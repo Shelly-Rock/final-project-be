@@ -228,6 +228,10 @@ export class ReportQueryDto {
   @Type(() => Number)
   @IsInt()
   teacher_id?: number;
+
+  @IsOptional()
+  @IsString()
+  faculty_id?: string;
 }
 
 // Student Progress DTOs
@@ -281,6 +285,10 @@ export class StudentProgressQueryDto {
   @Type(() => Number)
   @IsInt()
   teacher_id?: number;
+
+  @IsOptional()
+  @IsString()
+  faculty_id?: string;
 }
 
 // Notification DTOs - imported from notification module to avoid duplication

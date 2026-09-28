@@ -8,10 +8,12 @@ export class GetStudentListService {
   async getStudentList(
     query: PaginationReqDTO,
   ): Promise<GetListStudentsRespDTO> {
-    const { page = 1, limit = 10 } = query;
+    const { page = 1, limit = 10, facultyId } = query;
+    const where: any = { deleted_at: null };
+    if (facultyId) where.project = { teacher: { faculty_id: facultyId } };
     const [students, total] = await Promise.all([
       this.prismaService.student.findMany({
-        where: { deleted_at: null },
+        where,
         skip: (page - 1) * limit,
         take: limit,
         include: {
@@ -22,7 +24,7 @@ export class GetStudentListService {
           },
         },
       }),
-      this.prismaService.student.count({ where: { deleted_at: null } }),
+      this.prismaService.student.count({ where }),
     ]);
 
     const studentsDTO = students.map((student) => ({

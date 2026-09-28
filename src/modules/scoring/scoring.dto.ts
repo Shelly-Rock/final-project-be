@@ -156,6 +156,11 @@ export class QueryScoresDto {
   @IsOptional()
   @IsNumber()
   studentId?: number;
+
+  @ApiPropertyOptional({ description: 'Scope results to a faculty' })
+  @IsOptional()
+  @IsString()
+  facultyId?: string;
 }
 
 export class QueryMyScoresDto {
@@ -203,6 +208,11 @@ export class QueryMeetingsDto {
     return undefined;
   })
   finalized?: boolean;
+
+  @ApiPropertyOptional({ description: 'Scope meetings to a faculty' })
+  @IsOptional()
+  @IsString()
+  facultyId?: string;
 }
 
 export class AdjustMeetingScoreDto {
@@ -261,6 +271,11 @@ export class QueryTranscriptsDto {
     return undefined;
   })
   published?: boolean;
+
+  @ApiPropertyOptional({ description: 'Scope transcripts to a faculty' })
+  @IsOptional()
+  @IsString()
+  facultyId?: string;
 }
 
 export class UpdateBonusScoreDto {
@@ -293,6 +308,11 @@ export class QueryPostDefenseDto {
   @IsNumber()
   @Transform(({ value }) => parseInt(value))
   limit?: number = 50;
+
+  @ApiPropertyOptional({ description: 'Scope rankings to a faculty' })
+  @IsOptional()
+  @IsString()
+  facultyId?: string;
 }
 
 export class SetRevisionWindowDto {

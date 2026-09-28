@@ -135,6 +135,10 @@ export class DefenseSessionQueryDto {
   @IsOptional()
   @IsString()
   room?: string;
+
+  @IsOptional()
+  @IsString()
+  faculty_id?: string;
 }
 
 // Response DTOs

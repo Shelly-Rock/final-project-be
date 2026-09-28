@@ -244,11 +244,12 @@ export class DefenseService {
     }
   }
 
-  async getAvailableProjects() {
+  async getAvailableProjects(facultyId?: string) {
     // Lấy các project đã APPROVED và chưa được xếp vào lịch bảo vệ nào
     const projects = await this.prisma.project.findMany({
       where: {
         status: 'APPROVED',
+        ...(facultyId ? { teacher: { faculty_id: facultyId } } : {}),
         defense_session_projects: {
           none: {},
         },
@@ -278,12 +279,18 @@ export class DefenseService {
       status,
       defense_date,
       room,
+      faculty_id,
     } = query;
 
     const where: any = { deleted_at: null };
     if (committee_id) where.committee_id = committee_id;
     if (status) where.status = status;
     if (room) where.room = room;
+    if (faculty_id) {
+      where.defense_committees = {
+        committee_members: { some: { teachers: { faculty_id } } },
+      };
+    }
     if (defense_date) {
       const date = new Date(defense_date);
       where.defense_date = {
@@ -734,25 +741,45 @@ export class DefenseService {
     return buf;
   }
 
-  async getStats() {
+  async getStats(facultyId?: string) {
+    const sessionWhere: any = { deleted_at: null };
+    if (facultyId) {
+      sessionWhere.defense_committees = {
+        committee_members: { some: { teachers: { faculty_id: facultyId } } },
+      };
+    }
+    const scopedSessions = await this.prisma.defense_sessions.findMany({
+      where: sessionWhere,
+      select: { id: true },
+    });
+    const sessionIds = scopedSessions.map((session) => session.id);
     const [sessions, completedSessions, scores] = await Promise.all([
-      this.prisma.defense_sessions.count({ where: { deleted_at: null } }),
+      this.prisma.defense_sessions.count({ where: sessionWhere }),
       this.prisma.defense_sessions.count({
-        where: { status: DefenseSessionStatus.COMPLETED, deleted_at: null },
+        where: { ...sessionWhere, status: DefenseSessionStatus.COMPLETED },
       }),
-      this.prisma.defense_scores.findMany(),
+      this.prisma.defense_scores.findMany({
+        where: sessionIds.length
+          ? { defense_session_projects: { session_id: { in: sessionIds } } }
+          : { id: -1 },
+      }),
     ]);
 
     const scheduled = await this.prisma.defense_sessions.count({
-      where: { status: DefenseSessionStatus.SCHEDULED, deleted_at: null },
+      where: { ...sessionWhere, status: DefenseSessionStatus.SCHEDULED },
     });
     const cancelled = await this.prisma.defense_sessions.count({
-      where: { status: DefenseSessionStatus.CANCELLED, deleted_at: null },
+      where: { ...sessionWhere, status: DefenseSessionStatus.CANCELLED },
     });
 
     const sessionProjects = await this.prisma.defense_session_projects.findMany(
       {
-        where: { defended_at: { not: null } },
+        where: {
+          defended_at: { not: null },
+          ...(sessionIds.length
+            ? { session_id: { in: sessionIds } }
+            : { session_id: -1 }),
+        },
       },
     );
 

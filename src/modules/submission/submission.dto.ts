@@ -87,6 +87,10 @@ export class SubmissionQueryDto {
   @Type(() => Number)
   @IsInt()
   project_id?: number;
+
+  @IsOptional()
+  @IsString()
+  faculty_id?: string;
 }
 
 // Response DTOs

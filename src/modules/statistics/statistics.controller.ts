@@ -26,9 +26,13 @@ export class StatisticsController {
   })
   @ApiQuery({ name: 'periodId', required: false, type: Number })
   @ApiOkResponse({ description: 'Thống kê đậu/rớt theo kỳ' })
-  getAcademicReport(@Query('periodId') periodId?: string) {
+  getAcademicReport(
+    @Query('periodId') periodId?: string,
+    @Query('facultyId') facultyId?: string,
+  ) {
     return this.statisticsService.getAcademicReport(
       periodId ? Number(periodId) : undefined,
+      facultyId,
     );
   }
 
@@ -38,9 +42,13 @@ export class StatisticsController {
   @ApiOkResponse({
     description: 'Đề tài đã ra, ghế hội đồng theo vai trò, SV hướng dẫn',
   })
-  getTeacherProductivity(@Query('periodId') periodId?: string) {
+  getTeacherProductivity(
+    @Query('periodId') periodId?: string,
+    @Query('facultyId') facultyId?: string,
+  ) {
     return this.statisticsService.getTeacherProductivity(
       periodId ? Number(periodId) : undefined,
+      facultyId,
     );
   }
 
@@ -55,9 +63,11 @@ export class StatisticsController {
   async exportStatistics(
     @Res() response: Response,
     @Query('periodId') periodId?: string,
+    @Query('facultyId') facultyId?: string,
   ) {
     const file = await this.statisticsService.exportStatistics(
       periodId ? Number(periodId) : undefined,
+      facultyId,
     );
     response.set({
       'Content-Type':

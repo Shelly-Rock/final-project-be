@@ -73,9 +73,12 @@ export class CommitteeService {
   }
 
   // Get all available teachers for committee assignment
-  async getAvailableTeachers() {
+  async getAvailableTeachers(facultyId?: string) {
     const teachers = await this.prisma.teacher.findMany({
-      where: { deleted_at: null },
+      where: {
+        deleted_at: null,
+        ...(facultyId ? { faculty_id: facultyId } : {}),
+      },
       select: {
         id: true,
         teacher_id: true,
@@ -95,9 +98,12 @@ export class CommitteeService {
   }
 
   // Get all external reviewers (teachers who can be in multiple committees)
-  async getExternalReviewers() {
+  async getExternalReviewers(facultyId?: string) {
     const teachers = await this.prisma.teacher.findMany({
-      where: { deleted_at: null },
+      where: {
+        deleted_at: null,
+        ...(facultyId ? { faculty_id: facultyId } : {}),
+      },
       select: {
         id: true,
         teacher_id: true,
@@ -191,11 +197,16 @@ export class CommitteeService {
   }
 
   async getCommittees(query: CommitteeQueryDto) {
-    const { page = 1, limit = 20, name } = query;
+    const { page = 1, limit = 20, name, faculty_id } = query;
 
     const where: any = { deleted_at: null };
     if (name) {
       where.name = { contains: name, mode: 'insensitive' };
+    }
+    if (faculty_id) {
+      where.committee_members = {
+        some: { teachers: { faculty_id } },
+      };
     }
 
     const skip = (page - 1) * limit;
@@ -457,9 +468,14 @@ export class CommitteeService {
     });
   }
 
-  async getStats() {
+  async getStats(facultyId?: string) {
     const committees = await this.prisma.defense_committees.findMany({
-      where: { deleted_at: null },
+      where: {
+        deleted_at: null,
+        ...(facultyId
+          ? { committee_members: { some: { teachers: { faculty_id: facultyId } } } }
+          : {}),
+      },
       include: {
         committee_members: true,
         committee_external_reviewers: true,

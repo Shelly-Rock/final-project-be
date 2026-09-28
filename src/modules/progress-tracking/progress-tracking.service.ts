@@ -384,11 +384,19 @@ export class ProgressTrackingService {
   }
 
   async getReports(query: ReportQueryDto, user?: JwtUser) {
-    const { page = 1, limit = 20, status, student_id, teacher_id } = query;
+    const { page = 1, limit = 20, status, student_id, teacher_id, faculty_id } = query;
 
     const where: any = { deleted_at: null };
     if (status) where.status = status;
     if (student_id) where.student_id = student_id;
+
+    if (faculty_id) {
+      const facultyTeachers = await this.prisma.teacher.findMany({
+        where: { faculty_id },
+        select: { id: true },
+      });
+      where.teacher_id = { in: facultyTeachers.map((teacher) => teacher.id) };
+    }
 
     // If caller is teacher, enforce their profile ID
     const role = (user?.role || '').toUpperCase();
@@ -613,11 +621,20 @@ export class ProgressTrackingService {
   // ========== Student Progress Methods ==========
 
   async getStudentProgress(query: StudentProgressQueryDto, user?: JwtUser) {
-    const { page = 1, limit = 20, status, is_banned, teacher_id } = query;
+    const { page = 1, limit = 20, status, is_banned, teacher_id, faculty_id } = query;
 
     const where: any = {};
     if (status) where.status = status;
     if (is_banned !== undefined) where.is_banned = is_banned;
+
+    let facultyTeacherIds: number[] | undefined;
+    if (faculty_id) {
+      const facultyTeachers = await this.prisma.teacher.findMany({
+        where: { faculty_id },
+        select: { id: true },
+      });
+      facultyTeacherIds = facultyTeachers.map((teacher) => teacher.id);
+    }
 
     let targetTeacherId = teacher_id;
     const role = (user?.role || '').toUpperCase();
@@ -639,6 +656,18 @@ export class ProgressTrackingService {
         ...new Set(projects.map((project) => project.student_id)),
       ];
       where.student_id = { in: studentIds };
+    } else if (facultyTeacherIds) {
+      const projects = await this.prisma.project.findMany({
+        where: {
+          teacher_id: { in: facultyTeacherIds },
+          status: 'APPROVED',
+          deleted_at: null,
+        },
+        select: { student_id: true },
+      });
+      where.student_id = {
+        in: [...new Set(projects.map((project) => project.student_id))],
+      };
     }
 
     where.deleted_at = null;
@@ -909,13 +938,21 @@ export class ProgressTrackingService {
     };
   }
 
-  async getStats(user?: JwtUser) {
+  async getStats(user?: JwtUser, facultyId?: string) {
     const scope = await this.getTeacherStudentScope(user);
+    const facultyStudentIds = facultyId
+      ? await this.getFacultyStudentIds(facultyId)
+      : null;
+    const scopedStudentIds = facultyStudentIds
+      ? scope
+        ? scope.studentIds.filter((id) => facultyStudentIds.includes(id))
+        : facultyStudentIds
+      : scope?.studentIds;
     const studentWhere = {
       deleted_at: null,
-      ...(scope ? { student_id: { in: scope.studentIds } } : {}),
+      ...(scopedStudentIds ? { student_id: { in: scopedStudentIds } } : {}),
     };
-    const reportWhere = scope
+    const reportWhere = scopedStudentIds
       ? {
           status: {
             in: [
@@ -924,7 +961,7 @@ export class ProgressTrackingService {
               ReportStatus.REJECTED,
             ],
           },
-          student_id: { in: scope.studentIds },
+          student_id: { in: scopedStudentIds },
         }
       : undefined;
 
@@ -980,8 +1017,19 @@ export class ProgressTrackingService {
     };
   }
 
-  async getBanWarnings(user?: JwtUser): Promise<BanWarningDto[]> {
+  async getBanWarnings(
+    user?: JwtUser,
+    facultyId?: string,
+  ): Promise<BanWarningDto[]> {
     const scope = await this.getTeacherStudentScope(user);
+    const facultyStudentIds = facultyId
+      ? await this.getFacultyStudentIds(facultyId)
+      : null;
+    const scopedStudentIds = facultyStudentIds
+      ? scope
+        ? scope.studentIds.filter((id) => facultyStudentIds.includes(id))
+        : facultyStudentIds
+      : scope?.studentIds;
     const warnings: BanWarningDto[] = [];
 
     // Get students who haven't submitted reports recently
@@ -990,7 +1038,7 @@ export class ProgressTrackingService {
         deleted_at: null,
         is_banned: false,
         status: 'ON_TRACK',
-        ...(scope ? { student_id: { in: scope.studentIds } } : {}),
+        ...(scopedStudentIds ? { student_id: { in: scopedStudentIds } } : {}),
       },
     });
 
@@ -1026,13 +1074,21 @@ export class ProgressTrackingService {
     return warnings;
   }
 
-  async getBannedStudents(user?: JwtUser) {
+  async getBannedStudents(user?: JwtUser, facultyId?: string) {
     const scope = await this.getTeacherStudentScope(user);
+    const facultyStudentIds = facultyId
+      ? await this.getFacultyStudentIds(facultyId)
+      : null;
+    const scopedStudentIds = facultyStudentIds
+      ? scope
+        ? scope.studentIds.filter((id) => facultyStudentIds.includes(id))
+        : facultyStudentIds
+      : scope?.studentIds;
     const bannedRecords = await this.prisma.student_progress.findMany({
       where: {
         deleted_at: null,
         is_banned: true,
-        ...(scope ? { student_id: { in: scope.studentIds } } : {}),
+        ...(scopedStudentIds ? { student_id: { in: scopedStudentIds } } : {}),
       },
     });
 
@@ -1096,6 +1152,17 @@ export class ProgressTrackingService {
   }
 
   // ========== Helper Methods ==========
+
+  private async getFacultyStudentIds(facultyId: string): Promise<number[]> {
+    const projects = await this.prisma.project.findMany({
+      where: {
+        teacher: { faculty_id: facultyId },
+        deleted_at: null,
+      },
+      select: { student_id: true },
+    });
+    return [...new Set(projects.map((project) => project.student_id))];
+  }
 
   private async updateStudentReportCount(studentId: number) {
     const count = await this.prisma.progress_reports.count({

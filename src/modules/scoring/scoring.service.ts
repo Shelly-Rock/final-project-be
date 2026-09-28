@@ -412,6 +412,7 @@ export class ScoringService {
       teacherId,
       projectId,
       studentId,
+      facultyId,
     } = query;
     const skip = (page - 1) * limit;
 
@@ -422,6 +423,9 @@ export class ScoringService {
     if (teacherId) where.teacher_id = teacherId;
     if (projectId) where.project_id = projectId;
     if (studentId) where.student_id = studentId;
+    if (facultyId) {
+      where.projects = { teacher: { faculty_id: facultyId } };
+    }
 
     const [scores, total] = await Promise.all([
       this.prisma.independent_scores.findMany({
@@ -545,16 +549,21 @@ export class ScoringService {
   }
 
   async getAllScoringResults(query: QueryScoresDto) {
-    const { page = 1, limit = 20 } = query;
+    const { page = 1, limit = 20, facultyId } = query;
     const skip = (page - 1) * limit;
 
+    const where: Prisma.scoring_resultsWhereInput = facultyId
+      ? { projects: { teacher: { faculty_id: facultyId } } }
+      : {};
+
     const results = await this.prisma.scoring_results.findMany({
+      where,
       skip,
       take: limit,
       orderBy: { created_at: 'desc' },
     });
 
-    const total = await this.prisma.scoring_results.count();
+    const total = await this.prisma.scoring_results.count({ where });
 
     const enrichedResults = await Promise.all(
       results.map(async (result) => {
@@ -694,13 +703,17 @@ export class ScoringService {
   // ============ GIAI ĐOẠN 5: HỌP VÀ CHỐT ĐIỂM HỘI ĐỒNG ============
 
   async getMeetings(userId: number, role: string, query: QueryMeetingsDto) {
-    const { page = 1, limit = 20, finalized } = query;
+    const { page = 1, limit = 20, finalized, facultyId } = query;
     const skip = (page - 1) * limit;
     const staff = this.isStaff(role);
 
     const where: Prisma.independent_scoresWhereInput = {
       scoring_type: ScoringType.COMMITTEE,
     };
+
+    if (facultyId) {
+      where.projects = { teacher: { faculty_id: facultyId } };
+    }
 
     if (!staff) {
       const teacherId = await this.resolveTeacherId(userId);
@@ -1231,7 +1244,7 @@ export class ScoringService {
     role: string,
     query: QueryTranscriptsDto,
   ) {
-    const { page = 1, limit = 20, published } = query;
+    const { page = 1, limit = 20, published, facultyId } = query;
     const staff = this.isStaff(role);
 
     let projectIds: number[];
@@ -1243,6 +1256,9 @@ export class ScoringService {
             { final_status: 'REJECTED_DEFENSE' },
           ],
           ...(published !== undefined ? { is_published: published } : {}),
+          ...(facultyId
+            ? { projects: { teacher: { faculty_id: facultyId } } }
+            : {}),
         },
         select: { project_id: true },
       });
@@ -1435,10 +1451,16 @@ export class ScoringService {
     if (!this.isStaff(role)) {
       throw new ForbiddenException('Chỉ thư ký hệ thống được xếp hạng');
     }
-    const { page = 1, limit = 50 } = query;
+    const { page = 1, limit = 50, facultyId } = query;
 
     const results = await this.prisma.scoring_results.findMany({
-      where: { is_published: true, final_status: 'PASSED' },
+      where: {
+        is_published: true,
+        final_status: 'PASSED',
+        ...(facultyId
+          ? { projects: { teacher: { faculty_id: facultyId } } }
+          : {}),
+      },
       include: {
         projects: {
           select: {
@@ -1613,7 +1635,7 @@ export class ScoringService {
     };
   }
 
-  async getPrintSheet(userId: number, role: string) {
+  async getPrintSheet(userId: number, role: string, facultyId?: string) {
     if (!this.isStaff(role)) {
       throw new ForbiddenException(
         'Chỉ thư ký hệ thống được in bảng điểm lưu trữ',
@@ -1622,6 +1644,7 @@ export class ScoringService {
     const rows = await this.getPostDefenseList(userId, role, {
       page: 1,
       limit: 1000,
+      facultyId,
     });
     return { data: rows.data, generatedAt: new Date() };
   }

@@ -475,12 +475,13 @@ export class SubmissionService {
   }
 
   async getSubmissions(query: SubmissionQueryDto) {
-    const { page = 1, limit = 20, status, student_id, project_id } = query;
+    const { page = 1, limit = 20, status, student_id, project_id, faculty_id } = query;
 
     const where: any = { deleted_at: null };
     if (status) where.status = status;
     if (student_id) where.submitted_by_student_id = student_id;
     if (project_id) where.topic_id = project_id; // Mapping frontend project_id to topic_id
+    if (faculty_id) where.topics = { teachers: { faculty_id } };
 
     const skip = (page - 1) * limit;
 

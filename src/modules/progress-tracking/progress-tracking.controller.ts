@@ -196,18 +196,27 @@ export class ProgressTrackingController {
   // ========== Stats Endpoints ==========
 
   @Get('stats')
-  getStats(@CurrentUser() user: JwtUser) {
-    return this.service.getStats(user);
+  getStats(
+    @CurrentUser() user: JwtUser,
+    @Query('faculty_id') facultyId?: string,
+  ) {
+    return this.service.getStats(user, facultyId);
   }
 
   @Get('stats/ban-warnings')
-  getBanWarnings(@CurrentUser() user: JwtUser) {
-    return this.service.getBanWarnings(user);
+  getBanWarnings(
+    @CurrentUser() user: JwtUser,
+    @Query('faculty_id') facultyId?: string,
+  ) {
+    return this.service.getBanWarnings(user, facultyId);
   }
 
   @Get('stats/banned-students')
-  getBannedStudents(@CurrentUser() user: JwtUser) {
-    return this.service.getBannedStudents(user);
+  getBannedStudents(
+    @CurrentUser() user: JwtUser,
+    @Query('faculty_id') facultyId?: string,
+  ) {
+    return this.service.getBannedStudents(user, facultyId);
   }
 
   // ========== Admin Actions ==========
