@@ -148,6 +148,16 @@ export class DashboardController {
     return { data };
   }
 
+  @Get('secretary/faculty-actions')
+  @Roles('SECRETARY')
+  @ApiOperation({ summary: 'Việc cần xử lý của khoa dành cho thư ký' })
+  async getSecretaryFacultyActions(@CurrentUser() user: JwtUser) {
+    const facultyId = await this.dashboardService.getSecretaryFacultyId(Number(user.sub));
+    if (!facultyId) return { error: 'Thư ký chưa được gán khoa' };
+    const data = await this.dashboardService.getSecretaryFacultyActions(facultyId, user);
+    return { data };
+  }
+
   @Get('faculty/:id/secretary-detail')
   @Roles('ADMIN', 'SECRETARY')
   @ApiOperation({ summary: 'Chi tiết khoa cho thư ký với đề tài' })
