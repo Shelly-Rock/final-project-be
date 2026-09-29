@@ -14,7 +14,10 @@ ALTER TABLE "report_templates" ADD COLUMN IF NOT EXISTS "faculty_id" VARCHAR(50)
 
 -- Fields/enums introduced after the original production schema baseline.
 ALTER TYPE "SubmissionStatus" ADD VALUE IF NOT EXISTS 'APPROVED_BY_TEACHER';
-ALTER TABLE "topics" ADD COLUMN IF NOT EXISTS "english_name" VARCHAR(255);
+ALTER TABLE "topics"
+  ADD COLUMN IF NOT EXISTS "english_name" VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS "objectives" TEXT,
+  ADD COLUMN IF NOT EXISTS "technologies" TEXT;
 
 -- Keep production in sync with Prisma fields added after the original
 -- migrations were baselined. These columns are read by the student, scoring,
