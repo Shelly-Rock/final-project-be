@@ -901,6 +901,60 @@ export class DashboardService {
     };
   }
 
+  /** Action items shown on the secretary dashboard, always scoped to her faculty. */
+  async getSecretaryFacultyActions(facultyId: string, user: any) {
+    await this.assertCanAccessFaculty(user, facultyId);
+    const faculty = await this.prisma.faculty.findUnique({
+      where: { id: facultyId },
+      select: { id: true, name: true, teachers: { where: { deleted_at: null }, select: { id: true } } },
+    });
+    if (!faculty) throw new NotFoundException('Faculty not found');
+
+    const teacherIds = faculty.teachers.map((teacher) => teacher.id);
+    const period = await this.prisma.registration_periods.findFirst({
+      where: { status: 'OPEN' },
+      orderBy: [{ start_date: 'desc' }, { id: 'desc' }],
+      select: { id: true, student_deadline: true, teacher_deadline: true },
+    }) ?? await this.prisma.registration_periods.findFirst({
+      orderBy: [{ start_date: 'desc' }, { id: 'desc' }],
+      select: { id: true, student_deadline: true, teacher_deadline: true },
+    });
+
+    const [waitingSecretary, overdueReports, unlockedTopics, overQuota, missingSubmissions] =
+      await Promise.all([
+        this.prisma.project.count({
+          where: { teacher_id: { in: teacherIds }, status: 'WAITING_SECRETARY', deleted_at: null },
+        }),
+        this.prisma.progress_reports.count({
+          where: { teacher_id: { in: teacherIds }, status: 'PENDING', deleted_at: null },
+        }),
+        this.prisma.topics.count({
+          where: { teacher_id: { in: teacherIds }, ...(period ? { period_id: period.id } : {}), locked_at: null },
+        }),
+        period
+          ? this.prisma.teacher_quotas.count({
+              where: { period_id: period.id, teacher_id: { in: teacherIds }, submitted_topics: { gt: 0 }, status: 'INSUFFICIENT' },
+            })
+          : Promise.resolve(0),
+        this.prisma.topics.count({
+          where: { teacher_id: { in: teacherIds }, ...(period ? { period_id: period.id } : {}), final_submissions: null },
+        }),
+      ]);
+
+    const due = (count: number) => count > 0 ? 'due' as const : 'later' as const;
+    return {
+      faculty: { id: faculty.id, name: faculty.name },
+      periodId: period?.id ?? null,
+      items: [
+        { id: 'reg', title: `${waitingSecretary} đăng ký chờ thư ký xác nhận`, subtitle: waitingSecretary ? 'Cần duyệt đăng ký trong khoa' : 'Chưa có đăng ký chờ xác nhận', tone: due(waitingSecretary), href: '/project-config' },
+        { id: 'reports', title: `${overdueReports} báo cáo tiến trình chờ xử lý`, subtitle: overdueReports ? 'Kiểm tra và nhắc giảng viên hướng dẫn' : 'Không có báo cáo chờ xử lý', tone: due(overdueReports), href: '/progress-tracking/admin' },
+        { id: 'topics', title: `${unlockedTopics} đề tài chưa khóa`, subtitle: unlockedTopics ? 'Cần hoàn tất danh sách đề tài của khoa' : 'Danh sách đề tài đã khóa', tone: due(unlockedTopics), href: '/project-config' },
+        { id: 'quota', title: `${overQuota} giảng viên vượt định mức`, subtitle: overQuota ? 'Cần rà soát và phân bổ lại chỉ tiêu' : 'Định mức hướng dẫn đang ổn', tone: due(overQuota), href: '/project-config' },
+        { id: 'submissions', title: `${missingSubmissions} đề tài thiếu bài nộp cuối kỳ`, subtitle: missingSubmissions ? 'Theo dõi sinh viên chưa nộp bài' : 'Không có bài nộp cuối kỳ bị thiếu', tone: due(missingSubmissions), href: '/submission/admin' },
+      ],
+    };
+  }
+
   async getFacultySecretaryDetail(facultyId: string, user: any) {
     await this.assertCanAccessFaculty(user, facultyId);
 
