@@ -113,6 +113,8 @@ export class AlertDispatchService {
         return requestedRole && requestedRole !== AlertRecipientRole.TEACHER
           ? []
           : this.resolveTeachersBelowQuota(deadline.period_id);
+      case DeadlineType.SECRETARY_REVIEW:
+        return requestedRole ? [] : this.resolveSecretaries();
       case DeadlineType.STUDENT_REGISTRATION:
         return requestedRole && requestedRole !== AlertRecipientRole.STUDENT
           ? []
@@ -122,6 +124,10 @@ export class AlertDispatchService {
           ? []
           : this.resolveTeachersWithPendingRegistrations(deadline.period_id);
       case DeadlineType.PERIODIC_REPORT:
+        return requestedRole && requestedRole !== AlertRecipientRole.STUDENT
+          ? []
+          : this.resolveStudentsMissingReport(deadline.period_id, deadline.id);
+      case DeadlineType.FORM_02:
         return requestedRole && requestedRole !== AlertRecipientRole.STUDENT
           ? []
           : this.resolveStudentsMissingReport(deadline.period_id, deadline.id);
@@ -478,7 +484,12 @@ export class AlertDispatchService {
   }
 
   private errorMessage(error: unknown): string {
-    const message = error instanceof Error ? error.message : String(error);
+    const message =
+      error instanceof Error
+        ? error.message
+        : typeof error === 'string'
+          ? error
+          : 'Unknown error';
     this.logger.error(message);
     return message.slice(0, 2_000);
   }

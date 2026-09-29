@@ -12,12 +12,15 @@ export const TEACHER_OPTIONAL_HEADERS: string[] = [
   'dateOfBirth',
   'gender',
   'address',
+  'extraData',
 ];
 
 export const TEACHER_HEADERS: string[] = [
   ...TEACHER_REQUIRED_HEADERS,
   ...TEACHER_OPTIONAL_HEADERS,
 ];
+
+export const TEACHER_IMPORT_FIELDS = new Set(TEACHER_HEADERS);
 
 export const TEACHER_HEADER_ALIASES: Record<string, string> = {
   magiangvien: 'code',
@@ -47,7 +50,7 @@ export const TEACHER_HEADER_ALIASES: Record<string, string> = {
   dienthoai: 'phone',
   'điện thoại': 'phone',
   sdt: 'phone',
-  'sđt': 'phone',
+  sđt: 'phone',
   tel: 'phone',
 
   khoa: 'facultyId',
@@ -79,4 +82,10 @@ export const TEACHER_HEADER_ALIASES: Record<string, string> = {
 
   diachi: 'address',
   'địa chỉ': 'address',
+
+  extradata: 'extraData',
+  extra_data: 'extraData',
+  extrajson: 'extraData',
+  jsondata: 'extraData',
+  json: 'extraData',
 };

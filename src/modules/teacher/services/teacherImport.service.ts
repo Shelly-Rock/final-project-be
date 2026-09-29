@@ -6,6 +6,7 @@ import { MulterFile } from '@/shared/types/multer-file.type';
 import { CreateTeacherDto } from '../dto';
 import {
   TEACHER_HEADER_ALIASES,
+  TEACHER_IMPORT_FIELDS,
   TEACHER_REQUIRED_HEADERS,
 } from '../constrants';
 
@@ -42,8 +43,23 @@ export class ImportTeacherService {
   }
 
   private normalizeHeader(header: string): string {
-    const normalizedHeader = header.trim().toLowerCase();
-    return TEACHER_HEADER_ALIASES[normalizedHeader] ?? header.trim();
+    const trimmed = header.trim();
+    const lower = trimmed.toLowerCase();
+    return (
+      TEACHER_HEADER_ALIASES[lower] ??
+      TEACHER_HEADER_ALIASES[this.normalizeKey(trimmed)] ??
+      trimmed
+    );
+  }
+
+  private normalizeKey(value: string): string {
+    return value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd')
+      .replace(/Đ/g, 'D')
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '');
   }
 
   private async mapTeachers(
@@ -60,24 +76,50 @@ export class ImportTeacherService {
         faculties,
         rowNumber,
       );
+      const explicitExtraData = this.parseExtraData(row.extraData, rowNumber);
+      const additionalData = Object.fromEntries(
+        Object.entries(row).filter(
+          ([key, value]) =>
+            !TEACHER_IMPORT_FIELDS.has(key) &&
+            value !== null &&
+            value !== undefined &&
+            value !== '',
+        ),
+      );
+      const extraData = { ...additionalData, ...explicitExtraData };
+
       return {
         code: this.toStringValue(row.code),
         name: this.toStringValue(row.name),
         email: this.toStringValue(row.email),
         phone: this.toOptionalString(row.phone),
         facultyId,
-        academicTitle: this.normalizeAcademicTitle(row.academicTitle, rowNumber),
+        academicTitle: this.normalizeAcademicTitle(
+          row.academicTitle,
+          rowNumber,
+        ),
         position: this.toOptionalString(row.position),
         dateOfBirth: this.normalizeDate(row.dateOfBirth, rowNumber),
         gender: this.normalizeGender(row.gender, rowNumber),
         address: this.toOptionalString(row.address),
+        extraData: Object.keys(extraData).length ? extraData : undefined,
       };
     });
   }
 
   private toStringValue(value: unknown): string {
     if (value === null || value === undefined) return '';
-    return String(value).trim();
+    if (value instanceof Date) return value.toISOString();
+    if (typeof value === 'object') return JSON.stringify(value);
+    if (
+      typeof value === 'string' ||
+      typeof value === 'number' ||
+      typeof value === 'boolean' ||
+      typeof value === 'bigint'
+    ) {
+      return `${value}`.trim();
+    }
+    return '';
   }
 
   private toOptionalString(value: unknown): string | undefined {
@@ -92,11 +134,13 @@ export class ImportTeacherService {
   ): string {
     if (!value) return '';
 
-    const normalizedValue = value.toLowerCase();
+    const normalizedValue = this.normalizeKey(value);
     const faculty = faculties.find(
       (item) =>
-        item.id.toLowerCase() === normalizedValue ||
-        item.name.toLowerCase() === normalizedValue,
+        this.normalizeKey(item.id) === normalizedValue ||
+        this.normalizeKey(item.name) === normalizedValue ||
+        this.normalizeKey(item.name).includes(normalizedValue) ||
+        normalizedValue.includes(this.normalizeKey(item.name)),
     );
 
     if (!faculty) {
@@ -108,6 +152,37 @@ export class ImportTeacherService {
     return faculty.id;
   }
 
+  private parseExtraData(
+    value: unknown,
+    rowNumber: number,
+  ): Record<string, unknown> {
+    if (value === null || value === undefined || value === '') return {};
+    if (typeof value !== 'string') {
+      if (typeof value === 'object' && !Array.isArray(value)) {
+        return value as Record<string, unknown>;
+      }
+      throw new BadRequestException(
+        `Dòng ${rowNumber}: extraData phải là JSON object hợp lệ`,
+      );
+    }
+
+    try {
+      const parsed: unknown = JSON.parse(value);
+      if (
+        typeof parsed !== 'object' ||
+        parsed === null ||
+        Array.isArray(parsed)
+      ) {
+        throw new Error('extraData must be a JSON object');
+      }
+      return parsed as Record<string, unknown>;
+    } catch {
+      throw new BadRequestException(
+        `Dòng ${rowNumber}: extraData phải là JSON object hợp lệ`,
+      );
+    }
+  }
+
   private normalizeAcademicTitle(
     value: unknown,
     rowNumber: number,
@@ -115,25 +190,25 @@ export class ImportTeacherService {
     const stringValue = this.toStringValue(value);
     if (!stringValue) return undefined;
 
-    const normalizedValue = stringValue.toLowerCase();
+    const normalizedValue = this.normalizeKey(stringValue);
     const academicTitleMap: Record<string, AcademicTitle> = {
       master: AcademicTitle.MASTER,
       ths: AcademicTitle.MASTER,
-      'thạc sĩ': AcademicTitle.MASTER,
+      thacsi: AcademicTitle.MASTER,
       doctor: AcademicTitle.DOCTOR,
       ts: AcademicTitle.DOCTOR,
-      'tiến sĩ': AcademicTitle.DOCTOR,
-      assoc_prof: AcademicTitle.ASSOC_PROF,
+      tiensi: AcademicTitle.DOCTOR,
+      assocprof: AcademicTitle.ASSOC_PROF,
       pgs: AcademicTitle.ASSOC_PROF,
-      'phó giáo sư': AcademicTitle.ASSOC_PROF,
+      phogiaosu: AcademicTitle.ASSOC_PROF,
       prof: AcademicTitle.PROF,
       gs: AcademicTitle.PROF,
-      'giáo sư': AcademicTitle.PROF,
+      giaosu: AcademicTitle.PROF,
     };
 
     const academicTitle =
       academicTitleMap[normalizedValue] ??
-      AcademicTitle[stringValue as keyof typeof AcademicTitle];
+      AcademicTitle[stringValue.toUpperCase() as keyof typeof AcademicTitle];
 
     if (!academicTitle) {
       throw new BadRequestException(
@@ -144,27 +219,31 @@ export class ImportTeacherService {
     return academicTitle;
   }
 
-  private normalizeGender(value: unknown, rowNumber: number): Gender | undefined {
+  private normalizeGender(
+    value: unknown,
+    rowNumber: number,
+  ): Gender | undefined {
     const stringValue = this.toStringValue(value);
     if (!stringValue) return undefined;
 
-    const normalizedValue = stringValue.toLowerCase();
+    const normalizedValue = this.normalizeKey(stringValue);
     const genderMap: Record<string, Gender> = {
       male: Gender.MALE,
       nam: Gender.MALE,
       female: Gender.FEMALE,
-      nữ: Gender.FEMALE,
       nu: Gender.FEMALE,
       other: Gender.OTHER,
-      khác: Gender.OTHER,
       khac: Gender.OTHER,
     };
 
     const gender =
-      genderMap[normalizedValue] ?? Gender[stringValue as keyof typeof Gender];
+      genderMap[normalizedValue] ??
+      Gender[stringValue.toUpperCase() as keyof typeof Gender];
 
     if (!gender) {
-      throw new BadRequestException(`Dòng ${rowNumber}: Giới tính không hợp lệ`);
+      throw new BadRequestException(
+        `Dòng ${rowNumber}: Giới tính không hợp lệ`,
+      );
     }
 
     return gender;
@@ -173,9 +252,28 @@ export class ImportTeacherService {
   private normalizeDate(value: unknown, rowNumber: number): Date | undefined {
     if (value === null || value === undefined || value === '') return undefined;
 
-    const date = value instanceof Date ? value : new Date(String(value));
+    let date: Date;
+    if (value instanceof Date) {
+      date = value;
+    } else if (typeof value === 'number') {
+      date = new Date(Date.UTC(1899, 11, 30) + value * 86_400_000);
+    } else {
+      const text = this.toStringValue(value);
+      const vietnameseDate = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      date = vietnameseDate
+        ? new Date(
+            Date.UTC(
+              Number(vietnameseDate[3]),
+              Number(vietnameseDate[2]) - 1,
+              Number(vietnameseDate[1]),
+            ),
+          )
+        : new Date(text);
+    }
     if (Number.isNaN(date.getTime())) {
-      throw new BadRequestException(`Dòng ${rowNumber}: Ngày sinh không hợp lệ`);
+      throw new BadRequestException(
+        `Dòng ${rowNumber}: Ngày sinh không hợp lệ`,
+      );
     }
 
     return date;
@@ -197,9 +295,9 @@ export class ImportTeacherService {
       if (!teacher.code) {
         throw new BadRequestException(`Dòng ${rowNumber}: Thiếu mã giảng viên`);
       }
-      if (!/^GV\d+$/.test(teacher.code)) {
+      if (!/^[A-Za-z0-9._-]{2,50}$/.test(teacher.code)) {
         throw new BadRequestException(
-          `Dòng ${rowNumber}: Mã giảng viên phải có định dạng GV + số`,
+          `Dòng ${rowNumber}: Mã giảng viên không đúng định dạng`,
         );
       }
       if (!teacher.name) {
@@ -208,18 +306,13 @@ export class ImportTeacherService {
       if (!teacher.email) {
         throw new BadRequestException(`Dòng ${rowNumber}: Thiếu email`);
       }
-      if (!/^[a-zA-Z0-9._%+-]+@nttu\.edu\.vn$/.test(teacher.email)) {
-        throw new BadRequestException(
-          `Dòng ${rowNumber}: Email phải thuộc domain @nttu.edu.vn`,
-        );
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(teacher.email)) {
+        throw new BadRequestException(`Dòng ${rowNumber}: Email không hợp lệ`);
       }
       if (!teacher.facultyId) {
         throw new BadRequestException(`Dòng ${rowNumber}: Thiếu mã khoa`);
       }
-      if (
-        teacher.phone &&
-        !/^(0[3|5|7|8|9])+([0-9]{8})$/.test(teacher.phone)
-      ) {
+      if (teacher.phone && !/^0[35789][0-9]{8}$/.test(teacher.phone)) {
         throw new BadRequestException(
           `Dòng ${rowNumber}: Số điện thoại không đúng định dạng Việt Nam`,
         );
@@ -290,7 +383,9 @@ export class ImportTeacherService {
       );
     }
     if (duplicateEmails.size) {
-      duplicateMessages.push(`Email: ${Array.from(duplicateEmails).join(', ')}`);
+      duplicateMessages.push(
+        `Email: ${Array.from(duplicateEmails).join(', ')}`,
+      );
     }
 
     throw new BadRequestException(

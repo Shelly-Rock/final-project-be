@@ -1,13 +1,20 @@
-import { ConflictException, BadRequestException, Injectable } from '@nestjs/common';
+import {
+  ConflictException,
+  BadRequestException,
+  Injectable,
+} from '@nestjs/common';
 import { AuthService } from '@/modules/auth/auth.service';
 import { PrismaService } from '@/core/database/prisma/prisma.service';
 import { CreateTeacherDto } from '../dto';
 import { TeacherMapper } from '../mapper/teacher.mapper';
-import { TeacherStatus } from '@prisma/client';
+import { Prisma, TeacherStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 const BCRYPT_SALT_ROUNDS = 10;
 const DEFAULT_PASSWORD = '1111';
+type CreatedTeacher = Prisma.TeacherGetPayload<{
+  include: { faculty: true };
+}>;
 
 @Injectable()
 export class CreateTeacherService {
@@ -16,12 +23,14 @@ export class CreateTeacherService {
     private readonly authService: AuthService,
   ) {}
 
-  async createTeacher(dto: CreateTeacherDto) {
+  async createTeacher(dto: CreateTeacherDto): Promise<CreatedTeacher> {
     const teachers = await this.createTeachers([dto]);
     return teachers[0];
   }
 
-  async createTeachers(teachers: CreateTeacherDto[]) {
+  async createTeachers(
+    teachers: CreateTeacherDto[],
+  ): Promise<CreatedTeacher[]> {
     await this.validateTeachers(teachers);
 
     const teacherRole = await this.prisma.role.findUnique({
@@ -38,37 +47,39 @@ export class CreateTeacherService {
       BCRYPT_SALT_ROUNDS,
     );
 
-    const createdTeachers = await this.prisma.$transaction(async (tx) => {
-      const results = [];
+    const createdTeachers = await this.prisma.$transaction(
+      async (tx): Promise<CreatedTeacher[]> => {
+        const results: CreatedTeacher[] = [];
 
-      for (const teacher of teachers) {
-        const user = await tx.user.create({
-          data: {
-            email: teacher.email,
-            username: teacher.code,
-            password_hash: hashedPassword,
-            must_change_password: true,
-            email_verified_at: null,
-            is_active: true,
-            user_roles: {
-              create: [{ role_id: teacherRole.id }],
+        for (const teacher of teachers) {
+          const user = await tx.user.create({
+            data: {
+              email: teacher.email,
+              username: teacher.code,
+              password_hash: hashedPassword,
+              must_change_password: true,
+              email_verified_at: null,
+              is_active: true,
+              user_roles: {
+                create: [{ role_id: teacherRole.id }],
+              },
             },
-          },
-        });
+          });
 
-        const createdTeacher = await tx.teacher.create({
-          data: {
-            ...TeacherMapper.toPrismaCreateInput(teacher, user.id),
-            status: TeacherStatus.active,
-          },
-          include: { faculty: true },
-        });
+          const createdTeacher = await tx.teacher.create({
+            data: {
+              ...TeacherMapper.toPrismaCreateInput(teacher, user.id),
+              status: TeacherStatus.active,
+            },
+            include: { faculty: true },
+          });
 
-        results.push(createdTeacher);
-      }
+          results.push(createdTeacher);
+        }
 
-      return results;
-    });
+        return results;
+      },
+    );
 
     for (const teacher of createdTeachers) {
       try {
@@ -76,10 +87,14 @@ export class CreateTeacherService {
         console.log(
           `Verification email sent to ${teacher.email} (${teacher.name})`,
         );
-      } catch (error) {
+      } catch (error: unknown) {
         console.error(
           `Failed to send verification email to ${teacher.email}:`,
-          error.message,
+          error instanceof Error
+            ? error.message
+            : typeof error === 'string'
+              ? error
+              : 'Unknown error',
         );
       }
     }
@@ -155,7 +170,9 @@ export class CreateTeacherService {
       );
     }
     if (duplicateEmails.size) {
-      duplicateMessages.push(`Email: ${Array.from(duplicateEmails).join(', ')}`);
+      duplicateMessages.push(
+        `Email: ${Array.from(duplicateEmails).join(', ')}`,
+      );
     }
 
     throw new ConflictException(
