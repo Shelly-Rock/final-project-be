@@ -955,6 +955,51 @@ export class DashboardService {
     };
   }
 
+  async getFacultyUpcomingEvents(facultyId: string, user: any) {
+    await this.assertCanAccessFaculty(user, facultyId);
+    const now = new Date();
+    const until = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+    const [periods, deadlines, sessions] = await Promise.all([
+      this.prisma.registration_periods.findMany({
+        where: { OR: [{ student_deadline: { gte: now, lte: until } }, { teacher_deadline: { gte: now, lte: until } }] },
+        select: { id: true, name: true, student_deadline: true, teacher_deadline: true },
+      }),
+      this.prisma.period_deadlines.findMany({
+        where: { enabled: true, deadline_at: { gte: now, lte: until } },
+        select: { id: true, period_id: true, label: true, type: true, deadline_at: true },
+        orderBy: { deadline_at: 'asc' },
+      }),
+      this.prisma.defense_sessions.findMany({
+        where: {
+          status: 'SCHEDULED', deleted_at: null, defense_date: { gte: now, lte: until },
+          defense_committees: { defense_sessions: { some: { defense_session_projects: { some: { projects: { teacher: { faculty_id: facultyId } } } } } } },
+        },
+        include: { defense_committees: { select: { name: true } } },
+      }),
+    ]);
+
+    const events = new Map<string, { id: string; at: Date; title: string; detail: string }>();
+    for (const period of periods) {
+      for (const item of [
+        { key: 'student', at: period.student_deadline, title: 'Hạn xác nhận đăng ký sinh viên' },
+        { key: 'teacher', at: period.teacher_deadline, title: 'Hạn giảng viên nộp đề tài' },
+      ]) {
+        if (item.at < now || item.at > until) continue;
+        const key = `${item.title}:${item.at.toISOString()}`;
+        events.set(key, { id: `period-${period.id}-${item.key}`, at: item.at, title: item.title, detail: `${period.name} · ${item.at.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}` });
+      }
+    }
+    for (const deadline of deadlines) {
+      const key = `${deadline.label}:${deadline.deadline_at.toISOString()}`;
+      events.set(key, { id: `deadline-${deadline.id}`, at: deadline.deadline_at, title: deadline.label, detail: deadline.deadline_at.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) });
+    }
+    for (const session of sessions) {
+      const at = new Date(`${session.defense_date.toISOString().slice(0, 10)}T${session.start_time}`);
+      events.set(`defense-${session.id}`, { id: `defense-${session.id}`, at, title: `Bảo vệ · ${session.defense_committees.name}`, detail: `${session.start_time} · ${session.room}` });
+    }
+    return [...events.values()].sort((a, b) => a.at.getTime() - b.at.getTime()).map((event) => ({ ...event, at: event.at.toISOString() }));
+  }
+
   async getFacultySecretaryDetail(facultyId: string, user: any) {
     await this.assertCanAccessFaculty(user, facultyId);
 
