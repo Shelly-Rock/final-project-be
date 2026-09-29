@@ -1,6 +1,10 @@
 -- Sync columns introduced in application code after the production database
 -- was baselined. All statements are idempotent for partially upgraded DBs.
 
+ALTER TYPE "SubmissionStatus" ADD VALUE IF NOT EXISTS 'APPROVED_BY_TEACHER';
+
+ALTER TABLE "topics" ADD COLUMN IF NOT EXISTS "english_name" VARCHAR(255);
+
 ALTER TABLE "students" ADD COLUMN IF NOT EXISTS "faculty_id" VARCHAR(50);
 
 ALTER TABLE "projects"
