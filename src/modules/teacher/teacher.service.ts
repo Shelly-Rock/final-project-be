@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../../core/database/prisma/prisma.service';
 import { CreateTeacherDto, UpdateTeacherDto, ListTeacherQueryDto } from './dto';
 import { CreateTeacherService, ImportTeacherService } from './services';
@@ -138,7 +142,9 @@ export class TeacherService {
         const foundCodes = new Set(
           teachers.map((teacher) => teacher.teacher_id),
         );
-        const missingCodes = uniqueCodes.filter((code) => !foundCodes.has(code));
+        const missingCodes = uniqueCodes.filter(
+          (code) => !foundCodes.has(code),
+        );
         throw new NotFoundException(
           `Không tìm thấy giảng viên với mã: ${missingCodes.join(', ')}`,
         );
@@ -159,6 +165,11 @@ export class TeacherService {
           status: TeacherStatus.inactive,
           deleted_at: new Date(),
         },
+      });
+
+      await transaction.user.updateMany({
+        where: { id: { in: teachers.map((teacher) => teacher.user_id) } },
+        data: { is_active: false },
       });
 
       return {
@@ -188,12 +199,21 @@ export class TeacherService {
       );
     }
 
-    return this.prisma.teacher.update({
-      where: { id: teacher.id },
-      data: {
-        status: TeacherStatus.inactive,
-        deleted_at: new Date(),
-      },
+    return this.prisma.$transaction(async (transaction) => {
+      const deleted = await transaction.teacher.update({
+        where: { id: teacher.id },
+        data: {
+          status: TeacherStatus.inactive,
+          deleted_at: new Date(),
+        },
+      });
+
+      await transaction.user.updateMany({
+        where: { id: teacher.user_id },
+        data: { is_active: false },
+      });
+
+      return deleted;
     });
   }
 }
