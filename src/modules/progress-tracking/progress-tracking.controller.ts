@@ -97,7 +97,7 @@ export class ProgressTrackingController {
 
   // reviewer_id lấy từ JWT (resolve sang hồ sơ Teacher), không nhận từ body.
   @Put('reports/:id/review')
-  @Roles('TEACHER', 'ADMIN')
+  @Roles('TEACHER', 'ADMIN', 'SECRETARY')
   reviewReport(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: JwtUser,

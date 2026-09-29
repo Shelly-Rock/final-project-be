@@ -18,6 +18,7 @@ import {
   UpdateTeacherQuotaDto,
   UpdateRegistrationPeriodDto,
 } from './dto';
+import type { JwtUser } from '@/core/auth/interfaces/currentUser.interface';
 import { DeadlinePolicyService } from '@modules/governance/deadline-policy.service';
 import { AlertDispatchService } from '@modules/admin-config/alert-dispatch.service';
 
@@ -29,23 +30,40 @@ export class RegistrationPeriodService {
     private readonly alertDispatchService: AlertDispatchService,
   ) {}
 
-  async create(dto: CreateRegistrationPeriodDto) {
+  async create(dto: CreateRegistrationPeriodDto, actor?: JwtUser) {
+    // Auto-stamp the secretary's faculty into the period so it is scoped to that faculty
+    let facultyLimits = dto.facultyStudentLimits;
+    if (actor?.role === 'SECRETARY') {
+      const secretary = await this.prisma.secretary.findUnique({
+        where: { user_id: actor.id },
+        select: { faculty_id: true, faculty: { select: { name: true } } },
+      });
+      if (secretary?.faculty_id && (!facultyLimits || facultyLimits.length === 0)) {
+        facultyLimits = [{ faculty: secretary.faculty_id, maxStudents: dto.defaultQuota ?? 3 }];
+      }
+    }
+
     return this.prisma.registration_periods.create({
       data: {
         name: dto.name,
         semester: dto.semester,
         school_year: dto.schoolYear,
         start_date: dto.startDate,
-        teacher_deadline: dto.teacherDeadline,
-        student_deadline: dto.studentDeadline,
-        default_quota: dto.defaultQuota,
+        teacher_deadline: dto.teacherDeadline ?? new Date(dto.startDate.getTime() + 7 * 24 * 60 * 60 * 1000),
+        student_deadline: dto.studentDeadline ?? new Date(dto.startDate.getTime() + 14 * 24 * 60 * 60 * 1000),
+        default_quota: dto.defaultQuota ?? 3,
         description: dto.description,
         faculty_student_limits:
-          dto.facultyStudentLimits as unknown as Prisma.InputJsonArray,
+          facultyLimits as unknown as Prisma.InputJsonArray,
         status: RegistrationPeriodStatus.UPCOMING,
         updated_at: new Date(),
       },
     });
+  }
+
+  async getTeacherFaculty(userId: number): Promise<string | null> {
+    const teacher = await this.prisma.teacher.findUnique({ where: { user_id: userId }, select: { faculty_id: true } });
+    return teacher?.faculty_id || null;
   }
 
   async findAll(
@@ -62,7 +80,7 @@ export class RegistrationPeriodService {
         ...(schoolYear && { school_year: schoolYear }),
         ...(status && { status }),
       },
-      orderBy: { start_date: 'desc' },
+      orderBy: [{ start_date: 'desc' }, { id: 'desc' }],
     });
 
     if (!facultyId) return periods;
@@ -111,9 +129,9 @@ export class RegistrationPeriodService {
         semester: dto.semester,
         school_year: dto.schoolYear,
         start_date: dto.startDate,
-        teacher_deadline: dto.teacherDeadline,
-        student_deadline: dto.studentDeadline,
-        default_quota: dto.defaultQuota,
+        teacher_deadline: dto.teacherDeadline ?? (period.teacher_deadline || new Date()),
+        student_deadline: dto.studentDeadline ?? (period.student_deadline || new Date()),
+        default_quota: dto.defaultQuota ?? period.default_quota,
         description: dto.description,
         faculty_student_limits: dto.facultyStudentLimits
           ? (dto.facultyStudentLimits as unknown as Prisma.InputJsonArray)

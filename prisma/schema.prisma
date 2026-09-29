@@ -102,15 +102,18 @@ model Student {
   deleted_at         DateTime?
   middle_name        String
   extra_data         Json?
+  faculty_id         String?              @db.VarChar(50)
   final_submissions  final_submissions[]
   independent_scores independent_scores[]
   project            Project?
   scoring_results    scoring_results[]
   user               User?                @relation(fields: [user_id], references: [id])
+  faculty            Faculty?             @relation(fields: [faculty_id], references: [id])
   thesis_revisions   thesis_revisions[]
 
   @@index([student_id])
   @@index([class_name])
+  @@index([faculty_id])
   @@map("students")
 }
 
@@ -123,6 +126,7 @@ model Faculty {
   updated_at       DateTime           @updatedAt
   teachers         Teacher[]
   secretaries      Secretary[]
+  students         Student[]
   report_templates report_templates[]
 
   @@map("faculties")
@@ -395,24 +399,6 @@ model progress_notifications {
   created_at         DateTime         @default(now())
 
   @@index([recipient_id])
-  @@index([sender_id])
-}
-
-model notification_drafts {
-  id            Int      @id @default(autoincrement())
-  title         String
-  message       String
-  type          String
-  priority      String
-  recipient_ids Int[]
-  sender_id     Int
-  file_name     String?
-  file_url      String?
-  file_size     Int?
-  status        String   @default("DRAFT")
-  created_at    DateTime @default(now())
-  updated_at    DateTime @updatedAt
-
   @@index([sender_id])
 }
 
@@ -715,6 +701,24 @@ model topic_code_sequences {
   @@map("topic_code_sequences")
 }
 
+model notification_drafts {
+  id            Int      @id @default(autoincrement())
+  title         String
+  message       String
+  type          String
+  priority      String
+  recipient_ids Int[]
+  sender_id     Int
+  file_name     String?
+  file_url      String?
+  file_size     Int?
+  status        String   @default("DRAFT")
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  @@index([sender_id])
+}
+
 enum TeacherStatus {
   active
   inactive
@@ -789,8 +793,10 @@ enum ReportStatus {
 
 enum DeadlineType {
   TOPIC_CREATION
+  SECRETARY_REVIEW
   STUDENT_REGISTRATION
   TEACHER_APPROVAL
+  FORM_02
   PERIODIC_REPORT
   FINAL_SUBMISSION
 }
@@ -866,6 +872,7 @@ enum ScoringType {
 
 enum SubmissionStatus {
   PENDING
+  APPROVED_BY_TEACHER
   APPROVED
   REJECTED
 }

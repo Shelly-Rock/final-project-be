@@ -1895,16 +1895,16 @@ export class TopicService {
     const period =
       (await this.prisma.registration_periods.findFirst({
         where: { status: 'OPEN' },
-        orderBy: [{ start_date: 'desc' }],
+        orderBy: [{ start_date: 'desc' }, { id: 'desc' }],
         select: { id: true },
       })) ??
       (await this.prisma.registration_periods.findFirst({
         where: { status: 'UPCOMING' },
-        orderBy: [{ start_date: 'asc' }],
+        orderBy: [{ start_date: 'asc' }, { id: 'desc' }],
         select: { id: true },
       })) ??
       (await this.prisma.registration_periods.findFirst({
-        orderBy: [{ start_date: 'desc' }],
+        orderBy: [{ start_date: 'desc' }, { id: 'desc' }],
         select: { id: true },
       }));
 

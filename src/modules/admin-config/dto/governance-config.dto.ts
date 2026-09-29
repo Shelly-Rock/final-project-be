@@ -81,7 +81,7 @@ export class UpdateGovernanceConfigDto {
 
   @ApiProperty({ type: [PeriodDeadlineDto] })
   @IsArray()
-  @ArrayMinSize(5)
+  @ArrayMinSize(7)
   @ValidateNested({ each: true })
   @Type(() => PeriodDeadlineDto)
   deadlines: PeriodDeadlineDto[];

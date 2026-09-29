@@ -73,6 +73,11 @@ export class UpdateDefenseSessionDto {
   @Min(5)
   @Max(60)
   duration_minutes?: number;
+
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  project_ids?: number[];
 }
 
 export class AddProjectsToSessionDto {
@@ -139,6 +144,12 @@ export class DefenseSessionQueryDto {
   @IsOptional()
   @IsString()
   faculty_id?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  period_id?: number;
 }
 
 // Response DTOs

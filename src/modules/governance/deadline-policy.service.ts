@@ -300,6 +300,18 @@ export class DeadlinePolicyService {
     periodId: number,
     type: DeadlineType,
   ): Promise<DeadlineRow | null> {
+    const period = await this.prisma.registration_periods.findUnique({
+      where: { id: periodId },
+      select: { status: true },
+    });
+
+    if (period?.status === 'UPCOMING') {
+      throw new ForbiddenException('Đợt đăng ký này đang trong giai đoạn chuẩn bị, chưa được kích hoạt.');
+    }
+    if (period?.status === 'CLOSED') {
+      throw new ForbiddenException('Đợt đăng ký này đã đóng.');
+    }
+
     await this.ensureGovernanceConfig(periodId);
 
     // Các stage một-mốc dùng seq=1. Fallback deadline sớm nhất giúp dữ liệu

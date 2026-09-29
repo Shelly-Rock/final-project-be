@@ -75,8 +75,8 @@ export class SubmissionController {
   // Get all submissions (secretary/admin)
   @Get()
   @Roles('ADMIN', 'SECRETARY', 'TEACHER')
-  getSubmissions(@Query() query: SubmissionQueryDto) {
-    return this.service.getSubmissions(query);
+  getSubmissions(@CurrentUser() user: JwtUser, @Query() query: SubmissionQueryDto) {
+    return this.service.getSubmissions(query, user);
   }
 
   // Get eligible students for submission

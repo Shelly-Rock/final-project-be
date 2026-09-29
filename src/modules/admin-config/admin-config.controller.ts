@@ -53,7 +53,14 @@ export class AdminConfigController {
 
   @Get('teacher-overrides')
   @ApiOperation({ summary: 'Danh sách chỉ tiêu hiệu lực và ghi đè theo GV' })
-  listTeacherOverrides(@Query() query: ListTeacherOverridesQueryDto) {
+  async listTeacherOverrides(
+    @Query() query: ListTeacherOverridesQueryDto,
+    @CurrentUser() user?: import('@/core/auth/interfaces/currentUser.interface').JwtUser,
+  ) {
+    if (!query.facultyId && user?.role === 'SECRETARY') {
+      const secretary = await this.adminConfigService.getSecretaryFaculty(user.id);
+      if (secretary) query = { ...query, facultyId: secretary };
+    }
     return this.adminConfigService.listTeacherOverrides(query);
   }
 

@@ -42,8 +42,18 @@ export class DefenseController {
 
   // Get available projects for defense
   @Get('projects/available')
-  getAvailableProjects(@Query('faculty_id') facultyId?: string) {
-    return this.service.getAvailableProjects(facultyId);
+  getAvailableProjects(
+    @Query('faculty_id') facultyId?: string,
+    @Query('period_id') periodId?: string,
+    @Query('committee_id') committeeId?: string,
+  ) {
+    const parsedPeriodId = periodId ? parseInt(periodId, 10) : undefined;
+    const parsedCommitteeId = committeeId ? parseInt(committeeId, 10) : undefined;
+    return this.service.getAvailableProjects(
+      facultyId,
+      Number.isFinite(parsedPeriodId) ? parsedPeriodId : undefined,
+      Number.isFinite(parsedCommitteeId) ? parsedCommitteeId : undefined,
+    );
   }
 
   // Get defense session by ID

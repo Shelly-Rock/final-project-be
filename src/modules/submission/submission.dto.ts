@@ -12,6 +12,7 @@ import {
 
 export enum SubmissionStatus {
   PENDING = 'PENDING',
+  APPROVED_BY_TEACHER = 'APPROVED_BY_TEACHER',
   APPROVED = 'APPROVED',
   REJECTED = 'REJECTED',
 }

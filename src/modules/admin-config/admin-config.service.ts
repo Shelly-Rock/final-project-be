@@ -32,6 +32,14 @@ export class AdminConfigService {
     private readonly deadlinePolicy: DeadlinePolicyService,
   ) {}
 
+  async getSecretaryFaculty(userId: number): Promise<string | null> {
+    const secretary = await this.prisma.secretary.findUnique({
+      where: { user_id: userId },
+      select: { faculty_id: true },
+    });
+    return secretary?.faculty_id || null;
+  }
+
   async getConfig(periodId: number) {
     const config = await this.deadlinePolicy.ensureGovernanceConfig(periodId);
     const [deadlines, governance, alertGroups] = await Promise.all([

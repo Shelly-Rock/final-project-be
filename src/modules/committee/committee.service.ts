@@ -97,6 +97,10 @@ export class CommitteeService {
     }));
   }
 
+  async getTeacherConflicts(teacherId: number, excludeCommitteeId?: number) {
+    return this.checkTeacherConflicts(teacherId, excludeCommitteeId);
+  }
+
   // Get all external reviewers (teachers who can be in multiple committees)
   async getExternalReviewers(facultyId?: string) {
     const teachers = await this.prisma.teacher.findMany({
@@ -197,11 +201,14 @@ export class CommitteeService {
   }
 
   async getCommittees(query: CommitteeQueryDto) {
-    const { page = 1, limit = 20, name, faculty_id } = query;
+    const { page = 1, limit = 20, name, faculty_id, period_id } = query;
 
     const where: any = { deleted_at: null };
     if (name) {
       where.name = { contains: name, mode: 'insensitive' };
+    }
+    if (period_id) {
+      where.period_id = period_id;
     }
     if (faculty_id) {
       where.committee_members = {
@@ -468,7 +475,7 @@ export class CommitteeService {
     });
   }
 
-  async getStats(facultyId?: string) {
+  async getStats(facultyId?: string, periodId?: number) {
     const committees = await this.prisma.defense_committees.findMany({
       where: {
         deleted_at: null,

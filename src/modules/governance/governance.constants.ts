@@ -6,9 +6,11 @@ import { DeadlineType } from '@prisma/client';
 // ============================================================
 
 export const DEADLINE_TYPE_LABELS: Record<DeadlineType, string> = {
-  TOPIC_CREATION: 'Tạo / chỉnh sửa đề tài',
+  TOPIC_CREATION: 'Giảng viên tạo đề tài',
+  SECRETARY_REVIEW: 'Thư ký khoa duyệt / chỉnh sửa đề tài',
   STUDENT_REGISTRATION: 'Sinh viên đăng ký đề tài',
   TEACHER_APPROVAL: 'Giảng viên duyệt đăng ký',
+  FORM_02: 'Nộp biểu mẫu số 02',
   PERIODIC_REPORT: 'Báo cáo tiến độ định kỳ',
   FINAL_SUBMISSION: 'Nộp đồ án cuối kỳ',
 };
@@ -16,8 +18,10 @@ export const DEADLINE_TYPE_LABELS: Record<DeadlineType, string> = {
 /** Hành động còn thiếu, mô tả trong email alert. */
 export const DEADLINE_PENDING_ACTIONS: Record<DeadlineType, string> = {
   TOPIC_CREATION: 'tạo hoặc cập nhật đề tài hướng dẫn',
+  SECRETARY_REVIEW: 'rà soát, duyệt và chuẩn hóa các đề tài',
   STUDENT_REGISTRATION: 'đăng ký đề tài đồ án',
   TEACHER_APPROVAL: 'duyệt các yêu cầu đăng ký đang chờ',
+  FORM_02: 'nộp biểu mẫu số 02',
   PERIODIC_REPORT: 'nộp báo cáo tiến độ định kỳ',
   FINAL_SUBMISSION: 'nộp file đồ án cuối kỳ',
 };
@@ -25,8 +29,10 @@ export const DEADLINE_PENDING_ACTIONS: Record<DeadlineType, string> = {
 /** Đường dẫn FE gợi ý cho nút CTA trong email. */
 export const DEADLINE_CTA_PATHS: Record<DeadlineType, string> = {
   TOPIC_CREATION: '/my-topic',
+  SECRETARY_REVIEW: '/project-config',
   STUDENT_REGISTRATION: '/student-topic',
   TEACHER_APPROVAL: '/my-topic',
+  FORM_02: '/student-topic',
   PERIODIC_REPORT: '/progress-tracking',
   FINAL_SUBMISSION: '/submission',
 };
@@ -34,8 +40,10 @@ export const DEADLINE_CTA_PATHS: Record<DeadlineType, string> = {
 /** Thứ tự nghiệp vụ bắt buộc giữa các giai đoạn một-mốc. */
 export const DEADLINE_ORDERING: DeadlineType[] = [
   DeadlineType.TOPIC_CREATION,
+  DeadlineType.SECRETARY_REVIEW,
   DeadlineType.STUDENT_REGISTRATION,
   DeadlineType.TEACHER_APPROVAL,
+  DeadlineType.FORM_02,
   DeadlineType.FINAL_SUBMISSION,
 ];
 

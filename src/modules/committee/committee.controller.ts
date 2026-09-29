@@ -47,6 +47,17 @@ export class CommitteeController {
     return this.service.getExternalReviewers(facultyId);
   }
 
+  @Get('teachers/:teacherId/conflicts')
+  getTeacherConflicts(
+    @Param('teacherId', ParseIntPipe) teacherId: number,
+    @Query('committee_id') committeeId?: string,
+  ) {
+    return this.service.getTeacherConflicts(
+      teacherId,
+      committeeId ? Number(committeeId) : undefined,
+    );
+  }
+
   // Get excluded teachers (teachers already in other committees)
   @Get('teachers/excluded')
   getExcludedTeachers(@Query('committee_id') committeeId?: number) {
@@ -76,7 +87,8 @@ export class CommitteeController {
 
   // Get committee stats
   @Get('stats/summary')
-  getStats(@Query('faculty_id') facultyId?: string) {
-    return this.service.getStats(facultyId);
+  getStats(@Query('faculty_id') facultyId?: string, @Query('period_id') periodIdStr?: string) {
+    const periodId = periodIdStr ? parseInt(periodIdStr) : undefined;
+    return this.service.getStats(facultyId, periodId);
   }
 }

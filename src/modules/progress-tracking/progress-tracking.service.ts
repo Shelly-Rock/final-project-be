@@ -145,8 +145,34 @@ export class ProgressTrackingService {
     reportId: number,
     dto: ReviewReportDto,
   ) {
-    const teacher = await this.resolveTeacherByUserId(user.sub);
-    return this.reviewReport(reportId, teacher.id, dto, user.sub);
+    const role = (user.role || '').toUpperCase();
+    let reviewerId = 0;
+    
+    // Override status based on 2-level review logic
+    const isApprove = dto.action === 'APPROVE' || dto.status === 'APPROVED';
+    const isReject = dto.action === 'REJECT' || dto.status === 'REJECTED';
+    
+    if (role === 'TEACHER') {
+      const teacher = await this.resolveTeacherByUserId(user.sub);
+      reviewerId = teacher.id;
+      if (isApprove) dto.status = 'APPROVED_BY_TEACHER';
+      if (isReject) dto.status = 'REVISION_REQUESTED';
+    } else {
+      try {
+        const sec = await this.resolveSecretaryByUserId(user.sub);
+        reviewerId = sec.id;
+      } catch (e) {
+        // Fallback for admin
+        reviewerId = user.sub;
+      }
+      if (isApprove) dto.status = 'APPROVED';
+      if (isReject) dto.status = 'REJECTED';
+    }
+
+    // Clear action so reviewReport uses the overridden status directly
+    dto.action = undefined;
+
+    return this.reviewReport(reportId, reviewerId, dto, user.sub);
   }
 
   async archiveReportForActor(user: JwtUser, reportId: number) {
@@ -1191,6 +1217,17 @@ export class ProgressTrackingService {
     }
 
     let periodId = query.period_id;
+    
+    if (!periodId && studentId) {
+      const project = await this.prisma.project.findFirst({
+        where: { student_id: studentId, deleted_at: null },
+        include: { topics: { select: { period_id: true } } },
+      });
+      if (project?.topics?.period_id) {
+        periodId = project.topics.period_id;
+      }
+    }
+
     if (!periodId) {
       // Tìm đợt đang active
       const activePeriod = await this.prisma.registration_periods.findFirst({

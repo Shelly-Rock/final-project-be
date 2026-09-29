@@ -9,6 +9,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
+import {
+  RUBRIC_GVHD,
+  RUBRIC_GVPB,
+  RUBRIC_COMMITTEE,
+} from './rubrics.constant';
 import { PrismaService } from '@core/database/prisma/prisma.service';
 import {
   Prisma,
@@ -31,6 +36,33 @@ import {
   SubmitRevisionDto,
   UpdateRankDto,
 } from './scoring.dto';
+
+
+function scoreToText(score: number): string {
+    if (score === null || score === undefined) return '';
+    const num = Math.round(score * 100) / 100;
+    if (num === 10) return 'Mười';
+    if (num === 0) return 'Không';
+    
+    const units = ['Không', 'Một', 'Hai', 'Ba', 'Bốn', 'Năm', 'Sáu', 'Bảy', 'Tám', 'Chín'];
+    const parts = num.toString().split('.');
+    let text = units[parseInt(parts[0])];
+    
+    if (parts.length > 1) {
+        text += ' phẩy';
+        const decimals = parts[1];
+        for (let i = 0; i < decimals.length; i++) {
+            const digit = parseInt(decimals[i]);
+            if (decimals.length === 2 && i === 1 && digit === 5 && parseInt(decimals[0]) !== 0) {
+               text += ' lăm';
+            } else {
+               text += ' ' + units[digit].toLowerCase();
+            }
+        }
+    }
+    
+    return text;
+}
 
 @Injectable()
 export class ScoringService {
@@ -134,6 +166,21 @@ export class ScoringService {
       );
     }
 
+    if (score.scoring_type === 'COMMITTEE') {
+      const result = await this.prisma.scoring_results.findUnique({
+        where: { project_id: score.project_id },
+      });
+      if (score.role === 'EXTERNAL_REVIEWER') {
+        if (!result || result.gvhd_score === null || result.gvhd_score < 4) {
+          throw new ForbiddenException('Chưa thể chấm. Đang chờ GVHD chấm hoặc sinh viên đã rớt từ vòng GVHD');
+        }
+      } else {
+        if (!result || result.review_score === null || result.review_score < 4) {
+          throw new ForbiddenException('Chưa thể chấm. Đang chờ GVPB chấm hoặc sinh viên đã rớt từ vòng Phản biện');
+        }
+      }
+    }
+
     if (score.deadline && new Date() > score.deadline) {
       throw new BadRequestException('Đã quá thời hạn chấm điểm');
     }
@@ -163,6 +210,7 @@ export class ScoringService {
       score.project_id,
       score.scoring_type,
       dto.score,
+      score.role,
     );
 
     return updatedScore;
@@ -172,6 +220,7 @@ export class ScoringService {
     projectId: number,
     scoringType: ScoringType,
     score: number,
+    role?: string | null,
   ) {
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
@@ -204,6 +253,10 @@ export class ScoringService {
         updateData.final_status = 'REJECTED_GVHD';
       }
     } else {
+      if (role === 'EXTERNAL_REVIEWER') {
+        updateData.review_score = score;
+      }
+      
       // Committee score - get all committee scores from IndependentScore table
       const committeeScores = await this.prisma.independent_scores.findMany({
         where: {
@@ -344,25 +397,46 @@ export class ScoringService {
     ]);
 
     return {
-      data: scores.map((s) => ({
-        id: s.id,
-        projectId: s.project_id,
-        studentId: s.student_id,
-        teacherId: s.teacher_id,
-        scoringType: s.scoring_type,
-        role: s.role,
-        score: s.score,
-        maxScore: s.max_score,
-        criteriaScores: s.criteria_scores,
-        status: s.status,
-        deadline: s.deadline,
-        submittedAt: s.submitted_at,
-        notes: s.notes,
-        strengths: s.strengths,
-        weaknesses: s.weaknesses,
-        createdAt: s.created_at,
-        updatedAt: s.updated_at,
-        project: (s as any).projects
+      data: scores.map((s) => {
+        let isLocked = false;
+        let lockedReason = null;
+        const result = (s as any).projects?.scoring_results;
+        
+        if (s.scoring_type === 'COMMITTEE') {
+          if (s.role === 'EXTERNAL_REVIEWER') {
+            if (!result || result.gvhd_score === null || result.gvhd_score < 4) {
+              isLocked = true;
+              lockedReason = 'Đang chờ GVHD chấm hoặc sinh viên đã rớt vòng GVHD';
+            }
+          } else {
+            if (!result || result.review_score === null || result.review_score < 4) {
+              isLocked = true;
+              lockedReason = 'Đang chờ GVPB chấm hoặc sinh viên đã rớt vòng Phản biện';
+            }
+          }
+        }
+
+        return {
+          id: s.id,
+          projectId: s.project_id,
+          studentId: s.student_id,
+          teacherId: s.teacher_id,
+          scoringType: s.scoring_type,
+          role: s.role,
+          score: s.score,
+          maxScore: s.max_score,
+          criteriaScores: s.criteria_scores,
+          status: s.status,
+          deadline: s.deadline,
+          submittedAt: s.submitted_at,
+          notes: s.notes,
+          strengths: s.strengths,
+          weaknesses: s.weaknesses,
+          createdAt: s.created_at,
+          updatedAt: s.updated_at,
+          isLocked,
+          lockedReason,
+          project: (s as any).projects
           ? {
               projectId: (s as any).projects.project_id,
               projectCode: (s as any).projects.project_id,
@@ -378,7 +452,8 @@ export class ScoringService {
               className: (s as any).students.class_name,
             }
           : undefined,
-      })),
+      };
+      }),
       meta: {
         page,
         limit,
@@ -700,6 +775,82 @@ export class ScoringService {
     });
   }
 
+  // ============ EXPORT SUMMARY SCORE SHEET ============
+  
+  async exportSummaryScoreSheetWord(projectId: number): Promise<Buffer> {
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        student: true,
+      },
+    });
+
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
+
+    const result = await this.prisma.scoring_results.findUnique({
+      where: { project_id: projectId },
+    });
+
+    const scores = await this.prisma.independent_scores.findMany({
+      where: { project_id: projectId, status: 'SUBMITTED' },
+      include: { teachers: true },
+      orderBy: { role: 'asc' },
+    });
+
+    const templatePath = require('path').join(
+      process.cwd(),
+      'src',
+      'templates',
+      'NIIE-KLTN013.docx',
+    );
+
+    if (!fs.existsSync(templatePath)) {
+      throw new NotFoundException(
+        'Không tìm thấy file mẫu NIIE-KLTN013.docx. Vui lòng upload template.'
+      );
+    }
+
+    const fileContent = fs.readFileSync(templatePath, 'binary');
+    const zip = new PizZip(fileContent);
+    const doc = new Docxtemplater(zip, {
+      paragraphLoop: true,
+      linebreaks: true,
+    });
+
+    const now = new Date();
+    const templateData: Record<string, any> = {
+      student_last_name: `${project.student.last_name || ''} ${project.student.middle_name || ''}`.trim(),
+      student_first_name: project.student.first_name || '',
+      final_score_text: scoreToText(result?.final_score || 0),
+      day: now.getDate().toString().padStart(2, '0'),
+      month: (now.getMonth() + 1).toString().padStart(2, '0'),
+      year: now.getFullYear().toString(),
+      student_name: `${project.student.first_name} ${project.student.middle_name} ${project.student.last_name}`.trim(),
+      student_id: project.student.student_id,
+      project_name: project.project_name,
+      final_score: result?.final_score || 0,
+      gvhd_score: result?.gvhd_score || 0,
+      gvpb_score: result?.review_score || 0,
+      defense_score: result?.defense_score || 0,
+    };
+
+    // Committee details
+    const committeeScores = scores.filter(s => s.scoring_type === 'COMMITTEE' && s.role !== 'EXTERNAL_REVIEWER');
+    committeeScores.forEach((s, idx) => {
+      templateData[`committee_${idx + 1}_name`] = s.teachers.name;
+      templateData[`committee_${idx + 1}_score`] = s.score;
+    });
+
+    doc.render(templateData);
+
+    return doc.getZip().generate({
+      type: 'nodebuffer',
+      compression: 'DEFLATE',
+    });
+  }
+
   // ============ GIAI ĐOẠN 5: HỌP VÀ CHỐT ĐIỂM HỘI ĐỒNG ============
 
   async getMeetings(userId: number, role: string, query: QueryMeetingsDto) {
@@ -982,6 +1133,7 @@ export class ScoringService {
       score.project_id,
       ScoringType.COMMITTEE,
       dto.score,
+      score.role,
     );
 
     return {
@@ -1841,43 +1993,79 @@ export class ScoringService {
       throw new ForbiddenException('Bạn không có quyền xuất phiếu chấm này');
     }
 
-    // Read the template
+    // Determine correct template and rubric schema
+    let templateName = "";
+    let rubricSchema = null;
+    
+    if (score.scoring_type === ScoringType.GVHD) {
+      templateName = "NIIE-KLTN010.docx";
+      rubricSchema = RUBRIC_GVHD;
+    } else if (score.scoring_type === ScoringType.COMMITTEE && score.role === "EXTERNAL_REVIEWER") {
+      templateName = "NIIE-KLTN011.docx";
+      rubricSchema = RUBRIC_GVPB;
+    } else {
+      templateName = "NIIE-KLTN012.docx";
+      rubricSchema = RUBRIC_COMMITTEE;
+    }
+
     const templatePath = path.join(
       process.cwd(),
-      'src',
-      'templates',
-      'score_sheet_template.docx',
+      "src",
+      "templates",
+      templateName,
     );
 
     if (!fs.existsSync(templatePath)) {
       throw new NotFoundException(
-        'Không tìm thấy file mẫu score_sheet_template.docx trong thư mục src/templates.',
+        "Không tìm thấy file mẫu " + templateName + " trong thư mục src/templates. Vui lòng cấu hình upload template."
       );
     }
 
-    const content = fs.readFileSync(templatePath, 'binary');
-    const zip = new PizZip(content);
+    const fileContent = fs.readFileSync(templatePath, "binary");
+    const zip = new PizZip(fileContent);
     const doc = new Docxtemplater(zip, {
       paragraphLoop: true,
       linebreaks: true,
     });
 
-    // Render the document
-    doc.render({
-      student_name: `${score.students.first_name} ${score.students.middle_name} ${score.students.last_name}`,
-      student_mssv: score.students.student_id,
-      project_code: score.projects.project_id,
+    const rawScores = (score.criteria_scores) || {};
+    const templateData = {
+      student_name: (score.students.first_name + " " + score.students.middle_name + " " + score.students.last_name).trim(),
+      student_id: score.students.student_id,
       project_name: score.projects.project_name,
+      course_name: "Khóa luận tốt nghiệp",
       teacher_name: score.teachers.name,
-      scoring_type:
-        score.scoring_type === ScoringType.GVHD
-          ? 'Giảng viên hướng dẫn'
-          : 'Hội đồng bảo vệ',
       total_score: score.score || 0,
-      strengths: score.strengths || '',
-      weaknesses: score.weaknesses || '',
-      notes: score.notes || '',
-    });
+      notes: score.notes || "",
+    };
+
+    if (rubricSchema) {
+      rubricSchema.sections.forEach(section => {
+        let sectionScore = 0;
+        let totalWeight = 0;
+        
+        section.categories.forEach(cat => {
+          let sum = 0;
+          let count = 0;
+          cat.criteria.forEach(crit => {
+            const val = rawScores[crit.id] || 0;
+            templateData["c_" + crit.id.replace(/\./g, "_")] = val;
+            sum += val;
+            count++;
+          });
+          const catAvg = count > 0 ? sum / count : 0;
+          templateData["cat_" + cat.id.replace(/\./g, "_")] = catAvg.toFixed(2);
+          sectionScore += catAvg * cat.weight;
+          totalWeight += cat.weight;
+        });
+        
+        const finalSectionScore = totalWeight > 0 ? sectionScore / totalWeight : 0;
+        templateData["sec_" + section.id] = finalSectionScore.toFixed(2);
+      });
+    }
+
+    // Render the document
+    doc.render(templateData);
 
     return doc.getZip().generate({
       type: 'nodebuffer',

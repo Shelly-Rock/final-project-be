@@ -151,7 +151,7 @@ export class TopicController {
 
   @Post('generate-codes')
   @Roles('ADMIN', 'SECRETARY')
-  @ApiOperation({ summary: 'Sinh mã đề tài DT{year}_{DEPT}_{seq} hàng loạt' })
+  @ApiOperation({ summary: 'Cấp mã đề tài DT{year}_{DEPT}_{seq} hàng loạt' })
   generateCodes(
     @Body() dto: GenerateTopicCodesDto,
     @CurrentUser('sub') actorUserId: number,

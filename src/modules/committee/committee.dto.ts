@@ -31,10 +31,10 @@ export class CreateCommitteeDto {
   @IsNotEmpty()
   name: string;
 
-  @IsOptional()
   @Type(() => Number)
   @IsInt()
-  period_id?: number;
+  @IsNotEmpty()
+  period_id: number;
 
   @IsOptional()
   @Type(() => Number)
@@ -119,6 +119,11 @@ export class CommitteeQueryDto {
   @IsOptional()
   @IsString()
   faculty_id?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  period_id?: number;
 }
 
 // Response DTOs

@@ -53,31 +53,24 @@ export class CreateRegistrationPeriodDto {
   @Type(() => Date)
   startDate: Date;
 
-  @ApiProperty({ description: 'Hạn chót nộp đề tài của Giảng viên (ISO Date)' })
-  @IsNotEmpty()
+  @ApiPropertyOptional({ description: 'Hạn chót nộp đề tài của Giảng viên (ISO Date)' })
+  @IsOptional()
   @Type(() => Date)
-  @IsAfter('startDate', {
-    message: 'Hạn chót của Giảng viên phải sau Ngày bắt đầu',
-  })
-  teacherDeadline: Date;
+  teacherDeadline?: Date;
 
-  @ApiProperty({ description: 'Hạn chót đăng ký của Sinh viên (ISO Date)' })
-  @IsNotEmpty()
+  @ApiPropertyOptional({ description: 'Hạn chót đăng ký của Sinh viên (ISO Date)' })
+  @IsOptional()
   @Type(() => Date)
-  @IsAfter('teacherDeadline', {
-    message: 'Hạn chót của Sinh viên phải sau Hạn chót Giảng viên',
-  })
-  studentDeadline: Date;
+  studentDeadline?: Date;
 
   @ApiProperty({
     description: 'Chỉ tiêu đề tài mặc định/GV (3-10)',
     minimum: 3,
     maximum: 10,
   })
+  @IsOptional()
   @IsInt()
-  @Min(3, { message: 'Chỉ tiêu mặc định tối thiểu là 3 đề tài/GV' })
-  @Max(10, { message: 'Chỉ tiêu mặc định tối đa là 10 đề tài/GV' })
-  defaultQuota: number;
+  defaultQuota?: number;
 
   @ApiPropertyOptional({ description: 'Mô tả hoặc ghi chú thêm' })
   @IsOptional()

@@ -89,8 +89,33 @@ export class SubmissionService {
     submissionId: number,
     dto: ReviewSubmissionDto,
   ) {
-    const teacher = await this.resolveTeacherByUserId(user.sub);
-    return this.reviewSubmission(submissionId, teacher.id, dto);
+    const role = (user.role || '').toUpperCase();
+    let reviewerId = 0;
+    
+    // Override status based on 2-level review logic
+    const isApprove = dto.status === 'APPROVED';
+    const isReject = dto.status === 'REJECTED';
+    
+    if (role === 'TEACHER') {
+      const teacher = await this.resolveTeacherByUserId(user.sub);
+      reviewerId = teacher.id;
+      if (isApprove) dto.status = 'APPROVED_BY_TEACHER' as any;
+      if (isReject) dto.status = 'REJECTED' as any;
+    } else {
+      try {
+        const sec = await this.prisma.secretary.findFirst({
+          where: { user_id: user.sub, deleted_at: null }
+        });
+        if (sec) reviewerId = sec.id;
+        else reviewerId = user.sub;
+      } catch (e) {
+        reviewerId = user.sub;
+      }
+      if (isApprove) dto.status = 'APPROVED' as any;
+      if (isReject) dto.status = 'REJECTED' as any;
+    }
+
+    return this.reviewSubmission(submissionId, reviewerId, dto);
   }
 
   // Validate file name format: [ProjectCode].extension
@@ -335,7 +360,22 @@ export class SubmissionService {
     });
 
     if (existingSubmission) {
-      throw new BadRequestException('Đã nộp bài báo cáo cho nhóm này rồi.');
+      if (existingSubmission.status === 'APPROVED' || existingSubmission.status === 'APPROVED_BY_TEACHER') {
+        throw new BadRequestException('Bài nộp đã được duyệt, không thể cập nhật.');
+      }
+      return this.prisma.final_submissions.update({
+        where: { id: existingSubmission.id },
+        data: {
+          submitted_by_student_id: student.id,
+          file_url: dto.webViewLink,
+          file_name: dto.fileName,
+          original_name: dto.fileName,
+          file_size: dto.fileSize,
+          file_type: fileType,
+          status: 'PENDING',
+          updated_at: new Date(),
+        },
+      });
     }
 
     return this.prisma.final_submissions.create({
@@ -393,14 +433,16 @@ export class SubmissionService {
     // Check existing submission
     const existingSubmission = await this.prisma.final_submissions.findFirst({
       where: {
-        submitted_by_student_id: studentId,
         topic_id: project.topic_id,
         deleted_at: null,
       },
     });
 
     if (existingSubmission) {
-      throw new BadRequestException('Đã nộp bài cho đề tài này rồi');
+      if (existingSubmission.status === 'APPROVED' || existingSubmission.status === 'APPROVED_BY_TEACHER') {
+        throw new BadRequestException('Bài nộp đã được duyệt, không thể cập nhật nữa');
+      }
+      // If it's PENDING or REJECTED, they CAN update it, so we DON'T throw!
     }
   }
 
@@ -474,10 +516,16 @@ export class SubmissionService {
     }));
   }
 
-  async getSubmissions(query: SubmissionQueryDto) {
+  async getSubmissions(query: SubmissionQueryDto, user?: JwtUser) {
     const { page = 1, limit = 20, status, student_id, project_id, faculty_id } = query;
 
     const where: any = { deleted_at: null };
+    const role = user?.role ? user.role.toUpperCase() : '';
+    if (role === 'TEACHER' && user?.sub) {
+      const teacher = await this.resolveTeacherByUserId(user.sub);
+      // Giảng viên chỉ xem bài nộp của các đề tài họ hướng dẫn
+      where.topics = { teacher_id: teacher.id };
+    }
     if (status) where.status = status;
     if (student_id) where.submitted_by_student_id = student_id;
     if (project_id) where.topic_id = project_id; // Mapping frontend project_id to topic_id
@@ -575,8 +623,8 @@ export class SubmissionService {
       throw new NotFoundException('Bài nộp không tồn tại');
     }
 
-    if (submission.status !== SubmissionStatus.PENDING) {
-      throw new BadRequestException('Bài nộp đã được duyệt hoặc từ chối trước đó');
+    if (submission.status !== 'PENDING' && submission.status !== 'APPROVED_BY_TEACHER') {
+      throw new BadRequestException('Bản nộp không ở trạng thái chờ duyệt');
     }
 
     return this.prisma.final_submissions.update({
@@ -628,12 +676,19 @@ export class SubmissionService {
     const scope = facultyId
       ? { topics: { teachers: { faculty_id: facultyId } } }
       : {};
-    const [total, pending, approved, rejected] = await Promise.all([
+    const [total, pending, approvedByTeacher, approved, rejected] = await Promise.all([
       this.prisma.final_submissions.count({
         where: { deleted_at: null, ...scope },
       }),
       this.prisma.final_submissions.count({
         where: { status: SubmissionStatus.PENDING, deleted_at: null, ...scope },
+      }),
+      this.prisma.final_submissions.count({
+        where: {
+          status: SubmissionStatus.APPROVED_BY_TEACHER,
+          deleted_at: null,
+          ...scope,
+        },
       }),
       this.prisma.final_submissions.count({
         where: { status: SubmissionStatus.APPROVED, deleted_at: null, ...scope },
@@ -643,6 +698,12 @@ export class SubmissionService {
       }),
     ]);
 
-    return { total, pending, approved, rejected };
+    return {
+      total,
+      pending: pending + approvedByTeacher,
+      approvedByTeacher,
+      approved,
+      rejected,
+    };
   }
 }

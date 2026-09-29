@@ -12,6 +12,8 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { RegistrationPeriodService } from './registration-period.service';
+import { CurrentUser } from '@core/auth/decorators/currentUser.decorator';
+import type { JwtUser } from '@/core/auth/interfaces/currentUser.interface';
 import {
   CreateRegistrationPeriodDto,
   UpdateTeacherQuotaDto,
@@ -35,8 +37,11 @@ export class RegistrationPeriodController {
   @Post()
   @Roles('ADMIN', 'SECRETARY')
   @ApiOperation({ summary: 'Tạo đợt đăng ký mới' })
-  create(@Body() createDto: CreateRegistrationPeriodDto) {
-    return this.periodService.create(createDto);
+  async create(
+    @Body() createDto: CreateRegistrationPeriodDto,
+    @CurrentUser() user?: JwtUser,
+  ) {
+    return this.periodService.create(createDto, user);
   }
 
   @Get()
@@ -57,19 +62,25 @@ export class RegistrationPeriodController {
     description: 'Năm học (VD: 2025-2026)',
   })
   @ApiQuery({ name: 'status', enum: RegistrationPeriodStatus, required: false })
-  findAll(
+  async findAll(
     @Query('search') search?: string,
     @Query('semester') semester?: string,
     @Query('schoolYear') schoolYear?: string,
-    @Query('status') status?: RegistrationPeriodStatus,
+    @Query('status') status?: import('@prisma/client').RegistrationPeriodStatus,
     @Query('facultyId') facultyId?: string,
+    @CurrentUser() user?: JwtUser,
   ) {
+    let autoFacultyId = facultyId;
+    if (!autoFacultyId && user?.role === 'TEACHER') {
+      const teacherF = await this.periodService.getTeacherFaculty(user.id);
+      if (teacherF) autoFacultyId = teacherF;
+    }
     return this.periodService.findAll(
       search,
       semester,
       schoolYear,
       status,
-      facultyId,
+      autoFacultyId,
     );
   }
 

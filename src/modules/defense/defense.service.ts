@@ -80,10 +80,10 @@ export class DefenseService {
       include: { student: true },
     });
 
-    // Get all internal committee members' teacher IDs
-    const excludedTeacherIds = committee.committee_members.map(
-      (m) => m.teacher_id,
-    );
+    const excludedTeacherIds = [
+      ...committee.committee_members.map((m) => m.teacher_id),
+      ...committee.committee_external_reviewers.map((m) => m.teacher_id),
+    ];
 
     for (const project of projects) {
       // Check if any excluded teacher is the supervisor
@@ -244,12 +244,12 @@ export class DefenseService {
     }
   }
 
-  async getAvailableProjects(facultyId?: string) {
-    // Lấy các project đã APPROVED và chưa được xếp vào lịch bảo vệ nào
+  async getAvailableProjects(facultyId?: string, periodId?: number, committeeId?: number) {
     const projects = await this.prisma.project.findMany({
       where: {
         status: 'APPROVED',
         ...(facultyId ? { teacher: { faculty_id: facultyId } } : {}),
+        ...(periodId ? { topics: { period_id: periodId } } : {}),
         defense_session_projects: {
           none: {},
         },
@@ -260,15 +260,83 @@ export class DefenseService {
       },
     });
 
-    return projects.map((p) => ({
-      id: p.id,
-      projectCode: p.project_id,
-      name: p.project_name,
-      studentName: p.student
-        ? `${p.student.first_name} ${p.student.last_name}`
-        : 'Unknown',
-      studentMssv: p.student?.student_id || 'Unknown',
+    const excludedTeacherIds = await this.getExcludedSupervisorIdsForCommittee(
+      committeeId,
+    );
+
+    const groups = new Map<
+      string,
+      {
+        key: string;
+        topicId: number | null;
+        name: string;
+        projectCode: string;
+        projectIds: number[];
+        supervisorIds: number[];
+        students: { name: string; mssv: string }[];
+      }
+    >();
+
+    for (const p of projects) {
+      const key =
+        p.topic_id != null ? `topic:${p.topic_id}` : `project:${p.id}`;
+      let g = groups.get(key);
+      if (!g) {
+        g = {
+          key,
+          topicId: p.topic_id ?? null,
+          name: p.topics?.name || p.project_name,
+          projectCode: p.topics?.code || p.project_id,
+          projectIds: [],
+          supervisorIds: [],
+          students: [],
+        };
+        groups.set(key, g);
+      }
+      g.projectIds.push(p.id);
+      g.supervisorIds.push(p.teacher_id);
+      g.students.push({
+        name: p.student
+          ? `${p.student.first_name} ${p.student.middle_name ? p.student.middle_name + ' ' : ''}${p.student.last_name}`.replace(/\s+/g, ' ').trim()
+          : 'Unknown',
+        mssv: p.student?.student_id || 'Unknown',
+      });
+    }
+
+    const filteredGroups = [...groups.values()].filter(
+      (g) => !g.supervisorIds.some((id) => excludedTeacherIds.has(id)),
+    );
+
+    return filteredGroups.map((g) => ({
+      key: g.key,
+      topicId: g.topicId,
+      id: g.topicId ?? g.projectIds[0],
+      projectCode: g.projectCode,
+      name: g.name,
+      projectIds: g.projectIds,
+      supervisorIds: g.supervisorIds,
+      studentNames: g.students.map((s) => s.name).join(', '),
+      studentMssvs: g.students.map((s) => s.mssv).join(', '),
+      students: g.students,
     }));
+  }
+
+  private async getExcludedSupervisorIdsForCommittee(
+    committeeId?: number,
+  ): Promise<Set<number>> {
+    if (!committeeId) return new Set();
+    const committee = await this.prisma.defense_committees.findFirst({
+      where: { id: committeeId, deleted_at: null },
+      include: {
+        committee_members: true,
+        committee_external_reviewers: true,
+      },
+    });
+    if (!committee) return new Set();
+    return new Set([
+      ...committee.committee_members.map((m) => m.teacher_id),
+      ...committee.committee_external_reviewers.map((m) => m.teacher_id),
+    ]);
   }
 
   async getDefenseSessions(query: DefenseSessionQueryDto) {
@@ -280,15 +348,19 @@ export class DefenseService {
       defense_date,
       room,
       faculty_id,
+      period_id,
     } = query;
 
     const where: any = { deleted_at: null };
     if (committee_id) where.committee_id = committee_id;
     if (status) where.status = status;
     if (room) where.room = room;
-    if (faculty_id) {
+    if (faculty_id || period_id) {
       where.defense_committees = {
-        committee_members: { some: { teachers: { faculty_id } } },
+        ...(faculty_id && {
+          committee_members: { some: { teachers: { faculty_id } } },
+        }),
+        ...(period_id && { period_id }),
       };
     }
     if (defense_date) {
@@ -352,7 +424,7 @@ export class DefenseService {
       sessionProjects.map(async (sp) => {
         const project = await this.prisma.project.findUnique({
           where: { id: sp.project_id },
-          include: { student: true },
+          include: { student: true, topics: { select: { name: true, code: true } } },
         });
         return {
           project_id: sp.project_id,
@@ -362,6 +434,10 @@ export class DefenseService {
             ? `${project.student.first_name} ${project.student.middle_name} ${project.student.last_name}`
             : '',
           student_mssv: project?.student?.student_id,
+          teacher_id: project?.teacher_id ?? null,
+          topic_id: project?.topic_id ?? null,
+          topic_name: project?.topics?.name ?? null,
+          topic_code: project?.topics?.code ?? null,
           order_index: sp.order_index,
           scheduled_time: sp.scheduled_time,
           score: sp.score,
@@ -421,26 +497,81 @@ export class DefenseService {
       },
     });
 
-    // Recalculate project times if start_time changed
-    if (dto.start_time) {
-      const sessionProjects =
-        await this.prisma.defense_session_projects.findMany({
-          where: { session_id: id },
-          orderBy: { order_index: 'asc' },
-        });
+    const sessionProjects = await this.prisma.defense_session_projects.findMany({
+      where: { session_id: id },
+      orderBy: { order_index: 'asc' },
+    });
 
-      const times = this.calculateProjectTimes(
-        dto.start_time,
-        sessionProjects.length,
-        updated.duration_minutes,
+    if (dto.project_ids !== undefined) {
+      const desiredProjectIds = [...new Set(dto.project_ids)];
+      const currentProjectIds = sessionProjects.map((project) => project.project_id);
+      const desiredProjectIdSet = new Set(desiredProjectIds);
+      const currentProjectIdSet = new Set(currentProjectIds);
+      const projectIdsToAdd = desiredProjectIds.filter(
+        (projectId) => !currentProjectIdSet.has(projectId),
+      );
+      const projectIdsToRemove = currentProjectIds.filter(
+        (projectId) => !desiredProjectIdSet.has(projectId),
       );
 
-      for (let i = 0; i < sessionProjects.length; i++) {
-        await this.prisma.defense_session_projects.update({
-          where: { id: sessionProjects[i].id },
-          data: { scheduled_time: times[i] },
+      if (desiredProjectIds.length > 0) {
+        await this.validateProjectAssignments(session.committee_id, desiredProjectIds);
+      }
+
+      if (projectIdsToRemove.length > 0) {
+        const scoredProjects = await this.prisma.defense_session_projects.findMany({
+          where: {
+            session_id: id,
+            project_id: { in: projectIdsToRemove },
+            defense_scores: { some: {} },
+          },
+          include: { projects: { select: { project_name: true } } },
+        });
+
+        if (scoredProjects.length > 0) {
+          throw new BadRequestException(
+            `Không thể xóa đề tài đã có điểm: ${scoredProjects.map((project) => project.projects.project_name).join(', ')}`,
+          );
+        }
+
+        await this.prisma.defense_session_projects.deleteMany({
+          where: { session_id: id, project_id: { in: projectIdsToRemove } },
         });
       }
+
+      if (projectIdsToAdd.length > 0) {
+        const lastOrder = sessionProjects.reduce(
+          (max, project) => Math.max(max, project.order_index),
+          0,
+        );
+        await this.prisma.defense_session_projects.createMany({
+          data: projectIdsToAdd.map((projectId, index) => ({
+            session_id: id,
+            project_id: projectId,
+            order_index: lastOrder + index + 1,
+            scheduled_time: '',
+            updated_at: new Date(),
+          })),
+        });
+        await this.autoCreateScoreSheets(id, session.committee_id, projectIdsToAdd);
+      }
+    }
+
+    const updatedSessionProjects = await this.prisma.defense_session_projects.findMany({
+      where: { session_id: id },
+      orderBy: { order_index: 'asc' },
+    });
+    const times = this.calculateProjectTimes(
+      updated.start_time,
+      updatedSessionProjects.length,
+      updated.duration_minutes,
+    );
+
+    for (let i = 0; i < updatedSessionProjects.length; i++) {
+      await this.prisma.defense_session_projects.update({
+        where: { id: updatedSessionProjects[i].id },
+        data: { order_index: i + 1, scheduled_time: times[i] },
+      });
     }
 
     return this.getDefenseSessionById(id);
@@ -741,7 +872,7 @@ export class DefenseService {
     return buf;
   }
 
-  async getStats(facultyId?: string) {
+  async getStats(facultyId?: string, periodId?: number) {
     const sessionWhere: any = { deleted_at: null };
     if (facultyId) {
       sessionWhere.defense_committees = {
