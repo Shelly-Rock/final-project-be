@@ -16,6 +16,7 @@ import {
   CreateTemplateDto,
   TemplateQueryDto,
   CreateReportDto,
+  UpdateReportDto,
   ReviewReportDto,
   ReportQueryDto,
   UpdateStudentProgressDto,
@@ -140,6 +141,52 @@ export class ProgressTrackingService {
     return this.createReport(student.id, dto);
   }
 
+  async updateReportForActor(
+    user: JwtUser,
+    reportId: number,
+    dto: UpdateReportDto,
+  ) {
+    const student = await this.resolveStudentByUserId(user.sub);
+    const report = await this.prisma.progress_reports.findFirst({
+      where: { id: reportId, student_id: student.id, deleted_at: null },
+    });
+
+    if (!report) {
+      throw new NotFoundException('Report not found');
+    }
+    if (
+      report.status === ReportStatus.APPROVED_BY_TEACHER ||
+      report.status === ReportStatus.APPROVED ||
+      report.status === ReportStatus.ARCHIVED
+    ) {
+      throw new BadRequestException(
+        'Báo cáo đã được duyệt hoặc lưu trữ, không thể cập nhật.',
+      );
+    }
+
+    const updated = await this.prisma.progress_reports.update({
+      where: { id: report.id },
+      data: {
+        title: dto.title,
+        content: dto.content ?? report.content,
+        ...(dto.file_url !== undefined ? { file_url: dto.file_url } : {}),
+        ...(dto.file_name !== undefined ? { file_name: dto.file_name } : {}),
+        updated_at: new Date(),
+        ...(report.status === ReportStatus.REVISION_REQUESTED
+          ? {
+              status: ReportStatus.PENDING_TEACHER,
+              feedback: null,
+              reviewed_by: null,
+              reviewed_at: null,
+            }
+          : {}),
+      } as any,
+    });
+
+    await this.updateStudentReportCount(student.id);
+    return updated;
+  }
+
   async reviewReportForActor(
     user: JwtUser,
     reportId: number,
@@ -147,6 +194,14 @@ export class ProgressTrackingService {
   ) {
     const role = (user.role || '').toUpperCase();
     let reviewerId = 0;
+    const report = await this.prisma.progress_reports.findFirst({
+      where: { id: reportId, deleted_at: null },
+      select: { id: true, teacher_id: true, status: true },
+    });
+
+    if (!report) {
+      throw new NotFoundException('Report not found');
+    }
     
     // Override status based on 2-level review logic
     const isApprove = dto.action === 'APPROVE' || dto.status === 'APPROVED';
@@ -154,6 +209,12 @@ export class ProgressTrackingService {
     
     if (role === 'TEACHER') {
       const teacher = await this.resolveTeacherByUserId(user.sub);
+      if (report.teacher_id !== teacher.id) {
+        throw new ForbiddenException('You can only review your own students reports.');
+      }
+      if (report.status !== ReportStatus.PENDING) {
+        throw new BadRequestException('Report is not awaiting teacher review.');
+      }
       reviewerId = teacher.id;
       if (isApprove) dto.status = 'APPROVED_BY_TEACHER';
       if (isReject) dto.status = 'REVISION_REQUESTED';
@@ -164,6 +225,11 @@ export class ProgressTrackingService {
       } catch (e) {
         // Fallback for admin
         reviewerId = user.sub;
+      }
+      if (report.status !== ReportStatus.APPROVED_BY_TEACHER) {
+        throw new BadRequestException(
+          'Only reports approved by a teacher can be reviewed at the second level.',
+        );
       }
       if (isApprove) dto.status = 'APPROVED';
       if (isReject) dto.status = 'REJECTED';
@@ -431,6 +497,10 @@ export class ProgressTrackingService {
       where.teacher_id = teacher.id;
     } else if (teacher_id) {
       where.teacher_id = teacher_id;
+    }
+
+    if (role === 'SECRETARY' || role === 'ADMIN') {
+      where.status = ReportStatus.APPROVED_BY_TEACHER;
     }
 
     const skip = (page - 1) * limit;
@@ -1283,6 +1353,7 @@ export class ProgressTrackingService {
           ? {
               id: submission.id,
               title: submission.title,
+              content: submission.content,
               status: submission.status,
               file_url: submission.file_url,
               file_name: submission.file_name,

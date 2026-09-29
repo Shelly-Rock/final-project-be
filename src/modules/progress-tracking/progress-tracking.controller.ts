@@ -19,6 +19,7 @@ import {
   CloneTemplateDto,
   TemplateQueryDto,
   CreateReportDto,
+  UpdateReportDto,
   ReviewReportDto,
   ArchiveReportDto,
   ReportQueryDto,
@@ -83,6 +84,16 @@ export class ProgressTrackingController {
   @Roles('STUDENT')
   createReport(@CurrentUser() user: JwtUser, @Body() dto: CreateReportDto) {
     return this.service.createReportForActor(user, dto);
+  }
+
+  @Put('reports/:id')
+  @Roles('STUDENT')
+  updateReport(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: JwtUser,
+    @Body() dto: UpdateReportDto,
+  ) {
+    return this.service.updateReportForActor(user, id, dto);
   }
 
   @Get('reports')

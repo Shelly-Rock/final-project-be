@@ -2294,7 +2294,17 @@ export class TopicService {
       lockedAt: row.lockedAt,
       isSupplemental: row.isSupplemental,
       registrationStatus:
-        row.remainingSlots <= 0 ? 'FULL' : row.locked ? 'LOCKED' : 'OPEN',
+        row.locked ? 'LOCKED' : row.remainingSlots <= 0 ? 'FULL' : 'OPEN',
+      canDelete:
+        row.status === TopicStatus.PENDING &&
+        !row.code &&
+        !row.locked &&
+        row.students.length === 0,
+      canEdit: !row.locked,
+      canLock: !row.locked,
+      canChangeLeader: row.students.some(
+        (student) => student.status === ProjectStatus.APPROVED,
+      ),
       registeredCount: row.occupiedStudents,
       remainingSlots: row.remainingSlots,
       pendingApprovals,
@@ -2350,6 +2360,10 @@ export class TopicService {
       throw new ForbiddenException('Không có quyền khóa đề tài này.');
     }
 
+    if (topic.locked_at) {
+      throw new ConflictException('Đề tài đã bị khóa.');
+    }
+
     if (topic.status !== TopicStatus.APPROVED) {
       throw new BadRequestException('Đề tài chưa được duyệt.');
     }
@@ -2396,15 +2410,68 @@ export class TopicService {
     return { success: true };
   }
 
+  async deleteTopic(topicId: number, actorUserId: number) {
+    const teacher = await this.resolveTeacherByUserId(actorUserId);
+    const topic = await this.prisma.topics.findUnique({
+      where: { id: topicId },
+      select: {
+        id: true,
+        teacher_id: true,
+        status: true,
+        code: true,
+        locked_at: true,
+        projects: { where: { deleted_at: null }, select: { id: true } },
+      },
+    });
+
+    if (!topic) throw new NotFoundException(`Không tìm thấy đề tài ${topicId}.`);
+    if (topic.teacher_id !== teacher.id) {
+      throw new ForbiddenException('Bạn không có quyền xóa đề tài này.');
+    }
+    if (topic.locked_at) {
+      throw new ConflictException('Đề tài đã khóa, không thể xóa.');
+    }
+    if (topic.status !== TopicStatus.PENDING || topic.code) {
+      throw new ConflictException(
+        'Chỉ được xóa đề tài đang chờ duyệt và chưa được cấp mã.',
+      );
+    }
+    if (topic.projects.length > 0) {
+      throw new ConflictException(
+        'Không thể xóa đề tài đã có dữ liệu đăng ký sinh viên.',
+      );
+    }
+
+    await this.prisma.topics.delete({ where: { id: topicId } });
+    return { success: true, id: topicId };
+  }
+
   async changeLeader(topicId: number, actorUserId: number, projectId: number) {
     const teacher = await this.resolveTeacherByUserId(actorUserId);
 
-    const topic = await this.prisma.topics.findUnique({
-      where: { id: topicId },
-    });
+    const [topic, project] = await Promise.all([
+      this.prisma.topics.findUnique({
+        where: { id: topicId },
+        select: { id: true, teacher_id: true },
+      }),
+      this.prisma.project.findUnique({
+        where: { id: projectId },
+        select: { id: true, topic_id: true, teacher_id: true, status: true },
+      }),
+    ]);
 
     if (!topic || topic.teacher_id !== teacher.id) {
       throw new ForbiddenException('Không có quyền thay đổi trưởng nhóm.');
+    }
+    if (
+      !project ||
+      project.topic_id !== topicId ||
+      project.teacher_id !== teacher.id ||
+      !SLOT_OCCUPYING_PROJECT_STATUSES.includes(project.status)
+    ) {
+      throw new BadRequestException(
+        'Sinh viên được chọn không thuộc danh sách đã duyệt của đề tài.',
+      );
     }
 
     await this.prisma.$transaction(async (tx) => {

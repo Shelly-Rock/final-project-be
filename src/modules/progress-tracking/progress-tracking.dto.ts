@@ -175,6 +175,24 @@ export class CreateReportDto {
   period_id?: number;
 }
 
+export class UpdateReportDto {
+  @IsString()
+  @IsNotEmpty()
+  title: string;
+
+  @IsOptional()
+  @IsString()
+  content?: string;
+
+  @IsOptional()
+  @IsString()
+  file_url?: string;
+
+  @IsOptional()
+  @IsString()
+  file_name?: string;
+}
+
 export class ReviewReportDto {
   @IsString()
   @IsOptional()
