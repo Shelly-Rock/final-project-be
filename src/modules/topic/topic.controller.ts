@@ -224,6 +224,16 @@ export class TopicController {
     return this.topicService.lockWithAssignments(id, actorUserId, assignments);
   }
 
+  @Delete(':id')
+  @Roles('TEACHER', 'ADMIN', 'SECRETARY')
+  @ApiOperation({ summary: 'Delete an unapproved topic without a code' })
+  deleteTopic(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser('sub') actorUserId: number,
+  ) {
+    return this.topicService.deleteTopic(id, actorUserId);
+  }
+
   @Put(':id/change-leader')
   @Roles('TEACHER', 'ADMIN', 'SECRETARY')
   @ApiOperation({ summary: 'Đổi trưởng nhóm' })
