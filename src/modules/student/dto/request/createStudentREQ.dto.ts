@@ -27,18 +27,20 @@ export class CreateStudentReqDTO {
   firstName: string;
 
   @IsString()
-  @IsNotEmpty()
-  middleName: string;
+  @IsOptional()
+  middleName?: string;
 
   @IsString()
   @IsNotEmpty()
   lastName: string;
 
+  @IsOptional()
   @IsDateString()
-  dateOfBirth: string;
+  dateOfBirth?: string;
 
+  @IsOptional()
   @IsEnum(Gender)
-  gender: Gender;
+  gender?: Gender;
 
   @IsString()
   @IsNotEmpty()
@@ -56,8 +58,8 @@ export class CreateStudentReqDTO {
   academicYear: string;
 
   @IsString()
-  @IsNotEmpty()
-  projectName: string;
+  @IsOptional()
+  projectName?: string;
 
   @IsOptional()
   @IsObject()

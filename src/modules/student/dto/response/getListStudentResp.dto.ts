@@ -19,8 +19,8 @@ export class GetListStudentRespDTO {
   firstName: string;
   middleName: string;
   lastName: string;
-  dateOfBirth: Date;
-  gender: string;
+  dateOfBirth: Date | null;
+  gender: string | null;
   className: string;
   major: string;
   courseYear: number;

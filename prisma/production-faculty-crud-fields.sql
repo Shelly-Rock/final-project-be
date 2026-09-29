@@ -23,6 +23,9 @@ ALTER TABLE "topics"
 -- migrations were baselined. These columns are read by the student, scoring,
 -- and governance endpoints.
 ALTER TABLE "students" ADD COLUMN IF NOT EXISTS "faculty_id" VARCHAR(50);
+ALTER TABLE "students"
+  ALTER COLUMN "date_of_birth" DROP NOT NULL,
+  ALTER COLUMN "gender" DROP NOT NULL;
 ALTER TABLE "projects"
   ADD COLUMN IF NOT EXISTS "is_leader" BOOLEAN NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS "assigned_task" TEXT,

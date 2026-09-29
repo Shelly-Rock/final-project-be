@@ -61,10 +61,10 @@ export class CreateStudentService {
       student_id: student.studentId,
       email: student.email,
       first_name: student.firstName,
-      middle_name: student.middleName,
+      middle_name: student.middleName ?? '',
       last_name: student.lastName,
-      date_of_birth: new Date(student.dateOfBirth),
-      gender: student.gender,
+      date_of_birth: student.dateOfBirth ? new Date(student.dateOfBirth) : null,
+      gender: student.gender ?? null,
       class_name: student.className,
       major: student.major,
       course_year: student.courseYear,
@@ -87,10 +87,14 @@ export class CreateStudentService {
         console.log(
           `Verification email sent to ${student.email} (${fullName})`,
         );
-      } catch (error) {
+      } catch (error: unknown) {
         console.error(
           `Failed to send verification email to ${student.email}:`,
-          error.message,
+          error instanceof Error
+            ? error.message
+            : typeof error === 'string'
+              ? error
+              : 'Unknown error',
         );
       }
     }
