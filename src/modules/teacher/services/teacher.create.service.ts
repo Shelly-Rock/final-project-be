@@ -79,6 +79,7 @@ export class CreateTeacherService {
 
         return results;
       },
+      { timeout: 20_000 },
     );
 
     for (const teacher of createdTeachers) {
