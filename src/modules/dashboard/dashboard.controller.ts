@@ -112,6 +112,14 @@ export class DashboardController {
     return { data };
   }
 
+  @Get('faculty/:id/upcoming-events')
+  @Roles('ADMIN', 'SECRETARY')
+  @ApiOperation({ summary: 'Lịch hoạt động 14 ngày tới của khoa' })
+  async getFacultyUpcomingEvents(@Param('id') facultyId: string, @CurrentUser() user: JwtUser) {
+    const data = await this.dashboardService.getFacultyUpcomingEvents(facultyId, user);
+    return { data };
+  }
+
   @Get('secretary/faculty-overview')
   @Roles('SECRETARY')
   @ApiOperation({ summary: 'Tổng quan khoa cho thư ký (chi tiết dashboard)' })
