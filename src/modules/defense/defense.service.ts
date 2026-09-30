@@ -58,6 +58,10 @@ export class DefenseService {
     return times;
   }
 
+  private getDefenseGroupKey(project: { topic_id?: number | null; id: number }) {
+    return project.topic_id != null ? `topic:${project.topic_id}` : `project:${project.id}`;
+  }
+
   // Validate that no teacher in committee is supervising assigned projects
   private async validateProjectAssignments(
     committeeId: number,
@@ -134,20 +138,35 @@ export class DefenseService {
 
     // Add projects to session
     if (dto.project_ids && dto.project_ids.length > 0) {
+      const selectedProjects = await this.prisma.project.findMany({
+        where: { id: { in: dto.project_ids } },
+        select: { id: true, topic_id: true },
+      });
+      const groupKeys = new Map<string, number>();
+      for (const project of selectedProjects) {
+        const key = this.getDefenseGroupKey(project);
+        if (!groupKeys.has(key)) groupKeys.set(key, groupKeys.size);
+      }
       const times = this.calculateProjectTimes(
         dto.start_time,
-        dto.project_ids.length,
+        groupKeys.size,
         dto.duration_minutes || 15,
       );
 
       await this.prisma.defense_session_projects.createMany({
-        data: dto.project_ids.map((projectId, index) => ({
+        data: dto.project_ids.map((projectId) => {
+          const project = selectedProjects.find((item) => item.id === projectId);
+          const groupIndex = project
+            ? groupKeys.get(this.getDefenseGroupKey(project)) ?? 0
+            : 0;
+          return {
           session_id: session.id,
           project_id: projectId,
-          order_index: index + 1,
-          scheduled_time: times[index],
+          order_index: dto.project_ids.indexOf(projectId) + 1,
+          scheduled_time: times[groupIndex],
           updated_at: new Date(),
-        })),
+          };
+        }),
       });
 
       // Tự động tạo phiếu chấm cho toàn bộ thành viên Hội đồng
@@ -447,9 +466,14 @@ export class DefenseService {
       }),
     );
 
+    const groupKeys = new Set(
+      projects.map((project) =>
+        project.topic_id != null ? `topic:${project.topic_id}` : `project:${project.project_id}`,
+      ),
+    );
     const endTime = this.calculateEndTime(
       session.start_time,
-      projects.length,
+      groupKeys.size,
       session.duration_minutes,
     );
 
@@ -464,7 +488,7 @@ export class DefenseService {
       duration_minutes: session.duration_minutes,
       status: session.status,
       projects,
-      project_count: projects.length,
+      project_count: groupKeys.size,
       estimated_end_time: endTime,
       created_at: session.created_at,
       updated_at: session.updated_at,
