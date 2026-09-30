@@ -35,6 +35,7 @@ import {
   SetRevisionWindowDto,
   SubmitRevisionDto,
   UpdateRankDto,
+  QueryScoreIssuanceDto,
 } from './scoring.dto';
 
 
@@ -67,6 +68,204 @@ function scoreToText(score: number): string {
 @Injectable()
 export class ScoringService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private buildScoreSheetRecipients(project: any) {
+    const sessionProject = project.defense_session_projects?.[0];
+    const committee = sessionProject?.defense_sessions?.defense_committees;
+    if (!committee) return { recipients: [], reason: 'Chưa được xếp lịch bảo vệ.' };
+
+    const members = committee.committee_members ?? [];
+    const chairmen = members.filter(
+      (member: any) => member.role === CommitteeRole.CHAIRMAN,
+    );
+    const secretaries = members.filter(
+      (member: any) => member.role === CommitteeRole.SECRETARY,
+    );
+    const internals = members.filter(
+      (member: any) => member.role === CommitteeRole.INTERNAL_REVIEWER,
+    );
+    const chairman = chairmen[0];
+    const secretary = secretaries[0];
+    const internal = internals[0];
+    const external = committee.committee_external_reviewers ?? [];
+
+    if (
+      chairmen.length !== 1 ||
+      secretaries.length !== 1 ||
+      internals.length !== 1 ||
+      external.length !== 1
+    ) {
+      return {
+        recipients: [],
+        reason:
+          'Hội đồng phải có đúng Chủ tịch, Thư ký, một Phản biện trong và một Phản biện ngoài.',
+      };
+    }
+
+    return {
+      recipients: [
+        {
+          teacherId: project.teacher_id,
+          scoringType: ScoringType.GVHD,
+          role: null,
+          label: 'GVHD',
+          teacherName: project.teacher.name,
+        },
+        {
+          teacherId: external[0].teacher_id,
+          scoringType: ScoringType.COMMITTEE,
+          role: CommitteeRole.EXTERNAL_REVIEWER,
+          label: 'GVPB ngoài',
+          teacherName: external[0].teachers.name,
+        },
+        {
+          teacherId: chairman.teacher_id,
+          scoringType: ScoringType.COMMITTEE,
+          role: CommitteeRole.CHAIRMAN,
+          label: 'Chủ tịch hội đồng',
+          teacherName: chairman.teachers.name,
+        },
+        {
+          teacherId: secretary.teacher_id,
+          scoringType: ScoringType.COMMITTEE,
+          role: CommitteeRole.SECRETARY,
+          label: 'Thư ký hội đồng',
+          teacherName: secretary.teachers.name,
+        },
+        {
+          teacherId: internal.teacher_id,
+          scoringType: ScoringType.COMMITTEE,
+          role: CommitteeRole.INTERNAL_REVIEWER,
+          label: 'Phản biện trong',
+          teacherName: internal.teachers.name,
+        },
+      ],
+      reason: null,
+    };
+  }
+
+  async getScoreIssuanceCandidates(query: QueryScoreIssuanceDto) {
+    const { page = 1, limit = 20, facultyId } = query;
+    const projects = await this.prisma.project.findMany({
+      where: {
+        status: 'APPROVED',
+        deleted_at: null,
+        ...(facultyId ? { teacher: { faculty_id: facultyId } } : {}),
+      },
+      include: {
+        student: {
+          select: { student_id: true, first_name: true, middle_name: true, last_name: true },
+        },
+        teacher: { select: { id: true, teacher_id: true, name: true } },
+        topics: { include: { final_submissions: true } },
+        independent_scores: {
+          where: { deleted_at: null },
+          select: { teacher_id: true, scoring_type: true, role: true, status: true, deadline: true },
+        },
+        defense_session_projects: {
+          where: { defense_sessions: { deleted_at: null, status: 'SCHEDULED' } },
+          include: {
+            defense_sessions: {
+              include: {
+                defense_committees: {
+                  include: {
+                    committee_members: { include: { teachers: { select: { name: true } } } },
+                    committee_external_reviewers: { include: { teachers: { select: { name: true } } } },
+                  },
+                },
+              },
+            },
+          },
+          take: 1,
+        },
+      },
+      orderBy: { updated_at: 'desc' },
+    });
+
+    const rows = projects.map((project: any) => {
+      const submissionApproved = project.topics?.final_submissions?.status === 'APPROVED';
+      const { recipients, reason: committeeReason } = this.buildScoreSheetRecipients(project);
+      const existing = project.independent_scores ?? [];
+      const sheets = recipients.map((recipient: any) => {
+        const issued = existing.find(
+          (score: any) =>
+            score.teacher_id === recipient.teacherId &&
+            score.scoring_type === recipient.scoringType,
+        );
+        return { ...recipient, issued: Boolean(issued), status: issued?.status ?? null, deadline: issued?.deadline ?? null };
+      });
+      const reason = !submissionApproved
+        ? 'Bài nộp cuối kỳ chưa được thư ký duyệt.'
+        : committeeReason;
+      return {
+        projectId: project.id,
+        projectCode: project.topics?.code ?? project.project_id,
+        projectName: project.topics?.name ?? project.project_name,
+        student: {
+          studentId: project.student.student_id,
+          name: [project.student.last_name, project.student.middle_name, project.student.first_name]
+            .filter(Boolean)
+            .join(' '),
+        },
+        supervisor: { id: project.teacher.id, code: project.teacher.teacher_id, name: project.teacher.name },
+        finalSubmissionStatus: project.topics?.final_submissions?.status ?? null,
+        committeeName: project.defense_session_projects?.[0]?.defense_sessions?.defense_committees?.name ?? null,
+        eligible: submissionApproved && !committeeReason,
+        reason,
+        sheets,
+        issuedCount: sheets.filter((sheet: any) => sheet.issued).length,
+        requiredCount: recipients.length,
+      };
+    });
+
+    const start = (page - 1) * limit;
+    return {
+      data: rows.slice(start, start + limit),
+      meta: { page, limit, total: rows.length, totalPages: Math.ceil(rows.length / limit) },
+    };
+  }
+
+  async issueScoreSheets(userId: number, projectIds: number[], deadline: Date) {
+    if (Number.isNaN(deadline.getTime()) || deadline <= new Date()) {
+      throw new BadRequestException('Hạn chấm phải là thời điểm trong tương lai.');
+    }
+    const candidates = await this.getScoreIssuanceCandidates({ page: 1, limit: 10_000 });
+    const byProjectId = new Map(candidates.data.map((candidate: any) => [candidate.projectId, candidate]));
+    const requestedIds = [...new Set(projectIds)];
+
+    for (const projectId of requestedIds) {
+      const candidate = byProjectId.get(projectId);
+      if (!candidate) throw new NotFoundException(`Không tìm thấy project ${projectId}.`);
+      if (!candidate.eligible) throw new BadRequestException(candidate.reason);
+    }
+
+    const created = await this.prisma.$transaction(async (tx) => {
+      let count = 0;
+      for (const projectId of requestedIds) {
+        const candidate = byProjectId.get(projectId);
+        for (const sheet of candidate.sheets) {
+          if (sheet.issued) continue;
+          await tx.independent_scores.create({
+            data: {
+              project_id: projectId,
+              student_id: (await tx.project.findUnique({ where: { id: projectId }, select: { student_id: true } }))!.student_id,
+              teacher_id: sheet.teacherId,
+              scoring_type: sheet.scoringType,
+              role: sheet.role,
+              deadline,
+              status: ScoringStatus.PENDING,
+              max_score: 10,
+              updated_at: new Date(),
+            },
+          });
+          count++;
+        }
+      }
+      return count;
+    });
+
+    return { projectIds: requestedIds, issuedCount: created, issuedByUserId: userId };
+  }
 
   // ============ SCORE MANAGEMENT ============
 
@@ -166,18 +365,14 @@ export class ScoringService {
       );
     }
 
-    if (score.scoring_type === 'COMMITTEE') {
+    if (score.scoring_type === ScoringType.COMMITTEE) {
       const result = await this.prisma.scoring_results.findUnique({
         where: { project_id: score.project_id },
       });
-      if (score.role === 'EXTERNAL_REVIEWER') {
-        if (!result || result.gvhd_score === null || result.gvhd_score < 4) {
-          throw new ForbiddenException('Chưa thể chấm. Đang chờ GVHD chấm hoặc sinh viên đã rớt từ vòng GVHD');
-        }
-      } else {
-        if (!result || result.review_score === null || result.review_score < 4) {
-          throw new ForbiddenException('Chưa thể chấm. Đang chờ GVPB chấm hoặc sinh viên đã rớt từ vòng Phản biện');
-        }
+      if (result?.final_status === 'REJECTED_GVHD') {
+        throw new ForbiddenException(
+          'Đề tài đã không đạt vòng GVHD nên không thể tiếp tục chấm hội đồng.',
+        );
       }
     }
 
@@ -257,11 +452,12 @@ export class ScoringService {
         updateData.review_score = score;
       }
       
-      // Committee score - get all committee scores from IndependentScore table
+      // Defense score is the average of the three internal committee members.
       const committeeScores = await this.prisma.independent_scores.findMany({
         where: {
           project_id: projectId,
           scoring_type: ScoringType.COMMITTEE,
+          role: { not: CommitteeRole.EXTERNAL_REVIEWER },
           status: {
             in: [
               ScoringStatus.SUBMITTED,
@@ -273,7 +469,7 @@ export class ScoringService {
         },
       });
 
-      // Calculate average defense score
+      // Calculate the internal committee average.
       if (committeeScores.length > 0) {
         const totalScore = committeeScores.reduce(
           (sum, s) => sum + (s.score || 0),
@@ -377,6 +573,9 @@ export class ScoringService {
             select: {
               project_id: true,
               project_name: true,
+              scoring_results: {
+                select: { gvhd_score: true, review_score: true, final_status: true },
+              },
             },
           },
           students: {
@@ -402,18 +601,12 @@ export class ScoringService {
         let lockedReason = null;
         const result = (s as any).projects?.scoring_results;
         
-        if (s.scoring_type === 'COMMITTEE') {
-          if (s.role === 'EXTERNAL_REVIEWER') {
-            if (!result || result.gvhd_score === null || result.gvhd_score < 4) {
-              isLocked = true;
-              lockedReason = 'Đang chờ GVHD chấm hoặc sinh viên đã rớt vòng GVHD';
-            }
-          } else {
-            if (!result || result.review_score === null || result.review_score < 4) {
-              isLocked = true;
-              lockedReason = 'Đang chờ GVPB chấm hoặc sinh viên đã rớt vòng Phản biện';
-            }
-          }
+        if (
+          s.scoring_type === ScoringType.COMMITTEE &&
+          result?.final_status === 'REJECTED_GVHD'
+        ) {
+          isLocked = true;
+          lockedReason = 'Đề tài không đạt vòng GVHD.';
         }
 
         return {
@@ -1183,6 +1376,12 @@ export class ScoringService {
       throw new BadRequestException('Đề tài chưa có phiếu chấm hội đồng');
     }
 
+    const externalScores = committeeScores.filter(
+      (score) => score.role === CommitteeRole.EXTERNAL_REVIEWER,
+    );
+    const internalScores = committeeScores.filter(
+      (score) => score.role !== CommitteeRole.EXTERNAL_REVIEWER,
+    );
     const missing = committeeScores.filter((s) => s.score === null);
     if (missing.length > 0) {
       throw new BadRequestException(
@@ -1190,15 +1389,15 @@ export class ScoringService {
       );
     }
 
-    if (committeeScores.length < 3) {
+    if (externalScores.length !== 1 || internalScores.length !== 3) {
       throw new BadRequestException(
         'Cần tối thiểu 3 thành viên hội đồng để chốt điểm',
       );
     }
 
     const defenseScore =
-      committeeScores.reduce((sum, s) => sum + (s.score || 0), 0) /
-      committeeScores.length;
+      internalScores.reduce((sum, s) => sum + (s.score || 0), 0) /
+      internalScores.length;
     const failedCount = committeeScores.filter(
       (s) => (s.score || 0) < 4,
     ).length;
@@ -1213,7 +1412,11 @@ export class ScoringService {
       )?.score ??
       null;
 
-    const finalScore = gvhd !== null ? (gvhd + defenseScore) / 2 : defenseScore;
+    const externalScore = externalScores[0].score ?? 0;
+    const finalScore =
+      gvhd !== null
+        ? Math.min(10, gvhd * 0.4 + externalScore * 0.2 + defenseScore * 0.4)
+        : defenseScore;
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
     });

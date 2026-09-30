@@ -9,6 +9,7 @@ import {
   Min,
   Max,
   IsArray,
+  ArrayMaxSize,
   ValidateNested,
 } from 'class-validator';
 
@@ -58,6 +59,7 @@ export class CreateCommitteeDto {
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(1)
   @IsInt({ each: true })
   external_reviewer_ids?: number[];
 }
@@ -94,6 +96,7 @@ export class UpdateCommitteeDto {
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(1)
   @IsInt({ each: true })
   external_reviewer_ids?: number[];
 }

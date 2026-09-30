@@ -34,6 +34,8 @@ import {
   SetRevisionWindowDto,
   SubmitRevisionDto,
   UpdateRankDto,
+  IssueScoreSheetsDto,
+  QueryScoreIssuanceDto,
 } from './scoring.dto';
 import { JwtAuthGuard } from '@core/auth/guards/jwtAuth.guard';
 import { RolesGuard } from '@core/auth/guards/roles.guard';
@@ -117,6 +119,27 @@ export class ScoringController {
   }
 
   // ============ ADMIN SCORING MANAGEMENT ============
+
+  @Get('issuance-candidates')
+  @Roles('ADMIN', 'SECRETARY')
+  @ApiOperation({ summary: 'Danh sách đề tài đủ điều kiện cấp phiếu chấm' })
+  async getIssuanceCandidates(@Query() query: QueryScoreIssuanceDto) {
+    return this.scoringService.getScoreIssuanceCandidates(query);
+  }
+
+  @Post('issuance')
+  @Roles('ADMIN', 'SECRETARY')
+  @ApiOperation({ summary: 'Cấp phiếu chấm theo vai trò của đề tài và hội đồng' })
+  async issueScoreSheets(
+    @Request() req,
+    @Body() dto: IssueScoreSheetsDto,
+  ) {
+    return this.scoringService.issueScoreSheets(
+      this.userId(req),
+      dto.projectIds,
+      new Date(dto.deadline),
+    );
+  }
 
   @Get('meetings')
   @Roles('ADMIN', 'SECRETARY', 'TEACHER')

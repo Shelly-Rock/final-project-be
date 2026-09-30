@@ -127,6 +127,10 @@ export class CommitteeService {
   }
 
   async createCommittee(dto: CreateCommitteeDto) {
+    this.assertCommitteeComposition(dto);
+    await this.assertFixedMembersAvailable(
+      [dto.chairman_id, dto.secretary_id, dto.internal_1_id],
+    );
     // Validate members if provided
     if (dto.chairman_id) {
       const conflicts = await this.checkTeacherConflicts(dto.chairman_id);
@@ -333,6 +337,37 @@ export class CommitteeService {
       throw new NotFoundException('Hội đồng không tồn tại');
     }
 
+    if (
+      dto.chairman_id !== undefined ||
+      dto.secretary_id !== undefined ||
+      dto.internal_1_id !== undefined ||
+      dto.internal_2_id !== undefined ||
+      dto.external_reviewer_ids !== undefined
+    ) {
+      const currentMembership = await this.prisma.committee_members.findMany({
+        where: { committee_id: id },
+      });
+      const currentExternal = await this.prisma.committee_external_reviewers.findMany({
+        where: { committee_id: id },
+        select: { teacher_id: true },
+      });
+      const composition = {
+        chairman_id:
+          dto.chairman_id ?? currentMembership.find((m) => m.role === CommitteeRole.CHAIRMAN)?.teacher_id,
+        secretary_id:
+          dto.secretary_id ?? currentMembership.find((m) => m.role === CommitteeRole.SECRETARY)?.teacher_id,
+        internal_1_id:
+          dto.internal_1_id ?? currentMembership.find((m) => m.role === CommitteeRole.INTERNAL_REVIEWER)?.teacher_id,
+        internal_2_id: dto.internal_2_id,
+        external_reviewer_ids: dto.external_reviewer_ids ?? currentExternal.map((item) => item.teacher_id),
+      };
+      this.assertCommitteeComposition(composition);
+      await this.assertFixedMembersAvailable(
+        [composition.chairman_id, composition.secretary_id, composition.internal_1_id],
+        id,
+      );
+    }
+
     // Get current members
     const currentMembers = await this.prisma.committee_members.findMany({
       where: { committee_id: id },
@@ -446,6 +481,47 @@ export class CommitteeService {
     }
 
     return this.getCommitteeById(id);
+  }
+
+  private assertCommitteeComposition(dto: {
+    chairman_id?: number;
+    secretary_id?: number;
+    internal_1_id?: number;
+    internal_2_id?: number;
+    external_reviewer_ids?: number[];
+  }) {
+    const fixedIds = [dto.chairman_id, dto.secretary_id, dto.internal_1_id];
+    const externalIds = dto.external_reviewer_ids ?? [];
+    if (fixedIds.some((id) => !id) || externalIds.length !== 1) {
+      throw new BadRequestException(
+        'Hội đồng phải có Chủ tịch, Thư ký, một Phản biện trong và một Phản biện ngoài.',
+      );
+    }
+    if (dto.internal_2_id) {
+      throw new BadRequestException('Hội đồng chỉ được có một Phản biện trong.');
+    }
+    const assignedIds = [...fixedIds, externalIds[0]];
+    if (new Set(assignedIds).size !== assignedIds.length) {
+      throw new BadRequestException('Một giảng viên không thể giữ nhiều vai trò trong cùng hội đồng.');
+    }
+  }
+
+  private async assertFixedMembersAvailable(
+    teacherIds: Array<number | undefined>,
+    excludeCommitteeId?: number,
+  ) {
+    for (const teacherId of teacherIds) {
+      if (!teacherId) continue;
+      const conflicts = await this.checkTeacherConflicts(
+        teacherId,
+        excludeCommitteeId,
+      );
+      if (conflicts.length > 0) {
+        throw new ConflictException(
+          `Giảng viên ${teacherId} đã là thành viên của hội đồng khác: ${conflicts.join(', ')}`,
+        );
+      }
+    }
   }
 
   async deleteCommittee(id: number) {

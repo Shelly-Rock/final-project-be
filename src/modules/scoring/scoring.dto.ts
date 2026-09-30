@@ -6,6 +6,7 @@ import {
   IsOptional,
   IsString,
   IsArray,
+  ArrayMinSize,
   Min,
   Max,
   IsDateString,
@@ -43,6 +44,38 @@ export class CreateIndependentScoreDto {
   @IsOptional()
   @IsNumber()
   deadline?: Date;
+}
+
+export class IssueScoreSheetsDto {
+  @ApiProperty({ type: [Number], description: 'Danh sách project đủ điều kiện cấp phiếu' })
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsNumber({}, { each: true })
+  projectIds: number[];
+
+  @ApiProperty({ description: 'Hạn cuối nộp phiếu, ISO 8601' })
+  @IsNotEmpty()
+  @IsDateString()
+  deadline: string;
+}
+
+export class QueryScoreIssuanceDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  facultyId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Transform(({ value }) => parseInt(value))
+  page?: number = 1;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Transform(({ value }) => parseInt(value))
+  limit?: number = 20;
 }
 
 // Update Score DTO

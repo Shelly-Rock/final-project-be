@@ -170,11 +170,6 @@ export class DefenseService {
       });
 
       // Tự động tạo phiếu chấm cho toàn bộ thành viên Hội đồng
-      await this.autoCreateScoreSheets(
-        session.id,
-        dto.committee_id,
-        dto.project_ids,
-      );
     }
 
     return this.getDefenseSessionById(session.id);
@@ -577,7 +572,6 @@ export class DefenseService {
             updated_at: new Date(),
           })),
         });
-        await this.autoCreateScoreSheets(id, session.committee_id, projectIdsToAdd);
       }
     }
 
