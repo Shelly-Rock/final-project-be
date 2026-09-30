@@ -23,6 +23,8 @@ export class GetListStudentRespDTO {
   gender: string | null;
   className: string;
   major: string;
+  facultyId?: string | null;
+  facultyName?: string | null;
   courseYear: number;
   academicYear: string;
   extraData?: unknown;

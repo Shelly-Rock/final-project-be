@@ -73,6 +73,59 @@ async function main() {
       priority: 2,
     },
   });
+
+  const adminRole = await prisma.role.upsert({
+    where: { name: 'ADMIN' },
+    update: {},
+    create: {
+      name: 'ADMIN',
+      display_name: 'Quan tri vien',
+      description: 'Quyen truy cap day du he thong',
+      is_system: true,
+      priority: 4,
+    },
+  });
+
+  const secretaryRole = await prisma.role.upsert({
+    where: { name: 'SECRETARY' },
+    update: {},
+    create: {
+      name: 'SECRETARY',
+      display_name: 'Thu ky khoa',
+      description: 'Quyen truy cap danh cho thu ky khoa',
+      is_system: true,
+      priority: 3,
+    },
+  });
+
+  const managementPermissions = [
+    { name: 'role:read', description: 'Xem role', module: 'role', action: 'read' },
+    { name: 'role:create', description: 'Tao role', module: 'role', action: 'create' },
+    { name: 'role:update', description: 'Cap nhat role', module: 'role', action: 'update' },
+    { name: 'role:delete', description: 'Xoa role', module: 'role', action: 'delete' },
+    { name: 'user:read', description: 'Xem user', module: 'user', action: 'read' },
+    { name: 'user:create', description: 'Tao user', module: 'user', action: 'create' },
+    { name: 'user:update', description: 'Cap nhat user', module: 'user', action: 'update' },
+    { name: 'user:delete', description: 'Xoa user', module: 'user', action: 'delete' },
+    { name: 'student:create', description: 'Tao sinh vien', module: 'student', action: 'create' },
+    { name: 'student:update', description: 'Cap nhat sinh vien', module: 'student', action: 'update' },
+    { name: 'student:delete', description: 'Xoa sinh vien', module: 'student', action: 'delete' },
+    { name: 'teacher:read', description: 'Xem giang vien', module: 'teacher', action: 'read' },
+    { name: 'teacher:create', description: 'Tao giang vien', module: 'teacher', action: 'create' },
+    { name: 'teacher:update', description: 'Cap nhat giang vien', module: 'teacher', action: 'update' },
+    { name: 'teacher:delete', description: 'Xoa giang vien', module: 'teacher', action: 'delete' },
+    { name: 'notification:update', description: 'Cap nhat thong bao', module: 'notification', action: 'update' },
+    { name: 'notification:delete', description: 'Xoa thong bao', module: 'notification', action: 'delete' },
+  ];
+
+  for (const permissionData of managementPermissions) {
+    await prisma.permission.upsert({
+      where: { name: permissionData.name },
+      update: permissionData,
+      create: permissionData,
+    });
+  }
+
   const studentPermissions = [
     {
       name: 'student:read',
@@ -147,12 +200,114 @@ async function main() {
       },
     });
   }
+
+  const allPermissions = await prisma.permission.findMany({
+    where: { deleted_at: null },
+    select: { id: true, name: true },
+  });
+  const permissionsByName = new Map(
+    allPermissions.map((permission) => [permission.name, permission.id]),
+  );
+
+  const assignPermissions = async (roleId: number, permissionNames: string[]) => {
+    for (const permissionName of permissionNames) {
+      const permissionId = permissionsByName.get(permissionName);
+      if (!permissionId) continue;
+      await prisma.rolePermission.upsert({
+        where: { role_id_permission_id: { role_id: roleId, permission_id: permissionId } },
+        update: {},
+        create: { role_id: roleId, permission_id: permissionId },
+      });
+    }
+  };
+
+  await assignPermissions(
+    adminRole.id,
+    allPermissions.map((permission) => permission.name),
+  );
+  await assignPermissions(secretaryRole.id, [
+    'user:read',
+    'user:create',
+    'user:update',
+    'student:read',
+    'student:create',
+    'student:update',
+    'student:delete',
+    'teacher:read',
+    'notification:read',
+    'notification:create',
+    'notification:send',
+  ]);
+
   const faculty = await prisma.faculty.upsert({
     where: { id: 'KHOA_CNTT' },
     update: {},
     create: {
       id: 'KHOA_CNTT',
       name: 'Khoa C\u00f4ng ngh\u1ec7 th\u00f4ng tin',
+    },
+  });
+
+  const adminUser = await prisma.user.upsert({
+    where: { email: 'admin@system.com' },
+    update: {
+      password_hash: passwordHash,
+      is_active: true,
+      email_verified_at: now,
+      must_change_password: false,
+      deleted_at: null,
+    },
+    create: {
+      email: 'admin@system.com',
+      username: 'admin_sys',
+      password_hash: passwordHash,
+      is_active: true,
+      email_verified_at: now,
+      must_change_password: false,
+    },
+  });
+  await prisma.userRole.upsert({
+    where: { user_id_role_id: { user_id: adminUser.id, role_id: adminRole.id } },
+    update: {},
+    create: { user_id: adminUser.id, role_id: adminRole.id },
+  });
+
+  const secretaryUser = await prisma.user.upsert({
+    where: { email: 'secretary@nttu.edu.vn' },
+    update: {
+      password_hash: passwordHash,
+      is_active: true,
+      email_verified_at: now,
+      must_change_password: false,
+      deleted_at: null,
+    },
+    create: {
+      email: 'secretary@nttu.edu.vn',
+      username: 'secretary_cntt',
+      password_hash: passwordHash,
+      is_active: true,
+      email_verified_at: now,
+      must_change_password: false,
+    },
+  });
+  await prisma.userRole.upsert({
+    where: {
+      user_id_role_id: { user_id: secretaryUser.id, role_id: secretaryRole.id },
+    },
+    update: {},
+    create: { user_id: secretaryUser.id, role_id: secretaryRole.id },
+  });
+  await prisma.secretary.upsert({
+    where: { user_id: secretaryUser.id },
+    update: {
+      secretary_id: 'TK_CNTT',
+      faculty_id: faculty.id,
+      deleted_at: null,
+    },
+    create: {
+      user_id: secretaryUser.id,
+      secretary_id: 'TK_CNTT',
+      faculty_id: faculty.id,
     },
   });
 
@@ -271,7 +426,7 @@ async function main() {
       },
     });
   }
-  console.log('Seeded 3 CNTT students and 5 CNTT teachers. Login password: 1111');
+  console.log('Seeded admin, CNTT secretary, 3 CNTT students, and 5 CNTT teachers. Login password: 1111');
 }
 
 main()

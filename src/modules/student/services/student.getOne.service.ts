@@ -11,6 +11,7 @@ export class GetStudentByIdService {
       where: { id },
       include: {
         user: true,
+        faculty: true,
         project: {
           include: {
             teacher: {
@@ -46,6 +47,7 @@ export class GetStudentByIdService {
       where: { student_id: studentId },
       include: {
         user: true,
+        faculty: true,
         project: {
           include: {
             teacher: {
@@ -88,6 +90,8 @@ export class GetStudentByIdService {
       gender: student.gender,
       className: student.class_name,
       major: student.major,
+      facultyId: student.faculty_id,
+      facultyName: student.faculty?.name ?? null,
       courseYear: student.course_year,
       academicYear: student.academic_year,
       extraData: student.extra_data,

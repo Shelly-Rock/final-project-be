@@ -10,8 +10,7 @@ export class GetStudentListService {
   ): Promise<GetListStudentsRespDTO> {
     const { page = 1, limit = 10, facultyId } = query;
     const where: any = { deleted_at: null };
-    // Tạm thời bỏ filter bắt buộc phải có project để sinh viên chưa đăng ký vẫn hiện lên
-    // if (facultyId) where.project = { teacher: { faculty_id: facultyId } };
+    if (facultyId) where.faculty_id = facultyId;
     const [students, total] = await Promise.all([
       this.prismaService.student.findMany({
         where,
@@ -21,6 +20,12 @@ export class GetStudentListService {
           user: {
             select: {
               email: true,
+            },
+          },
+          faculty: {
+            select: {
+              id: true,
+              name: true,
             },
           },
         },
@@ -39,6 +44,8 @@ export class GetStudentListService {
       gender: student.gender,
       className: student.class_name,
       major: student.major,
+      facultyId: student.faculty_id,
+      facultyName: student.faculty?.name ?? null,
       courseYear: student.course_year,
       academicYear: student.academic_year,
       extraData: student.extra_data,
