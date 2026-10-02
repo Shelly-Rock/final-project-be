@@ -26,8 +26,6 @@ import {
   SubmitScoreDto,
   QueryScoresDto,
   QueryMyScoresDto,
-  QueryMeetingsDto,
-  AdjustMeetingScoreDto,
   QueryTranscriptsDto,
   UpdateBonusScoreDto,
   QueryPostDefenseDto,
@@ -141,46 +139,6 @@ export class ScoringController {
     );
   }
 
-  @Get('meetings')
-  @Roles('ADMIN', 'SECRETARY', 'TEACHER')
-  @ApiOperation({ summary: 'Danh sách đề tài họp hội đồng (Giai đoạn 5)' })
-  async getMeetings(@Request() req, @Query() query: QueryMeetingsDto) {
-    return this.scoringService.getMeetings(
-      this.userId(req),
-      req.user.role,
-      query,
-    );
-  }
-
-  @Get('meetings/:projectId')
-  @Roles('ADMIN', 'SECRETARY', 'TEACHER')
-  @ApiOperation({ summary: 'Chi tiết họp hội đồng theo đề tài' })
-  async getMeeting(@Request() req, @Param('projectId') projectId: string) {
-    return this.scoringService.getMeeting(
-      parseInt(projectId),
-      this.userId(req),
-      req.user.role,
-    );
-  }
-
-  @Put('meetings/:scoreId')
-  @Roles('ADMIN', 'SECRETARY', 'TEACHER')
-  @ApiOperation({
-    summary: 'Sửa điểm hội đồng sau khi thống nhất (trước khi chốt)',
-  })
-  async adjustMeetingScore(
-    @Request() req,
-    @Param('scoreId') scoreId: string,
-    @Body() dto: AdjustMeetingScoreDto,
-  ) {
-    return this.scoringService.adjustMeetingScore(
-      parseInt(scoreId),
-      this.userId(req),
-      req.user.role,
-      dto,
-    );
-  }
-
   @Post('meetings/:projectId/finalize')
   @Roles('ADMIN', 'SECRETARY', 'TEACHER')
   @ApiOperation({ summary: 'Chốt điểm hội đồng (OK)' })
@@ -203,10 +161,25 @@ export class ScoringController {
   @Roles('ADMIN', 'SECRETARY', 'TEACHER')
   @ApiOperation({ summary: 'Danh sách bảng điểm tổng hợp (Giai đoạn 6)' })
   async getTranscripts(@Request() req, @Query() query: QueryTranscriptsDto) {
+    console.log('[Controller getTranscripts] query:', query);
     return this.scoringService.getTranscripts(
       this.userId(req),
       req.user.role,
       query,
+    );
+  }
+
+  @Get('transcripts/:projectId/review')
+  @Roles('ADMIN', 'SECRETARY')
+  @ApiOperation({ summary: 'Review tất cả phiếu chấm trước/sau khi chốt (dành cho thư ký khoa)' })
+  async getTranscriptReview(
+    @Request() req,
+    @Param('projectId', ParseIntPipe) projectId: number,
+  ) {
+    return this.scoringService.getTranscriptReview(
+      projectId,
+      this.userId(req),
+      req.user.role,
     );
   }
 
@@ -287,7 +260,7 @@ export class ScoringController {
 
   @Put('post-defense/:projectId/revision-window')
   @Roles('ADMIN', 'SECRETARY')
-  @ApiOperation({ summary: 'Đặt hạn chỉnh sửa hồ sơ cho đề tài' })
+  @ApiOperation({ summary: 'Đặt hạn chỉnh sửa báo cáo cho đề tài' })
   async setRevisionWindow(
     @Request() req,
     @Param('projectId') projectId: string,
@@ -319,7 +292,7 @@ export class ScoringController {
 
   @Get('revisions/me')
   @Roles('STUDENT')
-  @ApiOperation({ summary: 'Sinh viên xem hạn và bản chỉnh sửa hồ sơ' })
+  @ApiOperation({ summary: 'Sinh viên xem hạn và bản chỉnh sửa báo cáo' })
   async getMyRevision(@Request() req) {
     return this.scoringService.getMyRevision(this.userId(req));
   }
@@ -359,6 +332,27 @@ export class ScoringController {
   @ApiOperation({ summary: 'Get all scoring results (admin)' })
   async getAllResults(@Query() query: QueryScoresDto) {
     return this.scoringService.getAllScoringResults(query);
+  }
+
+  @Get('results/:projectId/export-summary')
+  @Roles('ADMIN', 'SECRETARY')
+  @ApiOperation({ summary: 'Export the finalized student score summary to Word' })
+  async exportSummaryScoreSheetWord(
+    @Request() req,
+    @Param('projectId', ParseIntPipe) projectId: number,
+    @Res() res: Response,
+  ) {
+    const buffer = await this.scoringService.exportSummaryScoreSheetWord(
+      projectId,
+      this.userId(req),
+      req.user.role,
+    );
+    res.set({
+      'Content-Type':
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'Content-Disposition': `attachment; filename="Phieu_Tong_Hop_${projectId}.docx"`,
+    });
+    res.send(buffer);
   }
 
   @Get('results/:projectId')

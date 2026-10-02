@@ -84,6 +84,10 @@ export class DefenseService {
       include: { student: true },
     });
 
+    if (projects.length !== new Set(projectIds).size) {
+      throw new NotFoundException('Một hoặc nhiều đề tài không tồn tại.');
+    }
+
     const excludedTeacherIds = [
       ...committee.committee_members.map((m) => m.teacher_id),
       ...committee.committee_external_reviewers.map((m) => m.teacher_id),
@@ -317,11 +321,25 @@ export class DefenseService {
       });
     }
 
-    const filteredGroups = [...groups.values()].filter(
-      (g) => !g.supervisorIds.some((id) => excludedTeacherIds.has(id)),
+    const allGroups = [...groups.values()];
+    const conflictingGroups = allGroups.filter((group) =>
+      group.supervisorIds.some((id) => excludedTeacherIds.has(id)),
     );
-
-    return filteredGroups.map((g) => ({
+    const conflictingTeacherIds = [
+      ...new Set(
+        conflictingGroups.flatMap((group) =>
+          group.supervisorIds.filter((id) => excludedTeacherIds.has(id)),
+        ),
+      ),
+    ];
+    const conflictingTeachers = await this.prisma.teacher.findMany({
+      where: { id: { in: conflictingTeacherIds } },
+      select: { id: true, name: true },
+    });
+    const teacherNames = new Map(
+      conflictingTeachers.map((teacher) => [teacher.id, teacher.name]),
+    );
+    const mapGroup = (g: (typeof allGroups)[number]) => ({
       key: g.key,
       topicId: g.topicId,
       id: g.topicId ?? g.projectIds[0],
@@ -332,7 +350,18 @@ export class DefenseService {
       studentNames: g.students.map((s) => s.name).join(', '),
       studentMssvs: g.students.map((s) => s.mssv).join(', '),
       students: g.students,
-    }));
+      conflictingTeacherIds: g.supervisorIds.filter((id) => excludedTeacherIds.has(id)),
+      conflictingTeacherNames: g.supervisorIds
+        .filter((id) => excludedTeacherIds.has(id))
+        .map((id) => teacherNames.get(id) ?? `#${id}`),
+    });
+
+    return {
+      available: allGroups
+        .filter((group) => !conflictingGroups.includes(group))
+        .map(mapGroup),
+      excluded: conflictingGroups.map(mapGroup),
+    };
   }
 
   private async getExcludedSupervisorIdsForCommittee(

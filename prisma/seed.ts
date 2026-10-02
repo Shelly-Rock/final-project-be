@@ -9,6 +9,11 @@ const sampleTeachers = [
   { teacherId: 'GVTEST003', email: 'gvtest003@example.com', name: 'Le Quoc Cuong' },
   { teacherId: 'GVTEST004', email: 'gvtest004@example.com', name: 'Pham Thu Dung' },
   { teacherId: 'GVTEST005', email: 'gvtest005@example.com', name: 'Hoang Minh Duc' },
+  { teacherId: 'GVTEST006', email: 'gvtest006@example.com', name: 'Nguyen Thi Thanh Ha' },
+  { teacherId: 'GVTEST007', email: 'gvtest007@example.com', name: 'Pham Duc Long' },
+  { teacherId: 'GVTEST008', email: 'gvtest008@example.com', name: 'Vu Ngoc Anh' },
+  { teacherId: 'GVTEST009', email: 'gvtest009@example.com', name: 'Bui Minh Khang' },
+  { teacherId: 'GVTEST010', email: 'gvtest010@example.com', name: 'Dang Thu Trang' },
 ];
 const sampleStudents = [
   {
@@ -426,7 +431,7 @@ async function main() {
       },
     });
   }
-  console.log('Seeded admin, CNTT secretary, 3 CNTT students, and 5 CNTT teachers. Login password: 1111');
+  console.log(`Seeded admin, CNTT secretary, 3 CNTT students, and ${sampleTeachers.length} CNTT teachers. Login password: 1111`);
 }
 
 main()

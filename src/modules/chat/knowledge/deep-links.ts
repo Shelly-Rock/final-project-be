@@ -25,7 +25,7 @@ const LINKS: Record<ChatRole, DeepLink[]> = {
     { label: 'Nộp bài cuối kỳ', path: '/submission/admin' },
     { label: 'Hội đồng bảo vệ', path: '/committee' },
     { label: 'Lịch bảo vệ', path: '/defense-schedule' },
-    { label: 'Quản lý chấm điểm', path: '/scoring/admin' },
+    { label: 'Quản lý phiếu chấm', path: '/scoring/admin' },
     { label: 'Nhật ký Audit', path: '/audit' },
   ],
   ADMIN: [
@@ -40,7 +40,7 @@ const LINKS: Record<ChatRole, DeepLink[]> = {
     { label: 'Nộp bài cuối kỳ', path: '/submission/admin' },
     { label: 'Hội đồng bảo vệ', path: '/committee' },
     { label: 'Lịch bảo vệ', path: '/defense-schedule' },
-    { label: 'Quản lý chấm điểm', path: '/scoring/admin' },
+    { label: 'Quản lý phiếu chấm', path: '/scoring/admin' },
     { label: 'Đăng ký đề tài', path: '/topic-registration' },
   ],
 };

@@ -27,8 +27,6 @@ import {
   SubmitScoreDto,
   QueryScoresDto,
   QueryMyScoresDto,
-  QueryMeetingsDto,
-  AdjustMeetingScoreDto,
   QueryTranscriptsDto,
   UpdateBonusScoreDto,
   QueryPostDefenseDto,
@@ -327,6 +325,8 @@ export class ScoringService {
       );
     }
 
+    await this.assertScoreStageUnlocked(score);
+
     if (score.deadline && new Date() > score.deadline) {
       throw new BadRequestException('Đã quá thời hạn chấm điểm');
     }
@@ -364,6 +364,8 @@ export class ScoringService {
         'You are not authorized to submit this score',
       );
     }
+
+    await this.assertScoreStageUnlocked(score);
 
     if (score.scoring_type === ScoringType.COMMITTEE) {
       const result = await this.prisma.scoring_results.findUnique({
@@ -409,6 +411,93 @@ export class ScoringService {
     );
 
     return updatedScore;
+  }
+
+  private getScoreStageLockReason(
+    score: {
+      scoring_type: ScoringType;
+      role: CommitteeRole | null;
+      status: ScoringStatus;
+    },
+    relatedScores: {
+      scoring_type: ScoringType;
+      role: CommitteeRole | null;
+      score: number | null;
+      status: ScoringStatus;
+    }[],
+    result?: { final_status?: string | null } | null,
+  ) {
+    const completedStatuses: ScoringStatus[] = [
+      ScoringStatus.SUBMITTED,
+      ScoringStatus.PASSED,
+      ScoringStatus.FAILED,
+    ];
+    if (
+      score.scoring_type === ScoringType.COMMITTEE &&
+      result?.final_status === 'REJECTED_GVHD'
+    ) {
+      return 'Không đạt vòng GVHD; phiếu chấm các giai đoạn sau đã khóa.';
+    }
+    if (score.scoring_type === ScoringType.COMMITTEE && this.isFinalized(result)) {
+      return 'Điểm hội đồng đã được chốt.';
+    }
+    if (
+      score.scoring_type !== ScoringType.COMMITTEE ||
+      ([ScoringStatus.SUBMITTED, ScoringStatus.PASSED] as ScoringStatus[]).includes(
+        score.status,
+      )
+    ) {
+      return null;
+    }
+    if (result?.final_status === 'REJECTED_GVHD') {
+      return 'Không đạt vòng GVHD; phiếu chấm các giai đoạn sau đã khóa.';
+    }
+
+    const gvhd = relatedScores.find(
+      (row) => row.scoring_type === ScoringType.GVHD,
+    );
+    if (!gvhd || gvhd.score === null || !completedStatuses.includes(gvhd.status)) {
+      return 'Đang chờ giảng viên hướng dẫn nộp phiếu.';
+    }
+    if (gvhd.score < 4) {
+      return 'Không đạt vòng GVHD; phiếu chấm các giai đoạn sau đã khóa.';
+    }
+    if (score.role === CommitteeRole.EXTERNAL_REVIEWER) return null;
+
+    const external = relatedScores.find(
+      (row) =>
+        row.scoring_type === ScoringType.COMMITTEE &&
+        row.role === CommitteeRole.EXTERNAL_REVIEWER,
+    );
+    if (
+      !external ||
+      external.score === null ||
+      !completedStatuses.includes(external.status)
+    ) {
+      return 'Đang chờ giảng viên phản biện ngoài nộp phiếu.';
+    }
+    return null;
+  }
+
+  private async assertScoreStageUnlocked(score: {
+    project_id: number;
+    scoring_type: ScoringType;
+    role: CommitteeRole | null;
+    status: ScoringStatus;
+  }) {
+    if (score.scoring_type !== ScoringType.COMMITTEE) return;
+    const [relatedScores, result] = await Promise.all([
+      this.prisma.independent_scores.findMany({
+        where: { project_id: score.project_id, deleted_at: null },
+        select: { scoring_type: true, role: true, score: true, status: true },
+      }),
+      this.prisma.scoring_results.findUnique({
+        where: { project_id: score.project_id },
+        select: { final_status: true },
+      }),
+    ]);
+    const reason = this.getScoreStageLockReason(score, relatedScores, result);
+    if (reason) throw new ForbiddenException(reason);
   }
 
   async updateScoringResult(
@@ -479,30 +568,64 @@ export class ScoringService {
       }
     }
 
-    // Calculate final score if both GVHD and defense scores are available
+    // Keep the stored preview aligned with the transcript formula.
     const allScores = await this.prisma.independent_scores.findMany({
       where: {
         project_id: projectId,
-        status: ScoringStatus.SUBMITTED,
+        deleted_at: null,
+        status: {
+          in: [
+            ScoringStatus.SUBMITTED,
+            ScoringStatus.FAILED,
+            ScoringStatus.PASSED,
+          ],
+        },
       },
     });
 
-    const gvhdScore = allScores.find(
+    const gvhdScores = allScores.filter(
       (s) => s.scoring_type === ScoringType.GVHD,
     );
-    const allCommitteeScores = allScores.filter(
+    const committeeScores = allScores.filter(
       (s) => s.scoring_type === ScoringType.COMMITTEE,
     );
-
+    const gvhdScore = gvhdScores[0];
+    const externalScore = committeeScores.find(
+      (s) => s.role === CommitteeRole.EXTERNAL_REVIEWER,
+    );
+    const internalScores = committeeScores.filter((s) =>
+      ([
+        CommitteeRole.CHAIRMAN,
+        CommitteeRole.SECRETARY,
+        CommitteeRole.INTERNAL_REVIEWER,
+      ] as CommitteeRole[]).includes(s.role as CommitteeRole),
+    );
+    const internalRolesComplete = ([
+      CommitteeRole.CHAIRMAN,
+      CommitteeRole.SECRETARY,
+      CommitteeRole.INTERNAL_REVIEWER,
+    ] as CommitteeRole[]).every(
+      (memberRole) =>
+        internalScores.filter((score) => score.role === memberRole).length === 1,
+    );
     if (
-      gvhdScore &&
-      gvhdScore.score !== null &&
-      allCommitteeScores.length > 0
+      gvhdScores.length === 1 &&
+      gvhdScore?.score !== null &&
+      gvhdScore?.score !== undefined &&
+      externalScore?.score !== null &&
+      externalScore?.score !== undefined &&
+      internalScores.length === 3 &&
+      internalRolesComplete &&
+      committeeScores.length === 4
     ) {
-      const avgCommittee =
-        allCommitteeScores.reduce((sum, s) => sum + (s.score || 0), 0) /
-        allCommitteeScores.length;
-      updateData.final_score = ((gvhdScore.score || 0) + avgCommittee) / 2;
+      const internalAverage =
+        internalScores.reduce((sum, s) => sum + (s.score ?? 0), 0) / 3;
+      updateData.final_score = Math.min(
+        10,
+        Math.round(
+          (gvhdScore.score * 0.4 + externalScore.score * 0.2 + internalAverage * 0.4) * 100,
+        ) / 100,
+      );
     }
 
     return this.prisma.scoring_results.update({
@@ -576,6 +699,15 @@ export class ScoringService {
               scoring_results: {
                 select: { gvhd_score: true, review_score: true, final_status: true },
               },
+              independent_scores: {
+                where: { deleted_at: null },
+                select: {
+                  scoring_type: true,
+                  role: true,
+                  score: true,
+                  status: true,
+                },
+              },
             },
           },
           students: {
@@ -607,6 +739,16 @@ export class ScoringService {
         ) {
           isLocked = true;
           lockedReason = 'Đề tài không đạt vòng GVHD.';
+        }
+
+        const stageLockReason = this.getScoreStageLockReason(
+          s,
+          (s as any).projects?.independent_scores ?? [],
+          result,
+        );
+        if (stageLockReason) {
+          isLocked = true;
+          lockedReason = stageLockReason;
         }
 
         return {
@@ -970,11 +1112,18 @@ export class ScoringService {
 
   // ============ EXPORT SUMMARY SCORE SHEET ============
   
-  async exportSummaryScoreSheetWord(projectId: number): Promise<Buffer> {
+  async exportSummaryScoreSheetWord(
+    projectId: number,
+    userId: number,
+    role: string,
+  ): Promise<Buffer> {
+    await this.assertTranscriptFacultyAccess(projectId, userId, role);
+    const transcript = await this.buildTranscript(projectId);
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
       include: {
         student: true,
+        topics: { select: { code: true, name: true } },
       },
     });
 
@@ -982,15 +1131,23 @@ export class ScoringService {
       throw new NotFoundException('Project not found');
     }
 
-    const result = await this.prisma.scoring_results.findUnique({
-      where: { project_id: projectId },
-    });
-
-    const scores = await this.prisma.independent_scores.findMany({
-      where: { project_id: projectId, status: 'SUBMITTED' },
+    const committeeScores = await this.prisma.independent_scores.findMany({
+      where: {
+        project_id: projectId,
+        scoring_type: ScoringType.COMMITTEE,
+        role: { in: [CommitteeRole.CHAIRMAN, CommitteeRole.SECRETARY, CommitteeRole.INTERNAL_REVIEWER] },
+        deleted_at: null,
+      },
       include: { teachers: true },
-      orderBy: { role: 'asc' },
     });
+    const roleOrder: CommitteeRole[] = [
+      CommitteeRole.CHAIRMAN,
+      CommitteeRole.SECRETARY,
+      CommitteeRole.INTERNAL_REVIEWER,
+    ];
+    committeeScores.sort(
+      (left, right) => roleOrder.indexOf(left.role!) - roleOrder.indexOf(right.role!),
+    );
 
     const templatePath = require('path').join(
       process.cwd(),
@@ -1012,29 +1169,79 @@ export class ScoringService {
       linebreaks: true,
     });
 
+    // Fetch all projects sharing the same topic (if any)
+    let relatedProjects = [project];
+    if (project.topic_id) {
+      relatedProjects = await this.prisma.project.findMany({
+        where: { topic_id: project.topic_id, status: 'APPROVED', deleted_at: null },
+        include: {
+          student: true,
+          topics: { select: { code: true, name: true } },
+        },
+        orderBy: { student: { first_name: 'asc' } },
+      });
+    }
+
+    const fmt = (n?: number | null) => (n != null ? n.toFixed(2) : '');
+
+    const students = await Promise.all(
+      relatedProjects.map(async (p, idx) => {
+        const pTranscript = await this.buildTranscript(p.id);
+        const pCommitteeScores = await this.prisma.independent_scores.findMany({
+          where: {
+            project_id: p.id,
+            scoring_type: ScoringType.COMMITTEE,
+            role: { in: [CommitteeRole.CHAIRMAN, CommitteeRole.SECRETARY, CommitteeRole.INTERNAL_REVIEWER] },
+            deleted_at: null,
+          },
+          include: { teachers: true },
+        });
+        pCommitteeScores.sort(
+          (left, right) => roleOrder.indexOf(left.role!) - roleOrder.indexOf(right.role!),
+        );
+
+        const studentData: Record<string, any> = {
+          stt: idx + 1,
+          student_last_name: `${p.student.last_name || ''} ${p.student.middle_name || ''}`.trim(),
+          student_first_name: p.student.first_name || '',
+          student_name: `${p.student.first_name} ${p.student.middle_name} ${p.student.last_name}`.trim(),
+          student_id: p.student.student_id,
+          final_score_text: scoreToText(pTranscript.finalScore),
+          final_score: fmt(pTranscript.finalScore),
+          gvhd_score: fmt(pTranscript.gvhdScore),
+          gvpb_score: fmt(pTranscript.externalScore),
+          defense_score: fmt(pTranscript.othersAverage),
+        };
+
+        pCommitteeScores.forEach((s, cIdx) => {
+          studentData[`committee_${cIdx + 1}_name`] = s.teachers.name;
+          studentData[`committee_${cIdx + 1}_score`] = fmt(s.score);
+        });
+
+        return studentData;
+      }),
+    );
+
     const now = new Date();
+    // Maintain backwards compatibility for global tags with the first student, 
+    // but also provide the `students` array for loop rendering.
+    const firstStudent = students.find(s => s.student_id === project.student.student_id) || students[0];
+
     const templateData: Record<string, any> = {
-      student_last_name: `${project.student.last_name || ''} ${project.student.middle_name || ''}`.trim(),
-      student_first_name: project.student.first_name || '',
-      final_score_text: scoreToText(result?.final_score || 0),
+      ...firstStudent, // Fallback for templates that don't use {#students} loop yet
+      students, // Array for {#students} ... {/students} loop
       day: now.getDate().toString().padStart(2, '0'),
       month: (now.getMonth() + 1).toString().padStart(2, '0'),
       year: now.getFullYear().toString(),
-      student_name: `${project.student.first_name} ${project.student.middle_name} ${project.student.last_name}`.trim(),
-      student_id: project.student.student_id,
-      project_name: project.project_name,
-      final_score: result?.final_score || 0,
-      gvhd_score: result?.gvhd_score || 0,
-      gvpb_score: result?.review_score || 0,
-      defense_score: result?.defense_score || 0,
+      project_name: project.topics?.name ?? project.project_name,
+      project_code: project.topics?.code ?? project.project_id,
+      chairman_name:
+        committeeScores.find((score) => score.role === CommitteeRole.CHAIRMAN)
+          ?.teachers.name ?? '',
+      secretary_name:
+        committeeScores.find((score) => score.role === CommitteeRole.SECRETARY)
+          ?.teachers.name ?? '',
     };
-
-    // Committee details
-    const committeeScores = scores.filter(s => s.scoring_type === 'COMMITTEE' && s.role !== 'EXTERNAL_REVIEWER');
-    committeeScores.forEach((s, idx) => {
-      templateData[`committee_${idx + 1}_name`] = s.teachers.name;
-      templateData[`committee_${idx + 1}_score`] = s.score;
-    });
 
     doc.render(templateData);
 
@@ -1044,308 +1251,16 @@ export class ScoringService {
     });
   }
 
-  // ============ GIAI ĐOẠN 5: HỌP VÀ CHỐT ĐIỂM HỘI ĐỒNG ============
-
-  async getMeetings(userId: number, role: string, query: QueryMeetingsDto) {
-    const { page = 1, limit = 20, finalized, facultyId } = query;
-    const skip = (page - 1) * limit;
-    const staff = this.isStaff(role);
-
-    const where: Prisma.independent_scoresWhereInput = {
-      scoring_type: ScoringType.COMMITTEE,
-    };
-
-    if (facultyId) {
-      where.projects = { teacher: { faculty_id: facultyId } };
-    }
-
-    if (!staff) {
-      const teacherId = await this.resolveTeacherId(userId);
-      where.teacher_id = teacherId;
-    }
-
-    const grouped = await this.prisma.independent_scores.groupBy({
-      by: ['project_id'],
-      where,
-    });
-
-    const allProjectIds = grouped.map((g) => g.project_id);
-
-    const results = await this.prisma.scoring_results.findMany({
-      where: { project_id: { in: allProjectIds } },
-    });
-    const resultByProject = new Map(results.map((r) => [r.project_id, r]));
-
-    const filteredIds = allProjectIds.filter((projectId) => {
-      if (finalized === undefined) return true;
-      return this.isFinalized(resultByProject.get(projectId)) === finalized;
-    });
-
-    const pageIds = filteredIds.slice(skip, skip + limit);
-
-    const [projects, committeeScores] = await Promise.all([
-      this.prisma.project.findMany({
-        where: { id: { in: pageIds } },
-        include: {
-          student: {
-            select: {
-              student_id: true,
-              first_name: true,
-              middle_name: true,
-              last_name: true,
-              class_name: true,
-            },
-          },
-        },
-      }),
-      this.prisma.independent_scores.findMany({
-        where: {
-          project_id: { in: pageIds },
-          scoring_type: ScoringType.COMMITTEE,
-        },
-        include: {
-          teachers: { select: { teacher_id: true, name: true } },
-        },
-      }),
-    ]);
-
-    const scoresByProject = new Map<number, typeof committeeScores>();
-    for (const score of committeeScores) {
-      const list = scoresByProject.get(score.project_id) ?? [];
-      list.push(score);
-      scoresByProject.set(score.project_id, list);
-    }
-
-    const data = pageIds.map((projectId) => {
-      const project = projects.find((p) => p.id === projectId);
-      const scores = scoresByProject.get(projectId) ?? [];
-      const scored = scores.filter((s) => s.score !== null);
-      const avg =
-        scored.length > 0
-          ? scored.reduce((sum, s) => sum + (s.score || 0), 0) / scored.length
-          : null;
-      const result = resultByProject.get(projectId);
-      const student = project?.student;
-
-      return {
-        projectId,
-        projectCode: project?.project_id ?? '',
-        projectName: project?.project_name ?? '',
-        student: student
-          ? {
-              studentId: student.student_id,
-              firstName: student.first_name,
-              middleName: student.middle_name,
-              lastName: student.last_name,
-              className: student.class_name,
-            }
-          : null,
-        scoredCount: scored.length,
-        totalCount: scores.length,
-        defenseAverage: avg,
-        finalScore: result?.final_score ?? null,
-        finalStatus: result?.final_status ?? null,
-        isFinalized: this.isFinalized(result),
-      };
-    });
-
-    return {
-      data,
-      meta: {
-        page,
-        limit,
-        total: filteredIds.length,
-        totalPages: Math.ceil(filteredIds.length / limit),
-      },
-    };
-  }
-
-  async getMeeting(projectId: number, userId: number, role: string) {
-    const access = await this.assertMeetingAccess(projectId, userId, role);
-
-    const [project, scores, result] = await Promise.all([
-      this.prisma.project.findUnique({
-        where: { id: projectId },
-        include: {
-          student: {
-            select: {
-              student_id: true,
-              first_name: true,
-              middle_name: true,
-              last_name: true,
-              class_name: true,
-            },
-          },
-        },
-      }),
-      this.prisma.independent_scores.findMany({
-        where: { project_id: projectId },
-        include: {
-          teachers: { select: { teacher_id: true, name: true } },
-        },
-        orderBy: { role: 'asc' },
-      }),
-      this.prisma.scoring_results.findUnique({
-        where: { project_id: projectId },
-      }),
-    ]);
-
-    if (!project) {
-      throw new NotFoundException('Project not found');
-    }
-
-    const committeeScores = scores.filter(
-      (s) => s.scoring_type === ScoringType.COMMITTEE,
-    );
-    const gvhd = scores.find((s) => s.scoring_type === ScoringType.GVHD);
-    const scored = committeeScores.filter((s) => s.score !== null);
-    const defenseAverage =
-      scored.length > 0
-        ? scored.reduce((sum, s) => sum + (s.score || 0), 0) / scored.length
-        : null;
-    const gvhdScore = gvhd?.score ?? result?.gvhd_score ?? null;
-    const finalScorePreview =
-      gvhdScore !== null && defenseAverage !== null
-        ? (gvhdScore + defenseAverage) / 2
-        : null;
-
-    const student = project.student;
-    const isFinalized = this.isFinalized(result);
-
-    return {
-      projectId: project.id,
-      projectCode: project.project_id,
-      projectName: project.project_name,
-      student: student
-        ? {
-            studentId: student.student_id,
-            firstName: student.first_name,
-            middleName: student.middle_name,
-            lastName: student.last_name,
-            className: student.class_name,
-          }
-        : null,
-      gvhdScore: gvhd
-        ? {
-            id: gvhd.id,
-            teacherId: gvhd.teacher_id,
-            teacherName: gvhd.teachers.name,
-            score: gvhd.score,
-            status: gvhd.status,
-            notes: gvhd.notes,
-          }
-        : null,
-      committeeScores: committeeScores.map((s) => ({
-        id: s.id,
-        teacherId: s.teacher_id,
-        teacherName: s.teachers.name,
-        teacherCode: s.teachers.teacher_id,
-        role: s.role,
-        score: s.score,
-        maxScore: s.max_score,
-        criteriaScores: s.criteria_scores,
-        status: s.status,
-        notes: s.notes,
-        strengths: s.strengths,
-        weaknesses: s.weaknesses,
-        submittedAt: s.submitted_at,
-        canEdit:
-          !isFinalized &&
-          (access.canEditAll || s.teacher_id === access.teacherId),
-      })),
-      defenseAverage,
-      finalScorePreview: result?.final_score ?? finalScorePreview,
-      gvhdPassed:
-        result?.is_gvhd_passed ?? (gvhdScore !== null ? gvhdScore >= 4 : null),
-      finalStatus: result?.final_status ?? null,
-      isFinalPassed: result?.is_final_passed ?? false,
-      isFinalized,
-      canEditAll: access.canEditAll && !isFinalized,
-      canFinalize: access.canFinalize && !isFinalized,
-      currentTeacherId: access.teacherId,
-    };
-  }
-
-  async adjustMeetingScore(
-    scoreId: number,
-    userId: number,
-    role: string,
-    dto: AdjustMeetingScoreDto,
-  ) {
-    const score = await this.prisma.independent_scores.findUnique({
-      where: { id: scoreId },
-    });
-
-    if (!score) {
-      throw new NotFoundException('Score not found');
-    }
-
-    if (score.scoring_type !== ScoringType.COMMITTEE) {
-      throw new BadRequestException(
-        'Chỉ được sửa điểm hội đồng trong phiên họp',
-      );
-    }
-
-    const access = await this.assertMeetingAccess(
-      score.project_id,
-      userId,
-      role,
-    );
-    const result = await this.prisma.scoring_results.findUnique({
-      where: { project_id: score.project_id },
-    });
-
-    if (this.isFinalized(result)) {
-      throw new BadRequestException('Điểm hội đồng đã chốt, không thể sửa');
-    }
-
-    if (!access.canEditAll && score.teacher_id !== access.teacherId) {
-      throw new ForbiddenException('Bạn chỉ được sửa điểm của mình');
-    }
-
-    const isFailed = dto.score < 4;
-    const updated = await this.prisma.independent_scores.update({
-      where: { id: scoreId },
-      data: {
-        score: dto.score,
-        max_score: dto.maxScore ?? score.max_score,
-        criteria_scores:
-          (dto.criteriaScores as Prisma.JsonValue) ?? score.criteria_scores,
-        notes: dto.notes ?? score.notes,
-        strengths: dto.strengths ?? score.strengths,
-        weaknesses: dto.weaknesses ?? score.weaknesses,
-        status: isFailed ? ScoringStatus.FAILED : ScoringStatus.SUBMITTED,
-        submitted_at: score.submitted_at ?? new Date(),
-      },
-      include: {
-        teachers: { select: { teacher_id: true, name: true } },
-      },
-    });
-
-    await this.updateScoringResult(
-      score.project_id,
-      ScoringType.COMMITTEE,
-      dto.score,
-      score.role,
-    );
-
-    return {
-      id: updated.id,
-      teacherId: updated.teacher_id,
-      teacherName: updated.teachers.name,
-      role: updated.role,
-      score: updated.score,
-      status: updated.status,
-      notes: updated.notes,
-      strengths: updated.strengths,
-      weaknesses: updated.weaknesses,
-    };
-  }
-
   async finalizeMeeting(projectId: number, userId: number, role: string) {
-    const access = await this.assertMeetingAccess(projectId, userId, role);
-    if (!access.canFinalize) {
-      throw new ForbiddenException('Bạn không có quyền chốt điểm hội đồng');
+    const staff = this.isStaff(role);
+    if (!staff) {
+      const access = await this.assertMeetingAccess(projectId, userId, role);
+      if (!access.canFinalize) {
+        throw new ForbiddenException('Bạn không có quyền chốt điểm hội đồng');
+      }
+    } else {
+      // Staff (admin/secretary): check faculty access instead
+      await this.assertTranscriptFacultyAccess(projectId, userId, role);
     }
 
     const result = await this.prisma.scoring_results.findUnique({
@@ -1361,14 +1276,38 @@ export class ScoringService {
       result?.is_gvhd_passed === false
     ) {
       throw new BadRequestException(
-        'GVHD chưa đạt, không thể chốt điểm hội đồng',
+        'Giảng viên hướng dẫn chưa đạt, không thể chốt điểm hội đồng',
       );
+    }
+
+    const gvhdScores = await this.prisma.independent_scores.findMany({
+      where: {
+        project_id: projectId,
+        scoring_type: ScoringType.GVHD,
+        deleted_at: null,
+      },
+    });
+    const submittedStatuses: ScoringStatus[] = [
+      ScoringStatus.SUBMITTED,
+      ScoringStatus.PASSED,
+      ScoringStatus.FAILED,
+    ];
+    if (
+      gvhdScores.length !== 1 ||
+      gvhdScores[0].score === null ||
+      !submittedStatuses.includes(gvhdScores[0].status)
+    ) {
+      throw new BadRequestException('Phiếu giảng viên hướng dẫn chưa được nộp đầy đủ.');
+    }
+    if (gvhdScores[0].score < 4) {
+      throw new BadRequestException('Sinh viên chưa đạt vòng giảng viên hướng dẫn, không thể chốt điểm hội đồng.');
     }
 
     const committeeScores = await this.prisma.independent_scores.findMany({
       where: {
         project_id: projectId,
         scoring_type: ScoringType.COMMITTEE,
+        deleted_at: null,
       },
     });
 
@@ -1382,14 +1321,27 @@ export class ScoringService {
     const internalScores = committeeScores.filter(
       (score) => score.role !== CommitteeRole.EXTERNAL_REVIEWER,
     );
-    const missing = committeeScores.filter((s) => s.score === null);
+    const missing = committeeScores.filter(
+      (score) => score.score === null || !submittedStatuses.includes(score.status),
+    );
     if (missing.length > 0) {
       throw new BadRequestException(
         'Tất cả thành viên hội đồng phải có điểm trước khi chốt',
       );
     }
 
-    if (externalScores.length !== 1 || internalScores.length !== 3) {
+    const internalRoleCounts = [
+      CommitteeRole.CHAIRMAN,
+      CommitteeRole.SECRETARY,
+      CommitteeRole.INTERNAL_REVIEWER,
+    ].map((memberRole) =>
+      internalScores.filter((score) => score.role === memberRole).length,
+    );
+    if (
+      externalScores.length !== 1 ||
+      internalScores.length !== 3 ||
+      internalRoleCounts.some((count) => count !== 1)
+    ) {
       throw new BadRequestException(
         'Cần tối thiểu 3 thành viên hội đồng để chốt điểm',
       );
@@ -1403,25 +1355,25 @@ export class ScoringService {
     ).length;
     const passed = failedCount === 0;
 
-    const gvhd =
-      result?.gvhd_score ??
-      (
-        await this.prisma.independent_scores.findFirst({
-          where: { project_id: projectId, scoring_type: ScoringType.GVHD },
-        })
-      )?.score ??
-      null;
+    const gvhd = gvhdScores[0].score;
 
     const externalScore = externalScores[0].score ?? 0;
-    const finalScore =
-      gvhd !== null
-        ? Math.min(10, gvhd * 0.4 + externalScore * 0.2 + defenseScore * 0.4)
-        : defenseScore;
+    const finalScore = Math.min(
+      10,
+      gvhd * 0.4 + externalScore * 0.2 + defenseScore * 0.4,
+    );
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
     });
     if (!project) {
       throw new NotFoundException('Project not found');
+    }
+    if (
+      gvhdScores[0].student_id !== project.student_id ||
+      committeeScores.some((score) => score.student_id !== project.student_id) ||
+      (result && result.student_id !== project.student_id)
+    ) {
+      throw new BadRequestException('Dữ liệu phiếu chấm không khớp với sinh viên của đề tài.');
     }
 
     const saved = await this.prisma.$transaction(async (tx) => {
@@ -1473,6 +1425,159 @@ export class ScoringService {
   // ============ GIAI ĐOẠN 6: TÍNH ĐIỂM TỔNG HỢP + CÔNG BỐ BẢNG ĐIỂM ============
   // Điểm tổng = GVHD 40% + Phản biện ngoài 20% + TB 3 TV còn lại 40% + điểm thưởng (<=3)
 
+  async getTranscriptReview(projectId: number, userId: number, role: string) {
+    await this.assertTranscriptFacultyAccess(projectId, userId, role);
+
+    const [project, scores, result] = await Promise.all([
+      this.prisma.project.findUnique({
+        where: { id: projectId },
+        include: {
+          student: {
+            select: {
+              student_id: true,
+              first_name: true,
+              middle_name: true,
+              last_name: true,
+              class_name: true,
+            },
+          },
+          teacher: { select: { id: true, name: true, teacher_id: true, faculty_id: true } },
+          topics: { select: { code: true, name: true } },
+        },
+      }),
+      this.prisma.independent_scores.findMany({
+        where: { project_id: projectId, deleted_at: null },
+        include: {
+          teachers: { select: { teacher_id: true, name: true } },
+        },
+        orderBy: { scoring_type: 'asc' },
+      }),
+      this.prisma.scoring_results.findUnique({
+        where: { project_id: projectId },
+      }),
+    ]);
+
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
+
+    const submittedStatuses: ScoringStatus[] = [
+      ScoringStatus.SUBMITTED,
+      ScoringStatus.PASSED,
+      ScoringStatus.FAILED,
+    ];
+
+    const gvhd = scores.find((s) => s.scoring_type === ScoringType.GVHD);
+    const committee = scores.filter((s) => s.scoring_type === ScoringType.COMMITTEE);
+    const external = committee.find((s) => s.role === CommitteeRole.EXTERNAL_REVIEWER);
+    const internalScores = committee.filter((s) =>
+      ([CommitteeRole.CHAIRMAN, CommitteeRole.SECRETARY, CommitteeRole.INTERNAL_REVIEWER] as CommitteeRole[]).includes(s.role as CommitteeRole),
+    );
+
+    // Determine readiness
+    const gvhdSubmitted = gvhd && gvhd.score !== null && submittedStatuses.includes(gvhd.status);
+    const gvhdPassed = gvhdSubmitted && (gvhd?.score ?? 0) >= 4;
+    const gvhdFailed = gvhdSubmitted && (gvhd?.score ?? 0) < 4;
+    const externalSubmitted = external && external.score !== null && submittedStatuses.includes(external.status);
+    const internalRoles = [CommitteeRole.CHAIRMAN, CommitteeRole.SECRETARY, CommitteeRole.INTERNAL_REVIEWER] as CommitteeRole[];
+    const internalComplete = internalRoles.every(
+      (r) => internalScores.filter((s) => s.role === r && s.score !== null && submittedStatuses.includes(s.status)).length === 1,
+    );
+    const allSubmitted = gvhdSubmitted && externalSubmitted && internalComplete && committee.length === 4 && scores.length === 5;
+
+    let readinessStatus: string;
+    if (result?.final_status === 'REJECTED_GVHD' || gvhdFailed) {
+      readinessStatus = 'BLOCKED_GVHD';
+    } else if (!allSubmitted) {
+      readinessStatus = 'IN_PROGRESS';
+    } else if (!this.isFinalized(result)) {
+      readinessStatus = 'AWAITING_FINALIZATION';
+    } else {
+      readinessStatus = result?.is_published ? 'PUBLISHED' : 'READY';
+    }
+
+    // Calculate preview scores if possible
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+    const internalAvg = internalScores.length > 0
+      ? round2(internalScores.reduce((sum, s) => sum + (s.score ?? 0), 0) / internalScores.length)
+      : null;
+    const weightedScore = gvhd?.score != null && external?.score != null && internalAvg !== null
+      ? round2(gvhd.score * 0.4 + external.score * 0.2 + internalAvg * 0.4)
+      : null;
+    const bonusScore = result?.bonus_score ?? 0;
+    const finalScore = weightedScore !== null ? Math.min(10, round2(weightedScore + bonusScore)) : null;
+
+    return {
+      projectId: project.id,
+      projectCode: project.topics?.code ?? project.project_id,
+      projectName: project.topics?.name ?? project.project_name,
+      student: project.student ? {
+        studentId: project.student.student_id,
+        firstName: project.student.first_name,
+        middleName: project.student.middle_name,
+        lastName: project.student.last_name,
+        className: project.student.class_name,
+      } : null,
+      supervisor: { id: project.teacher.id, code: project.teacher.teacher_id, name: project.teacher.name },
+      readinessStatus,
+      isFinalized: this.isFinalized(result),
+      isPublished: result?.is_published ?? false,
+      finalStatus: result?.final_status ?? null,
+      gvhdSheet: gvhd ? {
+        id: gvhd.id,
+        teacherId: gvhd.teacher_id,
+        teacherName: gvhd.teachers.name,
+        teacherCode: gvhd.teachers.teacher_id,
+        score: gvhd.score,
+        maxScore: gvhd.max_score,
+        status: gvhd.status,
+        notes: gvhd.notes,
+        strengths: gvhd.strengths,
+        weaknesses: gvhd.weaknesses,
+        submittedAt: gvhd.submitted_at,
+        gvhdPassed,
+      } : null,
+      externalSheet: external ? {
+        id: external.id,
+        teacherId: external.teacher_id,
+        teacherName: external.teachers.name,
+        teacherCode: external.teachers.teacher_id,
+        score: external.score,
+        maxScore: external.max_score,
+        status: external.status,
+        notes: external.notes,
+        strengths: external.strengths,
+        weaknesses: external.weaknesses,
+        submittedAt: external.submitted_at,
+      } : null,
+      committeeSheets: committee
+        .filter((s) => s.role !== CommitteeRole.EXTERNAL_REVIEWER)
+        .sort((a, b) => {
+          const order: CommitteeRole[] = [CommitteeRole.CHAIRMAN, CommitteeRole.SECRETARY, CommitteeRole.INTERNAL_REVIEWER];
+          return order.indexOf(a.role as CommitteeRole) - order.indexOf(b.role as CommitteeRole);
+        })
+        .map((s) => ({
+          id: s.id,
+          teacherId: s.teacher_id,
+          teacherName: s.teachers.name,
+          teacherCode: s.teachers.teacher_id,
+          role: s.role,
+          score: s.score,
+          maxScore: s.max_score,
+          status: s.status,
+          notes: s.notes,
+          strengths: s.strengths,
+          weaknesses: s.weaknesses,
+          submittedAt: s.submitted_at,
+        })),
+      internalAverage: internalAvg,
+      weightedScore,
+      bonusScore,
+      bonusNote: result?.bonus_note ?? null,
+      finalScore,
+    };
+  }
+
   private async buildTranscript(projectId: number) {
     const [project, scores, result] = await Promise.all([
       this.prisma.project.findUnique({
@@ -1487,10 +1592,11 @@ export class ScoringService {
               class_name: true,
             },
           },
+          topics: { select: { code: true, name: true } },
         },
       }),
       this.prisma.independent_scores.findMany({
-        where: { project_id: projectId },
+        where: { project_id: projectId, deleted_at: null },
         include: {
           teachers: { select: { teacher_id: true, name: true } },
         },
@@ -1520,15 +1626,49 @@ export class ScoringService {
       (s) => s.role !== CommitteeRole.EXTERNAL_REVIEWER,
     );
 
-    if (gvhd?.score === null || gvhd?.score === undefined) {
+    const internalRoles: CommitteeRole[] = [
+      CommitteeRole.CHAIRMAN,
+      CommitteeRole.SECRETARY,
+      CommitteeRole.INTERNAL_REVIEWER,
+    ];
+    const submittedStatuses: ScoringStatus[] = [
+      ScoringStatus.SUBMITTED,
+      ScoringStatus.PASSED,
+      ScoringStatus.FAILED,
+    ];
+    if (
+      result?.student_id !== project.student_id ||
+      scores.some((score) => score.student_id !== project.student_id)
+    ) {
+      throw new BadRequestException('Dữ liệu phiếu chấm không khớp với sinh viên của đề tài.');
+    }
+
+    if (
+      scores.filter((score) => score.scoring_type === ScoringType.GVHD).length !== 1 ||
+      gvhd?.score === null ||
+      gvhd?.score === undefined ||
+      !submittedStatuses.includes(gvhd.status)
+    ) {
       throw new BadRequestException('Thiếu điểm giảng viên hướng dẫn');
     }
-    if (external?.score === null || external?.score === undefined) {
+    if (
+      committee.filter((score) => score.role === CommitteeRole.EXTERNAL_REVIEWER).length !== 1 ||
+      external?.score === null ||
+      external?.score === undefined ||
+      !submittedStatuses.includes(external.status)
+    ) {
       throw new BadRequestException('Thiếu điểm phản biện ngoài');
     }
     if (
-      others.length < 3 ||
-      others.some((s) => s.score === null || s.score === undefined)
+      others.length !== 3 ||
+      internalRoles.some(
+        (memberRole) => others.filter((score) => score.role === memberRole).length !== 1,
+      ) ||
+      others.some(
+        (score) => score.score === null || score.score === undefined || !submittedStatuses.includes(score.status),
+      ) ||
+      committee.length !== 4 ||
+      scores.length !== 5
     ) {
       throw new BadRequestException(
         'Cần đủ điểm của 3 thành viên hội đồng còn lại',
@@ -1537,8 +1677,7 @@ export class ScoringService {
 
     const othersAverage =
       others.reduce((sum, s) => sum + (s.score || 0), 0) / others.length;
-    const defenseAverage =
-      committee.reduce((sum, s) => sum + (s.score || 0), 0) / committee.length;
+    const defenseAverage = othersAverage;
     const round2 = (n: number) => Math.round(n * 100) / 100;
     const weightedScore = round2(
       (gvhd.score || 0) * 0.4 +
@@ -1551,8 +1690,8 @@ export class ScoringService {
 
     return {
       projectId: project.id,
-      projectCode: project.project_id,
-      projectName: project.project_name,
+      projectCode: project.topics?.code ?? project.project_id,
+      projectName: project.topics?.name ?? project.project_name,
       student: project.student
         ? {
             studentId: project.student.student_id,
@@ -1594,69 +1733,296 @@ export class ScoringService {
     };
   }
 
+  private async getTranscriptFacultyScope(
+    userId: number,
+    role: string,
+    requestedFacultyId?: string,
+  ) {
+    if (role.toLowerCase() !== 'secretary') return requestedFacultyId;
+
+    const secretary = await this.prisma.secretary.findUnique({
+      where: { user_id: userId },
+      select: { faculty_id: true },
+    });
+    if (!secretary?.faculty_id) {
+      throw new ForbiddenException('Tài khoản thư ký chưa được gán khoa.');
+    }
+    if (requestedFacultyId && requestedFacultyId !== secretary.faculty_id) {
+      throw new ForbiddenException('Không thể xem bảng điểm của khoa khác.');
+    }
+    return secretary.faculty_id;
+  }
+
+  private async assertTranscriptFacultyAccess(
+    projectId: number,
+    userId: number,
+    role: string,
+  ) {
+    if (role.toLowerCase() !== 'secretary') return;
+    const facultyId = await this.getTranscriptFacultyScope(userId, role);
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      select: { teacher: { select: { faculty_id: true } } },
+    });
+    if (!project) throw new NotFoundException('Project not found');
+    if (project.teacher.faculty_id !== facultyId) {
+      throw new ForbiddenException('Không thể thao tác bảng điểm của khoa khác.');
+    }
+  }
+
   async getTranscripts(
     userId: number,
     role: string,
     query: QueryTranscriptsDto,
   ) {
-    const { page = 1, limit = 20, published, facultyId } = query;
+    let {
+      page = 1,
+      limit = 20,
+      facultyId,
+    } = query;
+    let published = query.published;
+    let includeInProgress = query.includeInProgress ?? false;
+
+    if (typeof published === 'string') {
+      if (published === 'true') published = true;
+      else if (published === 'false') published = false;
+    }
+    if (typeof includeInProgress === 'string') {
+      if (includeInProgress === 'true') includeInProgress = true;
+      else if (includeInProgress === 'false') includeInProgress = false;
+    }
+
     const staff = this.isStaff(role);
+    const scopedFacultyId = await this.getTranscriptFacultyScope(
+      userId,
+      role,
+      facultyId,
+    );
+    const teacherId = staff ? undefined : await this.resolveTeacherId(userId);
 
-    let projectIds: number[];
-    if (staff) {
-      const results = await this.prisma.scoring_results.findMany({
-        where: {
-          OR: [
-            { final_status: 'PASSED' },
-            { final_status: 'REJECTED_DEFENSE' },
-          ],
-          ...(published !== undefined ? { is_published: published } : {}),
-          ...(facultyId
-            ? { projects: { teacher: { faculty_id: facultyId } } }
-            : {}),
+    const debugInfo = { userId, role, staff, scopedFacultyId, teacherId, query };
+    console.log('[DEBUG getTranscripts]', debugInfo);
+    require('fs').appendFileSync('debug-get-transcripts.json', JSON.stringify({ time: new Date(), ...debugInfo }) + '\n');
+
+    const projects = await this.prisma.project.findMany({
+      where: {
+        status: 'APPROVED',
+        deleted_at: null,
+        independent_scores: {
+          some: {
+            deleted_at: null,
+            ...(teacherId
+              ? { teacher_id: teacherId, scoring_type: ScoringType.COMMITTEE }
+              : {}),
+          },
         },
-        select: { project_id: true },
-      });
-      projectIds = results.map((r) => r.project_id);
-    } else {
-      const teacherId = await this.resolveTeacherId(userId);
-      const mine = await this.prisma.independent_scores.findMany({
-        where: { teacher_id: teacherId, scoring_type: ScoringType.COMMITTEE },
-        select: { project_id: true },
-      });
-      projectIds = [...new Set(mine.map((m) => m.project_id))];
-      if (published !== undefined) {
-        const results = await this.prisma.scoring_results.findMany({
-          where: { project_id: { in: projectIds }, is_published: published },
-          select: { project_id: true },
-        });
-        const allowed = new Set(results.map((r) => r.project_id));
-        projectIds = projectIds.filter((id) => allowed.has(id));
-      }
-    }
+        ...(scopedFacultyId
+          ? { teacher: { faculty_id: scopedFacultyId } }
+          : {}),
+      },
+      include: {
+        student: {
+          select: {
+            student_id: true,
+            first_name: true,
+            middle_name: true,
+            last_name: true,
+            class_name: true,
+          },
+        },
+        teacher: { select: { faculty_id: true } },
+        topics: { select: { code: true, name: true } },
+        independent_scores: {
+          where: { deleted_at: null },
+          include: { teachers: { select: { teacher_id: true, name: true } } },
+        },
+        scoring_results: true,
+      },
+      orderBy: { updated_at: 'desc' },
+    });
 
-    const data: Awaited<ReturnType<ScoringService['buildTranscript']>>[] = [];
-    for (const projectId of projectIds) {
-      try {
-        data.push(await this.buildTranscript(projectId));
-      } catch {
-        continue;
-      }
-    }
+    const expectedSheets: {
+      scoringType: ScoringType;
+      role: CommitteeRole | null;
+      label: string;
+    }[] = [
+      { scoringType: ScoringType.GVHD, role: null, label: 'Phiếu giảng viên hướng dẫn' },
+      {
+        scoringType: ScoringType.COMMITTEE,
+        role: CommitteeRole.EXTERNAL_REVIEWER,
+        label: 'Phiếu phản biện ngoài',
+      },
+      ...[
+        [CommitteeRole.CHAIRMAN, 'Phiếu Chủ tịch hội đồng'],
+        [CommitteeRole.SECRETARY, 'Phiếu Thư ký hội đồng'],
+        [CommitteeRole.INTERNAL_REVIEWER, 'Phiếu Phản biện trong'],
+      ].map(([memberRole, label]) => ({
+        scoringType: ScoringType.COMMITTEE,
+        role: memberRole as CommitteeRole,
+        label: label as string,
+      })),
+    ];
+    const submittedStatuses: ScoringStatus[] = [
+      ScoringStatus.SUBMITTED,
+      ScoringStatus.PASSED,
+      ScoringStatus.FAILED,
+    ];
+
+    const data = projects
+      .map((project) => {
+        const scores = project.independent_scores;
+        const result = project.scoring_results;
+        const missingItems: string[] = [];
+        let submittedCount = 0;
+        const scoreBySheet = new Map<string, (typeof scores)[number]>();
+        for (const sheet of expectedSheets) {
+          const matches = scores.filter(
+            (score) =>
+              score.scoring_type === sheet.scoringType &&
+              score.role === sheet.role,
+          );
+          const key = `${sheet.scoringType}:${sheet.role ?? 'NONE'}`;
+          if (matches.length !== 1) {
+            missingItems.push(`${sheet.label} (cần đúng 1 phiếu)`);
+            continue;
+          }
+          const score = matches[0];
+          scoreBySheet.set(key, score);
+          if (
+            score.student_id !== project.student_id ||
+            score.score === null ||
+            !submittedStatuses.includes(score.status)
+          ) {
+            missingItems.push(`${sheet.label} (chưa nộp hoặc sai sinh viên)`);
+          } else {
+            submittedCount++;
+          }
+        }
+        if (scores.length !== expectedSheets.length) {
+          missingItems.push('Cấu hình phiếu không đúng 5 vai trò bắt buộc');
+        }
+        if (result && result.student_id !== project.student_id) {
+          missingItems.push('Bản ghi tổng hợp đang gắn sai sinh viên');
+        }
+
+        const gvhd = scoreBySheet.get(`${ScoringType.GVHD}:NONE`);
+        const gvhdFailed =
+          gvhd?.score !== null &&
+          gvhd?.score !== undefined &&
+          submittedStatuses.includes(gvhd.status) &&
+          gvhd.score < 4;
+        const allScoresSubmitted = missingItems.length === 0;
+        let readinessStatus: string;
+        if (result?.final_status === 'REJECTED_GVHD' || gvhdFailed) {
+          readinessStatus = 'BLOCKED_GVHD';
+        } else if (!allScoresSubmitted) {
+          readinessStatus = 'IN_PROGRESS';
+        } else if (!this.isFinalized(result)) {
+          readinessStatus = 'AWAITING_FINALIZATION';
+        } else {
+          readinessStatus = result?.is_published ? 'PUBLISHED' : 'READY';
+        }
+        if (readinessStatus === 'BLOCKED_GVHD') {
+          missingItems.unshift('Không đạt điều kiện GVHD; chưa thể chấm tiếp vòng sau');
+        } else if (readinessStatus === 'AWAITING_FINALIZATION') {
+          missingItems.push('Thư ký hội đồng cần chốt điểm hội đồng');
+        }
+
+        const external = scoreBySheet.get(
+          `${ScoringType.COMMITTEE}:${CommitteeRole.EXTERNAL_REVIEWER}`,
+        );
+        const internalScores = [
+          CommitteeRole.CHAIRMAN,
+          CommitteeRole.SECRETARY,
+          CommitteeRole.INTERNAL_REVIEWER,
+        ].map((memberRole) =>
+          scoreBySheet.get(`${ScoringType.COMMITTEE}:${memberRole}`),
+        );
+        const completeForTotal =
+          readinessStatus === 'READY' || readinessStatus === 'PUBLISHED';
+        const round2 = (value: number) => Math.round(value * 100) / 100;
+        const committeeAverage = completeForTotal
+          ? round2(
+              internalScores.reduce((sum, score) => sum + (score?.score ?? 0), 0) /
+                internalScores.length,
+            )
+          : null;
+        const weightedScore =
+          completeForTotal && gvhd?.score != null && external?.score != null && committeeAverage !== null
+            ? round2(gvhd.score * 0.4 + external.score * 0.2 + committeeAverage * 0.4)
+            : null;
+        const bonusScore = completeForTotal ? (result?.bonus_score ?? 0) : null;
+        const finalScore =
+          weightedScore !== null && bonusScore !== null
+            ? Math.min(10, round2(weightedScore + bonusScore))
+            : null;
+
+        return {
+          projectId: project.id,
+          projectCode: project.topics?.code ?? project.project_id,
+          projectName: project.topics?.name ?? project.project_name,
+          student: project.student
+            ? {
+                studentId: project.student.student_id,
+                firstName: project.student.first_name,
+                middleName: project.student.middle_name,
+                lastName: project.student.last_name,
+                className: project.student.class_name,
+              }
+            : null,
+          readinessStatus,
+          submittedCount,
+          requiredCount: expectedSheets.length,
+          missingItems,
+          gvhdScore: completeForTotal ? (gvhd?.score ?? null) : null,
+          externalScore: completeForTotal ? (external?.score ?? null) : null,
+          committeeAverage,
+          weightedScore,
+          bonusScore,
+          finalScore,
+          finalStatus: result?.final_status ?? null,
+          isFinalized: this.isFinalized(result),
+          isPublished: result?.is_published ?? false,
+          publishedAt: result?.published_at ?? null,
+        };
+      })
+      .filter(
+        (row) =>
+          (includeInProgress || row.isFinalized) &&
+          (published === undefined || row.isPublished === published),
+      );
 
     const total = data.length;
     const start = (page - 1) * limit;
+    const finalData = data.slice(start, start + limit);
+    const debugReturn = { total, returnedDataCount: finalData.length, initialProjectsCount: projects.length, firstData: data[0] };
+    console.log('[DEBUG getTranscripts return]', debugReturn);
+    require('fs').appendFileSync('debug-get-transcripts.json', JSON.stringify({ time: new Date(), type: 'return', ...debugReturn }) + '\n');
     return {
-      data: data.slice(start, start + limit),
+      data: finalData,
       meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
   }
 
   async getTranscript(projectId: number, userId: number, role: string) {
+    await this.assertTranscriptFacultyAccess(projectId, userId, role);
     const access = await this.assertMeetingAccess(projectId, userId, role);
+    const isSecretary = access.staff || access.own?.role === CommitteeRole.SECRETARY;
+
+    const result = await this.prisma.scoring_results.findUnique({
+      where: { project_id: projectId },
+    });
+
+    if (!this.isFinalized(result)) {
+      if (isSecretary) {
+        return this.getTranscriptReview(projectId, userId, role);
+      }
+      throw new BadRequestException('Đề tài chưa chốt điểm hội đồng (Giai đoạn 5)');
+    }
+
     const detail = await this.buildTranscript(projectId);
-    const isSecretary =
-      access.staff || access.own?.role === CommitteeRole.SECRETARY;
+
+
     return {
       ...detail,
       canAwardBonus: isSecretary && !detail.isPublished,
@@ -1670,6 +2036,7 @@ export class ScoringService {
     role: string,
     dto: UpdateBonusScoreDto,
   ) {
+    await this.assertTranscriptFacultyAccess(projectId, userId, role);
     const access = await this.assertMeetingAccess(projectId, userId, role);
     const isSecretary =
       access.staff || access.own?.role === CommitteeRole.SECRETARY;
@@ -1704,12 +2071,16 @@ export class ScoringService {
   }
 
   async publishTranscript(projectId: number, userId: number, role: string) {
+    await this.assertTranscriptFacultyAccess(projectId, userId, role);
     const access = await this.assertMeetingAccess(projectId, userId, role);
     if (!access.canFinalize) {
       throw new ForbiddenException('Bạn không có quyền công bố bảng điểm');
     }
 
     const detail = await this.buildTranscript(projectId);
+    if (detail.isPublished) {
+      throw new BadRequestException('Bảng điểm đã được công bố.');
+    }
 
     await this.prisma.scoring_results.update({
       where: { project_id: projectId },
@@ -1789,7 +2160,7 @@ export class ScoringService {
   }
 
   // ============ GIAI ĐOẠN 7: HẬU KIỂM VÀ XẾP HẠNG ============
-  // Chỉnh sửa hồ sơ theo nhận xét -> Xếp hạng (sort điểm, đồng điểm xử lý thủ công) -> In biểu mẫu.
+  // Chỉnh sửa báo cáo theo nhận xét -> Xếp hạng (sort điểm, đồng điểm xử lý thủ công) -> In biểu mẫu.
 
   private defaultRevisionDeadline(publishedAt: Date | null) {
     const base = publishedAt ?? new Date();
@@ -1821,6 +2192,7 @@ export class ScoringService {
           select: {
             project_id: true,
             project_name: true,
+            topics: { select: { code: true, name: true } },
             thesis_revisions: {
               where: { deleted_at: null },
               orderBy: { submitted_at: 'desc' },
@@ -1853,8 +2225,8 @@ export class ScoringService {
       const latestRevision = r.projects.thesis_revisions[0] ?? null;
       return {
         projectId: r.project_id,
-        projectCode: r.projects.project_id,
-        projectName: r.projects.project_name,
+        projectCode: r.projects.topics?.code ?? r.projects.project_id,
+        projectName: r.projects.topics?.name ?? r.projects.project_name,
         student: r.students
           ? {
               studentId: r.students.student_id,
@@ -1872,7 +2244,7 @@ export class ScoringService {
         revisionDeadline:
           r.revision_deadline ?? this.defaultRevisionDeadline(r.published_at),
         revisionCount: latestRevision ? 1 : 0,
-        latestRevisionFile: latestRevision?.file_name ?? null,
+        latestRevisionFile: latestRevision?.original_name || latestRevision?.file_name || null,
       };
     });
 
@@ -2036,7 +2408,7 @@ export class ScoringService {
         revision: revision
           ? {
               id: revision.id,
-              fileName: revision.file_name,
+              fileName: revision.original_name || revision.file_name,
               fileUrl: revision.file_url,
               submittedAt: revision.submitted_at,
               note: revision.note,
@@ -2068,7 +2440,7 @@ export class ScoringService {
       result.revision_deadline ??
       this.defaultRevisionDeadline(result.published_at);
     if (deadline.getTime() <= Date.now()) {
-      throw new BadRequestException('Đã hết hạn chỉnh sửa hồ sơ');
+      throw new BadRequestException('Đã hết hạn chỉnh sửa báo cáo, không thể nộp');
     }
 
     return this.prisma.thesis_revisions.create({

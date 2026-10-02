@@ -5,6 +5,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsBoolean,
   IsArray,
   ArrayMinSize,
   Min,
@@ -220,67 +221,6 @@ export class QueryMyScoresDto {
   scoringType?: ScoringType;
 }
 
-export class QueryMeetingsDto {
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsNumber()
-  @Transform(({ value }) => parseInt(value))
-  page?: number = 1;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsNumber()
-  @Transform(({ value }) => parseInt(value))
-  limit?: number = 20;
-
-  @ApiPropertyOptional({ description: 'true = đã chốt, false = chưa chốt' })
-  @IsOptional()
-  @Transform(({ value }) => {
-    if (value === 'true' || value === true) return true;
-    if (value === 'false' || value === false) return false;
-    return undefined;
-  })
-  finalized?: boolean;
-
-  @ApiPropertyOptional({ description: 'Scope meetings to a faculty' })
-  @IsOptional()
-  @IsString()
-  facultyId?: string;
-}
-
-export class AdjustMeetingScoreDto {
-  @ApiProperty({ minimum: 0, maximum: 10 })
-  @IsNotEmpty()
-  @IsNumber()
-  @Min(0)
-  @Max(10)
-  score: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsNumber()
-  maxScore?: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  criteriaScores?: Record<string, number>;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  notes?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  strengths?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  weaknesses?: string;
-}
-
 export class QueryTranscriptsDto {
   @ApiPropertyOptional()
   @IsOptional()
@@ -298,12 +238,22 @@ export class QueryTranscriptsDto {
     description: 'true = đã công bố, false = chưa công bố',
   })
   @IsOptional()
-  @Transform(({ value }) => {
-    if (value === 'true' || value === true) return true;
-    if (value === 'false' || value === false) return false;
+  @Transform(({ obj }) => {
+    if (obj.published === 'true' || obj.published === true) return true;
+    if (obj.published === 'false' || obj.published === false) return false;
     return undefined;
   })
   published?: boolean;
+
+  @ApiPropertyOptional({ description: 'Include assigned score sheets that are still in progress' })
+  @IsOptional()
+  @IsBoolean()
+  @Transform(({ obj }) => {
+    if (obj.includeInProgress === 'true' || obj.includeInProgress === true) return true;
+    if (obj.includeInProgress === 'false' || obj.includeInProgress === false) return false;
+    return undefined;
+  })
+  includeInProgress?: boolean;
 
   @ApiPropertyOptional({ description: 'Scope transcripts to a faculty' })
   @IsOptional()
@@ -349,7 +299,7 @@ export class QueryPostDefenseDto {
 }
 
 export class SetRevisionWindowDto {
-  @ApiProperty({ description: 'Hạn cuối sinh viên được chỉnh sửa hồ sơ' })
+  @ApiProperty({ description: 'Hạn cuối sinh viên được chỉnh sửa báo cáo' })
   @IsNotEmpty()
   @IsDateString()
   revisionDeadline: string;
