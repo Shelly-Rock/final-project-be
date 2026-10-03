@@ -14,6 +14,8 @@ const sampleTeachers = [
   { teacherId: 'GVTEST008', email: 'gvtest008@example.com', name: 'Vu Ngoc Anh' },
   { teacherId: 'GVTEST009', email: 'gvtest009@example.com', name: 'Bui Minh Khang' },
   { teacherId: 'GVTEST010', email: 'gvtest010@example.com', name: 'Dang Thu Trang' },
+  { teacherId: 'GVTEST011', email: 'gvtest011@example.com', name: 'Nguyen Quang Huy' },
+  { teacherId: 'GVTEST012', email: 'gvtest012@example.com', name: 'Le Thi Mai Linh' },
 ];
 const sampleStudents = [
   {
@@ -44,6 +46,17 @@ const sampleStudents = [
     firstName: 'Chi',
     middleName: 'Ngoc',
     lastName: 'Le',
+    className: 'CNTT02',
+    major: 'Cong nghe thong tin',
+    courseYear: 2024,
+    academicYear: '2024-2028',
+  },
+    {
+    studentId: '2200001237',
+    email: 'thienan03@nttu.edu.vn',
+    firstName: 'An',
+    middleName: 'Thien',
+    lastName: 'Pham',
     className: 'CNTT02',
     major: 'Cong nghe thong tin',
     courseYear: 2024,

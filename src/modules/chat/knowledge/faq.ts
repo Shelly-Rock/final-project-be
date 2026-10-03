@@ -40,7 +40,7 @@ export const FAQ_ENTRIES: FaqEntry[] = [
   {
     id: 'sv-report',
     q: 'Cách nộp báo cáo tiến trình?',
-    a: 'Vào Theo dõi tiến trình, tải mẫu (nếu có), nộp báo cáo tháng. Cần nộp ít nhất 1 báo cáo/tháng để tránh bị cấm bảo vệ.',
+    a: 'Vào Theo dõi tiến độ, tải mẫu (nếu có), nộp báo cáo tháng. Cần nộp ít nhất 1 báo cáo/tháng để tránh bị cấm bảo vệ.',
     href: '/progress-tracking/student',
     roles: ['STUDENT'],
   },
@@ -74,8 +74,8 @@ export const FAQ_ENTRIES: FaqEntry[] = [
   },
   {
     id: 'gv-report',
-    q: 'Cách chấm báo cáo tiến trình?',
-    a: 'Theo dõi tiến trình → báo cáo chờ duyệt: duyệt/từ chối, điểm 1–10, nhận xét.',
+    q: 'Cách chấm báo cáo tiến độ?',
+    a: 'Theo dõi tiến độ → báo cáo chờ duyệt: duyệt/từ chối, điểm 1–10, nhận xét.',
     href: '/progress-tracking/teacher',
     roles: ['TEACHER'],
   },

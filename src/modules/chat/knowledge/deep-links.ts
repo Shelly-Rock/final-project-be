@@ -8,12 +8,12 @@ export interface DeepLink {
 const LINKS: Record<ChatRole, DeepLink[]> = {
   STUDENT: [
     { label: 'Đăng ký đề tài', path: '/topic-registration' },
-    { label: 'Theo dõi tiến trình', path: '/progress-tracking/student' },
+    { label: 'Theo dõi tiến độ', path: '/progress-tracking/student' },
     { label: 'Nộp bài cuối kỳ', path: '/submission/student' },
   ],
   TEACHER: [
     { label: 'Đề tài của tôi', path: '/my-topics' },
-    { label: 'Theo dõi tiến trình', path: '/progress-tracking/teacher' },
+    { label: 'Theo dõi tiến độ.', path: '/progress-tracking/teacher' },
     { label: 'Phiếu chấm điểm', path: '/scoring/teacher' },
   ],
   SECRETARY: [
@@ -33,7 +33,7 @@ const LINKS: Record<ChatRole, DeepLink[]> = {
     { label: 'Quản lý giảng viên', path: '/teachers' },
     { label: 'Đợt đăng ký', path: '/registration-periods' },
     { label: 'Cấu hình & Duyệt đề tài', path: '/project-config' },
-    { label: 'Theo dõi tiến trình', path: '/progress-tracking/admin' },
+    { label: 'Theo dõi tiến độ', path: '/progress-tracking/admin' },
     { label: 'Phân quyền', path: '/role' },
     { label: 'Nhật ký Audit', path: '/audit' },
     { label: 'Dashboard Thư ký', path: '/dashboard' },
